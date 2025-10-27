@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
+  
 }
 
 datasource db {
@@ -18,5 +18,5 @@ model admin {
 model user {
   id    Int    @id @default(autoincrement())
   email String @unique
-  tags  Int
+  tags  String @default("RDP")
 }
