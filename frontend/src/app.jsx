@@ -19,7 +19,7 @@ function App() {
     <>
       <div className="d-flex justify-content-between align-items-center p-4 bg-head border-bottom">
         <h1 className="text-2xl fw-bold text-center flex-grow-1">
-          Welcome to WayFinder{" "}
+          Welcome to WayFinder
           <img src={logo} alt="WayFinder Logo" className="img" />
         </h1>
         <button
