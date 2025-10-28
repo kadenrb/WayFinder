@@ -85,3 +85,41 @@
     color: #555;
     font-size: 0.95rem;
 }
+
+/* Custom Bootstrap Primary Button, needs to be flagged as important */
+.btn-primary {
+    background-color: #c76c2f !important;
+    border-color: #aa5c28 !important;
+}
+
+.btn-primary:hover {
+    background-color: #aa5c28 !important;
+    border-color: #995221 !important;
+}
+
+.btn-primary:focus,
+.btn-primary:focus-visible {
+    box-shadow: 0 0 0 0.25rem rgba(199, 108, 47, 0.5) !important;
+}
+
+.btn-primary:active {
+    background-color: #995221 !important;
+    border-color: #88471e !important;
+}
+
+.bg-head {
+    background-color: #57aeda !important;
+}
+
+img {
+    width: 15vw;
+    height: auto;
+}
+
+body {
+    background-color: #59879e !important;
+}
+
+.bg-content {
+    background-color: #59879e !important;
+}
