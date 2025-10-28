@@ -1,3 +1,14 @@
+/* Brand color tokens */
+:root {
+  --brand-primary: #2a91c9; /* blue */
+  --brand-accent: #c89154;  /* orange/bronze */
+  --brand-bg: #e9f4f9;      /* light tint */
+  --surface: #ffffff;
+  --text: #1b1b1d;
+  --muted: #6b7280;
+  --border: #e6e8ec;
+}
+
 /* Drag & Drop map box */
 .map-dropzone {
   border: 2px dashed #bdbdbd;
