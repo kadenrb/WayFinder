@@ -1,18 +1,37 @@
 import React, { useState } from "react";
-import SendEmailBtn from "./sendEmailBtn";
-import DragMapArea from "./DragMapArea";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./index.css";
 import logo from "./images/logo.png";
 
 function App() {
-  const [promptEmail, setPromptEmail] = React.useState(false);
+  const [promptEmail, setPromptEmail] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [location, setLocation] = useState("");
-  const validateEmail = (email) => {
-    // Basic email regex
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(email);
+
+  const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  const handleSubmit = async () => {
+    if (!validateEmail(userEmail) || !location)
+      throw new Error("Invalid email or location");
+    if (!userEmail || !location) return;
+
+    try {
+      const response = await fetch("http://localhost:5000/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: userEmail, tags: location }),
+      });
+
+      if (!response.ok) throw new Error("Failed to save user");
+
+      alert("Successfully subscribed!");
+      setPromptEmail(false);
+      setUserEmail("");
+      setLocation("");
+    } catch (err) {
+      console.error(err);
+      alert("Error submitting. Try again.");
+    }
   };
 
   return (
@@ -58,7 +77,6 @@ function App() {
                   required
                   style={{ flex: 3 }}
                 />
-
                 <select
                   className="form-select"
                   value={location}
@@ -72,7 +90,6 @@ function App() {
                   <option value="Rocky Mountains">Rocky Mountains</option>
                 </select>
               </div>
-
               <div className="modal-footer bg-content">
                 <button
                   className="btn btn-secondary"
@@ -80,14 +97,8 @@ function App() {
                 >
                   Cancel
                 </button>
-
-                {/* This is an if else to check if the user has entered a valid email address & location for the button to submit to appear */}
-
                 {validateEmail(userEmail) && location ? (
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => alert(userEmail)}
-                  >
+                  <button className="btn btn-primary" onClick={handleSubmit}>
                     Submit
                   </button>
                 ) : (
