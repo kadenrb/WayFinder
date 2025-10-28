@@ -1,19 +1,19 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./index.css";
 import logo from "./images/logo.png";
 
 function App() {
-  const [promptEmail, setPromptEmail] = useState(false);
-  const [userEmail, setUserEmail] = useState("");
-  const [location, setLocation] = useState("");
+  const [promptEmail, setPromptEmail] = useState(false); // Controls display of email signup modal
+  const [userEmail, setUserEmail] = useState(""); // Stores user email input
+  const [location, setLocation] = useState(""); // Stores user location selection
+  const [showToast, setShowToast] = useState(false); // Controls display of notification toast
+  const [toastMessage, setToastMessage] = useState(""); // Stores notification message
 
   const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const handleSubmit = async () => {
-    if (!validateEmail(userEmail) || !location)
-      throw new Error("Invalid email or location");
-    if (!userEmail || !location) return;
+    if (!validateEmail(userEmail) || !location) return;
 
     try {
       const response = await fetch("http://localhost:5000/auth/signup", {
@@ -22,20 +22,57 @@ function App() {
         body: JSON.stringify({ email: userEmail, tags: location }),
       });
 
-      if (!response.ok) throw new Error("Failed to save user");
+      const data = await response.json();
 
-      alert("Successfully subscribed!");
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save user to db");
+      }
+
+      // Show success notification
+      setToastMessage(
+        `${userEmail} successfully signed up for notifications at ${location}`
+      );
+      setShowToast(true);
+
       setPromptEmail(false);
       setUserEmail("");
       setLocation("");
     } catch (err) {
       console.error(err);
-      alert("Error submitting. Try again.");
+      setToastMessage(`Error: ${err.message}`);
+      setShowToast(true);
     }
   };
 
+  // Auto-hide notification after 3 seconds
+  useEffect(() => {
+    if (!showToast) return;
+    const timer = setTimeout(() => setShowToast(false), 3000);
+    return () => clearTimeout(timer);
+  }, [showToast]);
+
   return (
     <>
+      <div className="toast-container position-fixed top-0 end-0 p-3">
+        {showToast && (
+          <div
+            className="toast show align-items-center text-bg-primary border-0"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            <div className="d-flex">
+              <div className="toast-body">{toastMessage}</div>
+              <button
+                type="button"
+                className="btn-close btn-close-white me-2 m-auto"
+                onClick={() => setShowToast(false)}
+              ></button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="d-flex justify-content-between align-items-center p-4 bg-head border-bottom">
         <h1 className="text-2xl fw-bold text-center flex-grow-1">
           Welcome to WayFinder
@@ -49,6 +86,7 @@ function App() {
         </button>
       </div>
 
+      {/* Signup bootstrap modal */}
       {promptEmail && (
         <div
           className="modal fade show d-block"
@@ -74,14 +112,12 @@ function App() {
                   placeholder="Enter your email..."
                   value={userEmail}
                   onChange={(e) => setUserEmail(e.target.value)}
-                  required
                   style={{ flex: 3 }}
                 />
                 <select
                   className="form-select"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                  required
                   style={{ flex: 1 }}
                 >
                   <option value="">Location</option>
