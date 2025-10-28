@@ -8,7 +8,7 @@ function sendEmailBtn() {
     setLoading(true);
     setMessage("");
     try {
-      const res = await fetch("http://localhost:5000/api/send-email", {
+      const res = await fetch("http://localhost:5000/auth/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -25,7 +25,7 @@ function sendEmailBtn() {
     }
     setLoading(false);
   };
-    // JSX for the button and message display 
+  // JSX for the button and message display
   return (
     <div>
       <button onClick={handleSend} disabled={loading}>
