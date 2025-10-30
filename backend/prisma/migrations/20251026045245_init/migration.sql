@@ -4,6 +4,7 @@ CREATE TABLE "admin" (
     "email" TEXT NOT NULL,
     "password" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "tags" TEXT NOT NULL DEFAULT 'RDP',
 
     CONSTRAINT "admin_pkey" PRIMARY KEY ("id")
 );
