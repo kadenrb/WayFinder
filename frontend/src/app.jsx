@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./index.css";
 import logo from "./images/logo.png";
-
+import MapPreview from "./MapPreview";
+import { Link, useNavigate } from "react-router-dom";
 function App() {
   const [promptEmail, setPromptEmail] = useState(false); // Controls display of email signup modal
   const [userEmail, setUserEmail] = useState(""); // Stores user email input
@@ -53,6 +54,7 @@ function App() {
 
   return (
     <>
+      {/* Notification bootstrap toast */}
       <div className="toast-container position-fixed top-0 end-0 p-3">
         {showToast && (
           <div
@@ -72,20 +74,21 @@ function App() {
           </div>
         )}
       </div>
-
-      <div className="d-flex justify-content-between align-items-center p-4 bg-head border-bottom">
-        <h1 className="text-2xl fw-bold text-center flex-grow-1">
+      <div className="d-flex justify-content-between align-items-center p-1 bg-head border-bottom">
+        <Link className="btn btn-primary fw-bold" to="/admin/sign-in">
+          Own a business?
+        </Link>
+        <h1 className="title text-2xl fw-bold text-center text-white">
           Welcome to WayFinder
           <img src={logo} alt="WayFinder Logo" className="img" />
         </h1>
         <button
-          className="btn btn-primary"
+          className="btn btn-primary fw-bold"
           onClick={() => setPromptEmail(true)}
         >
-          Want to get notified?
+          Get notified
         </button>
       </div>
-
       {/* Signup bootstrap modal */}
       {promptEmail && (
         <div
@@ -147,6 +150,7 @@ function App() {
           </div>
         </div>
       )}
+      <MapPreview /> {/* Have to pass the correct map eventually */}
     </>
   );
 }

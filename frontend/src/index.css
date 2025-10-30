@@ -1,8 +1,8 @@
 /* Brand color tokens */
 :root {
   --brand-primary: #2a91c9; /* blue */
-  --brand-accent: #c89154;  /* orange/bronze */
-  --brand-bg: #e9f4f9;      /* light tint */
+  --brand-accent: #c89154; /* orange/bronze */
+  --brand-bg: #e9f4f9; /* light tint */
   --surface: #ffffff;
   --text: #1b1b1d;
   --muted: #6b7280;
@@ -141,4 +141,9 @@ body {
 }
 .text-bg-primary:hover {
   background-color: #aa5c28 !important;
+}
+
+.title,
+.btn {
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
 }
