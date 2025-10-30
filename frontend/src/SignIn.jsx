@@ -34,19 +34,25 @@ export default function SignIn() {
     <div className="landing">
       <header className="landing__header">
         <div className="brand">
-          <span className="brand__logo" aria-hidden>🧭</span>
           <span className="brand__name">Wayfinder</span>
         </div>
         <nav className="actions">
-          <Link className="btn btn--secondary" to="/">Home</Link>
-          <Link className="btn btn--ghost" to="/admin/register">Request Admin</Link>
+          <Link className="btn btn--secondary" to="/">
+            Home
+          </Link>
+          <Link className="btn btn--ghost" to="/admin/register">
+            Request Admin
+          </Link>
         </nav>
       </header>
 
       <main className="landing__main">
         <form className="card auth" onSubmit={onSubmit}>
           <h2 className="card__title">Admin Sign In</h2>
-          <p className="muted">Only administrators can sign in. Public users can browse without an account.</p>
+          <p className="muted">
+            Only administrators can sign in. Public users can browse without an
+            account.
+          </p>
           <label className="field">
             <span className="field__label">Email</span>
             <input
@@ -69,13 +75,25 @@ export default function SignIn() {
               required
             />
           </label>
-          {error && <div className="error" role="alert">{error}</div>}
+          {error && (
+            <div className="error" role="alert">
+              {error}
+            </div>
+          )}
           <div className="actions">
-            <button className="btn btn--primary" type="submit" disabled={loading}>
+            <button
+              className="btn btn--primary"
+              type="submit"
+              disabled={loading}
+            >
               {loading ? "Signing in…" : "Sign In"}
             </button>
-            <Link className="btn btn--ghost" to="/register">Get updates</Link>
-            <Link className="btn btn--secondary" to="/app">Continue without sign in</Link>
+            <Link className="btn btn--ghost" to="/register">
+              Get updates
+            </Link>
+            <Link className="btn btn--secondary" to="/app">
+              Continue without sign in
+            </Link>
           </div>
         </form>
       </main>

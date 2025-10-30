@@ -18,7 +18,7 @@ app.use("/uploads", express.static(path.join(process.cwd(), "/uploads")));
 
 app.use("/auth", authRoutes);
 
-app.use("/upload", uploadRoute);
+// app.use("/upload", uploadRoute);
 
 app.use("/notify", notifyRoutes);
 
