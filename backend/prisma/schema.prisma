@@ -13,6 +13,7 @@ model admin {
   email     String   @unique
   password  String
   createdAt DateTime @default(now())
+  tags      String   @default("RDP")
 }
 
 model user {
