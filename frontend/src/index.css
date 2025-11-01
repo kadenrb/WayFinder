@@ -119,21 +119,49 @@
   border-color: #88471e !important;
 }
 
+.btn-outline-primary {
+  color: #c76c2f !important;
+  border-color: #aa5c28 !important;
+}
+
+.btn-outline-primary:hover {
+  background-color: #aa5c28 !important;
+  border-color: #995221 !important;
+  color: #fff !important;
+}
+
 .bg-head {
-  background-color: #57aeda !important;
+  background: linear-gradient(
+    100deg,
+    rgba(40, 70, 85, 1) 0%,
+    rgba(70, 85, 95, 1) 50%,
+    rgba(110, 95, 75, 1) 100%
+  );
 }
 
 img {
-  width: 15vw;
+  width: 10vw;
   height: auto;
 }
 
 body {
-  background-color: #59879e !important;
+  background: linear-gradient(
+    100deg,
+    rgb(28, 49, 59) 0%,
+    rgb(47, 56, 63) 50%,
+    rgb(73, 63, 50) 100%
+  );
+
+  background-attachment: fixed;
 }
 
 .bg-content {
-  background-color: #59879e !important;
+  background: linear-gradient(
+    120deg,
+    rgba(25, 70, 90, 1) 0%,
+    rgba(45, 65, 75, 1) 50%,
+    rgba(90, 75, 60, 1) 100%
+  );
 }
 
 .text-bg-primary {
@@ -142,8 +170,31 @@ body {
 .text-bg-primary:hover {
   background-color: #aa5c28 !important;
 }
+<<<<<<< Updated upstream
 
 .title,
 .btn {
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
 }
+=======
+<<<<<<< Updated upstream
+=======
+
+.title,
+.text-shadow {
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 12);
+}
+
+.btn {
+  text-shadow: 1px 1px 7px rgba(0, 0, 0, 10);
+}
+
+.text-blue {
+  color: #0376b4 !important;
+}
+
+.text-orange {
+  color: #c76c2f !important;
+}
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
