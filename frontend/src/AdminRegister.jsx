@@ -1,9 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-<<<<<<< Updated upstream
-=======
 import logo from "./images/logo.png";
->>>>>>> Stashed changes
 
 export default function AdminRegister() {
   const navigate = useNavigate();
@@ -38,85 +35,6 @@ export default function AdminRegister() {
   };
 
   return (
-<<<<<<< Updated upstream
-    <div className="landing">
-      <header className="landing__header">
-        <div className="brand">
-          <span className="brand__name">Wayfinder</span>
-        </div>
-        <nav className="actions">
-          <Link className="btn btn--secondary" to="/">
-            Home
-          </Link>
-          <Link className="btn btn--ghost" to="/admin/sign-in">
-            Admin Sign In
-          </Link>
-        </nav>
-      </header>
-
-      <main className="landing__main">
-        <form className="card auth" onSubmit={onSubmit}>
-          <h2 className="card__title">Request Admin Access</h2>
-          <p className="muted">
-            Create an admin account. Company name is for display only.
-          </p>
-          <label className="field">
-            <span className="field__label">Company</span>
-            <input
-              className="field__input"
-              type="text"
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-              placeholder="Acme Inc."
-              required
-            />
-          </label>
-          <label className="field">
-            <span className="field__label">Email</span>
-            <input
-              className="field__input"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@example.com"
-              required
-            />
-          </label>
-          <label className="field">
-            <span className="field__label">Password</span>
-            <input
-              className="field__input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-            />
-          </label>
-          {message && (
-            <div className="success" role="status">
-              {message}
-            </div>
-          )}
-          {error && (
-            <div className="error" role="alert">
-              {error}
-            </div>
-          )}
-          <div className="actions">
-            <button
-              className="btn btn--primary"
-              type="submit"
-              disabled={loading}
-            >
-              {loading ? "Submitting…" : "Create Admin"}
-            </button>
-            <Link className="btn btn--ghost" to="/signin">
-              Back to Sign In
-            </Link>
-          </div>
-        </form>
-=======
     <div>
       {/* Header */}
       <div className="bg-head p-3 rounded mb-5 border-bottom">
@@ -217,7 +135,6 @@ export default function AdminRegister() {
             </div>
           </form>
         </div>
->>>>>>> Stashed changes
       </main>
     </div>
   );

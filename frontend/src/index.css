@@ -170,15 +170,10 @@ body {
 .text-bg-primary:hover {
   background-color: #aa5c28 !important;
 }
-<<<<<<< Updated upstream
-
 .title,
 .btn {
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
 }
-=======
-<<<<<<< Updated upstream
-=======
 
 .title,
 .text-shadow {
@@ -196,5 +191,3 @@ body {
 .text-orange {
   color: #c76c2f !important;
 }
->>>>>>> Stashed changes
->>>>>>> Stashed changes

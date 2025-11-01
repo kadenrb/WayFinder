@@ -74,28 +74,6 @@ function App() {
           </div>
         )}
       </div>
-<<<<<<< Updated upstream
-      <div className="d-flex justify-content-between align-items-center p-1 bg-head border-bottom">
-        <Link className="btn btn-primary fw-bold" to="/admin/sign-in">
-          Own a business?
-        </Link>
-        <h1 className="title text-2xl fw-bold text-center text-white">
-=======
-<<<<<<< Updated upstream
-
-      <div className="d-flex justify-content-between align-items-center p-4 bg-head border-bottom">
-        <h1 className="text-2xl fw-bold text-center flex-grow-1">
->>>>>>> Stashed changes
-          Welcome to WayFinder
-          <img src={logo} alt="WayFinder Logo" className="img" />
-        </h1>
-        <button
-          className="btn btn-primary fw-bold"
-          onClick={() => setPromptEmail(true)}
-        >
-          Get notified
-        </button>
-=======
       <div className="bg-head p-3 rounded border-bottom">
         <header
           className="d-flex flex-column flex-md-row justify-content-between 
@@ -125,7 +103,6 @@ function App() {
             </button>
           </nav>
         </header>
->>>>>>> Stashed changes
       </div>
       {/* Signup bootstrap modal */}
       {promptEmail && (
