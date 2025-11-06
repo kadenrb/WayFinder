@@ -22,7 +22,7 @@ export default function SignIn() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Sign-in failed");
       if (data?.token) localStorage.setItem("token", data.token);
-      navigate("/app");
+      navigate("/admin/home");
     } catch (err) {
       setError(err.message || "Unable to sign in");
     } finally {
@@ -91,7 +91,7 @@ export default function SignIn() {
             <Link className="btn btn--ghost" to="/register">
               Get updates
             </Link>
-            <Link className="btn btn--secondary" to="/app">
+            <Link className="btn btn--secondary" to="/admin/home">
               Continue without sign in
             </Link>
           </div>

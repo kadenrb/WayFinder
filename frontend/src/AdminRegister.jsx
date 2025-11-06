@@ -106,9 +106,9 @@ export default function AdminRegister() {
             >
               {loading ? "Submitting…" : "Create Admin"}
             </button>
-            <Link className="btn btn--ghost" to="/signin">
-              Back to Sign In
-            </Link>
+          <Link className="btn btn--ghost" to="/admin/sign-in">
+            Back to Sign In
+          </Link>
           </div>
         </form>
       </main>

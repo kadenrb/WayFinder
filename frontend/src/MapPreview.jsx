@@ -1,3 +1,5 @@
+// MAP PREVIEW — concise overview
+// Small snapshot of the chosen map image. Editing happens in MapEditor.
 import React from "react";
 
 export default function MapPreview({ imageUrl }) {
