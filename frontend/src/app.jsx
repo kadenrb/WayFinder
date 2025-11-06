@@ -76,20 +76,35 @@ function App() {
           </div>
         )}
       </div>
-      <div className="d-flex justify-content-between align-items-center p-1 bg-head border-bottom">
-        <Link className="btn btn-primary fw-bold" to="/admin/sign-in">
-          Own a business?
-        </Link>
-        <h1 className="title text-2xl fw-bold text-center text-white">
-          Welcome to WayFinder
-          <img src={logo} alt="WayFinder Logo" className="img" />
-        </h1>
-        <button
-          className="btn btn-primary fw-bold"
-          onClick={() => setPromptEmail(true)}
+      <div className="bg-head p-3 rounded border-bottom">
+        <header
+          className="d-flex flex-column flex-md-row justify-content-between 
+              align-items-center mb-3 text-center"
         >
-          Get notified
-        </button>
+          <div
+            className="display-3 fw-bold text-shadow mb-3 d-flex align-items-center 
+                justify-content-center justify-content-start"
+          >
+            <img src={logo} alt="WayFinder Logo" className="me-2" />
+            <span className="text-blue">Way</span>
+            <span className="text-orange">Finder</span>
+          </div>
+
+          <nav className="d-flex flex-column flex-sm-row gap-2">
+            <Link
+              className="btn btn-outline-primary fw-bold"
+              to="/admin/sign-in"
+            >
+              Own a business?
+            </Link>
+            <button
+              className="btn btn-primary fw-bold"
+              onClick={() => setPromptEmail(true)}
+            >
+              Get notified
+            </button>
+          </nav>
+        </header>
       </div>
       {/* Signup bootstrap modal */}
       {promptEmail && (
@@ -101,7 +116,7 @@ function App() {
           <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header bg-head">
-                <h5 className="modal-title">
+                <h5 className="modal-title text-white">
                   Enter Your Email & Location to Get Notified
                 </h5>
                 <button
@@ -114,7 +129,7 @@ function App() {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Enter your email..."
+                  placeholder="Enter a valid email..."
                   value={userEmail}
                   onChange={(e) => setUserEmail(e.target.value)}
                   style={{ flex: 3 }}
@@ -125,7 +140,9 @@ function App() {
                   onChange={(e) => setLocation(e.target.value)}
                   style={{ flex: 1 }}
                 >
-                  <option value="">Location</option>
+                  <option value="">
+                    Location - Chose where you want updates
+                  </option>
                   <option value="RDP">RDP - Red Deer Polytechnic</option>
                   <option value="Grand Canyon">Grand Canyon</option>
                   <option value="Rocky Mountains">Rocky Mountains</option>
@@ -133,7 +150,7 @@ function App() {
               </div>
               <div className="modal-footer bg-content">
                 <button
-                  className="btn btn-secondary"
+                  className="btn btn-outline-primary"
                   onClick={() => setPromptEmail(false)}
                 >
                   Cancel
