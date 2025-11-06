@@ -1,3 +1,5 @@
+// APP SHELL — concise overview
+// Top-level app wrapper. Wires routes to SignIn/Register/LandingPage.
 import React, { useState, useEffect } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./index.css";

@@ -25,7 +25,7 @@ export default function Register() {
       if (!res.ok) throw new Error(data?.message || "Registration failed");
       setMessage("Account created. You can now sign in.");
       // Light nudge to signin after a moment
-      setTimeout(() => navigate("/signin"), 900);
+      setTimeout(() => navigate("/admin/sign-in"), 900);
     } catch (err) {
       setError(err.message || "Unable to register");
     } finally {
@@ -92,7 +92,7 @@ export default function Register() {
             >
               {loading ? "Submitting…" : "Submit"}
             </button>
-            <Link className="btn btn--ghost" to="/signin">
+            <Link className="btn btn--ghost" to="/admin/sign-in">
               Already have an account?
             </Link>
           </div>

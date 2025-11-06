@@ -1,6 +1,11 @@
+// LANDING PAGE — concise overview
+// Hosts the Map Editor and a small sidebar. Left: upload and edit. Right: account info and a public map URL.
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "./index.css";
 import DragMapArea from "./DragMapArea";
+import MapEditor from "./MapEditor";
 
 function Stat({ label, value }) {
   return (
@@ -12,8 +17,15 @@ function Stat({ label, value }) {
 }
 
 function QuickAction({ label, onClick, kind = "primary" }) {
+  const variantMap = {
+    primary: "btn btn-primary",
+    secondary: "btn btn-secondary",
+    ghost: "btn btn-outline-secondary",
+    danger: "btn btn-danger",
+  };
+  const className = variantMap[kind] || variantMap.primary;
   return (
-    <button className={`btn btn--${kind}`} onClick={onClick}>
+    <button className={className} onClick={onClick}>
       {label}
     </button>
   );
@@ -24,6 +36,7 @@ function QuickAction({ label, onClick, kind = "primary" }) {
 export default function LandingPage({ user }) {
   const name = user?.name || user?.email || "Explorer";
   const navigate = useNavigate();
+  const [editorImageUrl, setEditorImageUrl] = React.useState("");
   const [publicMapUrl, setPublicMapUrl] = React.useState(() =>
     (typeof window !== "undefined" && localStorage.getItem("wf_public_map_url")) || ""
   );
@@ -40,12 +53,17 @@ export default function LandingPage({ user }) {
 
   return (
     <div className="landing">
-      <header className="landing__header">
+      <header className="d-flex justify-content-between align-items-center p-1 bg-head border-bottom">
         <div className="brand">
           <span className="brand__logo" aria-hidden></span>
-          <span className="brand__name">Wayfinder</span>
+          <span className="brand__name text-white fw-bold">Wayfinder</span>
         </div>
-        <div className="landing__greeting">Welcome, {name}</div>
+        <h1 className="title text-2xl fw-bold text-center text-white m-0">
+          Welcome, {name}
+        </h1>
+        <button className="btn btn-primary fw-bold" onClick={handleSignOut}>
+          Sign out
+        </button>
       </header>
 
       <main className="landing__main container">
@@ -56,7 +74,7 @@ export default function LandingPage({ user }) {
               <p className="card__desc">
                 Drag an image of your map to preview and save it locally.
               </p>
-              <DragMapArea />
+              <DragMapArea onImageSelected={(url) => setEditorImageUrl(url)} />
             </div>
 
             <div className="card shadow-sm">
@@ -78,6 +96,10 @@ export default function LandingPage({ user }) {
                   onClick={() => alert("Coming soon: docs")}
                 />
               </div>
+            </div>
+
+            <div className="mt-3">
+              <MapEditor imageSrc={editorImageUrl || publicMapUrl} />
             </div>
           </div>
 

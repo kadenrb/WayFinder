@@ -23,7 +23,7 @@ export default function SignIn() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Sign-in failed");
       if (data?.token) localStorage.setItem("token", data.token);
-      navigate("/app");
+      navigate("/admin/home");
     } catch (err) {
       setError(err.message || "Unable to sign in");
     } finally {

@@ -1,6 +1,8 @@
+// DRAG MAP AREA — concise overview
+// Drag-and-drop image input. Emits the selected image URL to the parent.
 import React, { useRef, useState } from "react";
 
-function DragMapArea() {
+function DragMapArea({ onImageSelected }) {
     const [previewUrl, setPreviewUrl] = useState("");
     const [dragOver, setDragOver] = useState(false);
     const [blob, setBlob] = useState(null);
@@ -24,6 +26,7 @@ function DragMapArea() {
             return url;
         });
         setStatus(`${f.name} (${(f.size / 1024).toFixed(1)} KB)`);
+        try { onImageSelected && onImageSelected(url, { file: f, name: f.name }); } catch {}
     };
 
     const onDrop = (e) => {
