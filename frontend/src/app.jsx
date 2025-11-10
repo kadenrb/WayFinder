@@ -8,6 +8,7 @@ import MapPreview from "./MapPreview";
 import { Link, useNavigate } from "react-router-dom";
 function App() {
   const [promptEmail, setPromptEmail] = useState(false); // Controls display of email signup modal
+  const [deleteEmail, setDeleteEmail] = useState(false); // Controls display of email delete modal
   const [userEmail, setUserEmail] = useState(""); // Stores user email input
   const [location, setLocation] = useState(""); // Stores user location selection
   const [showToast, setShowToast] = useState(false); // Controls display of notification toast
@@ -38,6 +39,38 @@ function App() {
       setShowToast(true);
 
       setPromptEmail(false);
+      setUserEmail("");
+      setLocation("");
+    } catch (err) {
+      console.error(err);
+      setToastMessage(`Error: ${err.message}`);
+      setShowToast(true);
+    }
+  };
+
+  const deleteUser = async () => {
+    if (!validateEmail(userEmail)) return;
+
+    try {
+      const response = await fetch("http://localhost:5000/auth/delete-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: userEmail }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete user from db");
+      }
+
+      // Show success notification
+      setToastMessage(
+        `${userEmail} successfully unsubscribed from notifications`
+      );
+      setShowToast(true);
+
+      setDeleteEmail(false);
       setUserEmail("");
       setLocation("");
     } catch (err) {
@@ -150,6 +183,15 @@ function App() {
               </div>
               <div className="modal-footer bg-content">
                 <button
+                  className="btn btn-outline-danger me-auto"
+                  onClick={() => {
+                    setPromptEmail(false);
+                    setDeleteEmail(true);
+                  }}
+                >
+                  Unsubscribe
+                </button>
+                <button
                   className="btn btn-outline-primary"
                   onClick={() => setPromptEmail(false)}
                 >
@@ -162,6 +204,55 @@ function App() {
                 ) : (
                   <button className="btn btn-primary" disabled>
                     Submit
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {deleteEmail && (
+        <div
+          className="modal fade show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        >
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header bg-head">
+                <h5 className="modal-title text-white">
+                  Enter Your Email to Unsubscribe
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setDeleteEmail(false)}
+                ></button>
+              </div>
+              <div className="modal-body d-flex gap-2">
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Enter your email"
+                  value={userEmail}
+                  onChange={(e) => setUserEmail(e.target.value)}
+                  style={{ flex: 3 }}
+                />
+              </div>
+              <div className="modal-footer bg-content">
+                <button
+                  className="btn btn-outline-primary"
+                  onClick={() => setDeleteEmail(false)}
+                >
+                  Cancel
+                </button>
+                {validateEmail(userEmail) ? (
+                  <button className="btn btn-danger" onClick={deleteUser}>
+                    Unsubscribe
+                  </button>
+                ) : (
+                  <button className="btn btn-danger" disabled>
+                    Unsubscribe
                   </button>
                 )}
               </div>

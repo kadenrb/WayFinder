@@ -60,7 +60,9 @@ export default function SignIn() {
 
       <main className="d-flex justify-content-center">
         <div className="card shadow-sm p-4">
-          <h2 className="text-center mb-3">Admin Sign In</h2>
+          <h2 className="text-center mb-3 text-orange fw-bold">
+            Admin Sign In
+          </h2>
           <p className="text-muted text-center small mb-4">
             Only use this if you have a map to manage. Guests don't require a
             sign-in. Admins can request an account for inquiry's{" "}

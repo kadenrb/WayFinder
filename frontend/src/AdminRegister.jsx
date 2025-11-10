@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import logo from "./images/logo.png";
 
 export default function AdminRegister() {
-  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [company, setCompany] = useState("");
@@ -21,12 +20,17 @@ export default function AdminRegister() {
       const res = await fetch("http://localhost:5000/auth/create-admin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email: email,
+          password: password,
+          company: company,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Registration failed");
-      setMessage("Admin account created. You can now sign in.");
-      setTimeout(() => navigate("/admin/sign-in"), 900);
+      setMessage(
+        `Successfully submitted admin account details for ${company} (email: ${email}). You will receive an email once we have reviewed your request.`
+      );
     } catch (err) {
       setError(err.message || "Unable to register admin");
     } finally {
@@ -107,7 +111,13 @@ export default function AdminRegister() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
+                pattern="^(?=.*\d).{8,}$"
+                title="Must be at least 8 characters long and include at least one number"
               />
+              <small className="text-muted">
+                Password must be at least 8 characters long and include at least
+                one number.
+              </small>
             </div>
 
             {message && (
