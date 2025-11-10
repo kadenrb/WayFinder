@@ -104,6 +104,9 @@ export default function SignIn() {
               <button type="submit" className="btn btn-primary">
                 Sign In
               </button>
+              <Link to="/" className="btn btn-outline-primary">
+                Home
+              </Link>
             </div>
           </form>
         </div>
