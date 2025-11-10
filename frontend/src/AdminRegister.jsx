@@ -111,7 +111,13 @@ export default function AdminRegister() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
+                pattern="^(?=.*\d).{8,}$"
+                title="Must be at least 8 characters long and include at least one number"
               />
+              <small className="text-muted">
+                Password must be at least 8 characters long and include at least
+                one number.
+              </small>
             </div>
 
             {message && (
