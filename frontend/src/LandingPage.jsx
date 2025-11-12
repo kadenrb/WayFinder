@@ -6,7 +6,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import "./index.css";
 import DragMapArea from "./DragMapArea";
 import MapEditor from "./MapEditor";
-import SignIn from "./SignIn";
+
 
 
 
