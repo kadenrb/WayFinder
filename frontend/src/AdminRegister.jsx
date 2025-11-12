@@ -56,7 +56,7 @@ export default function AdminRegister() {
           </div>
 
           <nav className="d-flex flex-column flex-sm-row gap-2">
-            <Link className="btn btn-outline-primary fw-bold" to="/">
+            <Link className="btn btn-outline-primary fw-bold px-4" to="/">
               Home
             </Link>
             <Link className="btn btn-primary fw-bold" to="/admin/sign-in">
@@ -68,21 +68,21 @@ export default function AdminRegister() {
 
       {/* Main */}
       <main className="d-flex justify-content-center">
-        <div className="card shadow-sm p-4">
+        <div className="card shadow-sm p-4 bg-card">
           <h2 className="text-center mb-3 text-orange fw-bold">
             Request Admin Access
           </h2>
-          <p className="text-muted text-center small mb-4">
+          <p className="text-card text-center small mb-4">
             This will send an email to the creators of WayFinder to approve your
             request for a public map in a location you manage.
           </p>
 
           <form onSubmit={onSubmit}>
             <div className="mb-3">
-              <label className="form-label">Company</label>
+              <label className="form-label text-card">Company</label>
               <input
                 type="text"
-                className="form-control"
+                className="form-control bg-card-inner"
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
                 placeholder="Your Company Name"
@@ -91,22 +91,23 @@ export default function AdminRegister() {
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Email</label>
+              <label className="form-label text-card">Email</label>
               <input
                 type="email"
-                className="form-control"
+                className="form-control bg-card-inner"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                pattern="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
                 placeholder="admin@example.com"
                 required
               />
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Password</label>
+              <label className="form-label text-card">Password</label>
               <input
                 type="password"
-                className="form-control"
+                className="form-control bg-card-inner"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
@@ -114,7 +115,7 @@ export default function AdminRegister() {
                 pattern="^(?=.*\d).{8,}$"
                 title="Must be at least 8 characters long and include at least one number"
               />
-              <small className="text-muted">
+              <small className="text-card">
                 Password must be at least 8 characters long and include at least
                 one number.
               </small>

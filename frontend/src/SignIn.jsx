@@ -48,7 +48,7 @@ export default function SignIn() {
           </div>
 
           <nav className="d-flex flex-column flex-sm-row gap-2">
-            <Link className="btn btn-outline-primary fw-bold" to="/">
+            <Link className="btn btn-outline-primary fw-bold px-4" to="/">
               Home
             </Link>
             <Link className="btn btn-primary fw-bold" to="/admin/register">
@@ -59,22 +59,25 @@ export default function SignIn() {
       </div>
 
       <main className="d-flex justify-content-center">
-        <div className="card shadow-sm p-4">
+        <div className="card shadow-sm p-4 bg-card">
           <h2 className="text-center mb-3 text-orange fw-bold">
             Admin Sign In
           </h2>
-          <p className="text-muted text-center small mb-4">
+          <p className="text-card text-center small mb-4">
             Only use this if you have a map to manage. Guests don't require a
             sign-in. Admins can request an account for inquiry's{" "}
-            <Link to="/admin/register">here</Link>.
+            <Link style={{ color: "#6cb2d5" }} to="/admin/register">
+              here
+            </Link>
+            .
           </p>
 
           <form onSubmit={onSubmit}>
             <div className="mb-3">
-              <label className="form-label">Email</label>
+              <label className="form-label text-card">Email</label>
               <input
                 type="email"
-                className="form-control"
+                className="form-control bg-card-inner"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
@@ -83,10 +86,10 @@ export default function SignIn() {
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Password</label>
+              <label className="form-label text-card">Password</label>
               <input
                 type="password"
-                className="form-control"
+                className="form-control bg-card-inner"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="***"
