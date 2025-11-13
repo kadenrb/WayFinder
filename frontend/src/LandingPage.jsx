@@ -1,12 +1,15 @@
 // LANDING PAGE — concise overview
 // Hosts the Map Editor and a small sidebar. Left: upload and edit. Right: account info and a public map URL.
-import React from "react";
+import React, { useEffect} from "react";
 import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./index.css";
 import DragMapArea from "./DragMapArea";
 import MapEditor from "./MapEditor";
 import logo from "./images/logo.png";
+
+
+
 
 function Stat({ label, value }) {
   return (
@@ -43,6 +46,17 @@ export default function LandingPage({ user }) {
         localStorage.getItem("wf_public_map_url")) ||
       ""
   );
+
+
+  //kris: 
+  useEffect(() => {
+    const token = localStorage.getItem("token"); 
+    if (!token) {
+      navigate("/");  // Redirect to SignIn if no token
+    }
+  }, [navigate]);
+  //kris ^
+
 
   const savePublicMapUrl = () => {
     try {
