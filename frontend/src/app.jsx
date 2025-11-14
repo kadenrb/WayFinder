@@ -5,6 +5,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import "./index.css";
 import logo from "./images/logo.png";
 import MapPreview from "./MapPreview";
+import UserMap from "./UserMap";
 import { Link, useNavigate } from "react-router-dom";
 function App() {
   const [promptEmail, setPromptEmail] = useState(false); // Controls display of email signup modal
@@ -211,6 +212,10 @@ function App() {
           </div>
         </div>
       )}
+      {/* Public multi-floor viewer (uses published floors). */}
+      <div className="mt-4">
+        <UserMap />
+      </div>
       {deleteEmail && (
         <div
           className="modal fade show d-block"
