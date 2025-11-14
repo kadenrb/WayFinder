@@ -79,6 +79,7 @@ export default function LandingPage({ user }) {
   const clearAllImages = () => {
     setImages((prev) => { prev.forEach((i) => { try { URL.revokeObjectURL(i.url); } catch {} }); return []; });
     setSelectedImageId(null);
+  };
   const [editorImageUrl, setEditorImageUrl] = React.useState("");
   const [publicMapUrl, setPublicMapUrl] = React.useState(
     () =>
@@ -87,7 +88,7 @@ export default function LandingPage({ user }) {
       ""
   );
 
-
+  
   //kris: 
   useEffect(() => {
     const token = localStorage.getItem("token"); 
@@ -96,7 +97,7 @@ export default function LandingPage({ user }) {
     }
   }, [navigate]);
   //kris ^
-
+  
 
   const savePublicMapUrl = () => {
     try {
@@ -332,4 +333,5 @@ export default function LandingPage({ user }) {
       </main>
     </div>
   );
-}
+};
+
