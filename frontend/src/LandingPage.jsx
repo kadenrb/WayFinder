@@ -106,6 +106,32 @@ export default function LandingPage({ user }) {
     alert("Public map URL saved for homepage preview");
   };
 
+  const [editorImageUrl, setEditorImageUrl] = React.useState("");
+  const [publicMapUrl, setPublicMapUrl] = React.useState(
+    () =>
+      (typeof window !== "undefined" &&
+        localStorage.getItem("wf_public_map_url")) ||
+      ""
+  );
+
+
+  //kris: 
+  useEffect(() => {
+    const token = localStorage.getItem("token"); 
+    if (!token) {
+      navigate("/");  // Redirect to SignIn if no token
+    }
+  }, [navigate]);
+  //kris ^
+
+
+  const savePublicMapUrl = () => {
+    try {
+      localStorage.setItem("wf_public_map_url", publicMapUrl);
+    } catch {}
+    alert("Public map URL saved for homepage preview");
+  };
+
   // Cycle selection forward/backward
   const selectNext = (dir = +1) => {
     if (!images.length || !selectedImageId) return;

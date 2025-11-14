@@ -107,7 +107,13 @@ export default function MapEditor({ imageSrc }) {
   // SECTION: Inline List Editing (quick fixes)
   // ===============================
   const [listEditId, setListEditId] = useState(null);
-  const [listDraft, setListDraft] = useState({ name: "", roomNumber: "", aliasText: "", warpKey: "" });
+  const [listDraft, setListDraft] = useState(() => ({
+    name: "",
+    roomNumber: "",
+    aliasText: "",
+    warpKey: "",
+    poiType: POI_TYPES[0] || "",
+  }));
 
   // ===============================
   // SECTION: User Marker (dev/debug routing)
@@ -141,12 +147,24 @@ export default function MapEditor({ imageSrc }) {
   const beginListEdit = (p) => {
     setListEditId(p.id);
     const aliasText = Array.isArray(p.aliases) && p.aliases.length ? p.aliases.join(", ") : "";
-    setListDraft({ name: p.name || "", roomNumber: p.roomNumber || "", aliasText, warpKey: p.warpKey || "" });
+    setListDraft({
+      name: p.name || "",
+      roomNumber: p.roomNumber || "",
+      aliasText,
+      warpKey: p.warpKey || "",
+      poiType: p.poiType || POI_TYPES[0] || "",
+    });
   };
 
   const cancelListEdit = () => {
     setListEditId(null);
-    setListDraft({ name: "", roomNumber: "", aliasText: "", warpKey: "" });
+    setListDraft({
+      name: "",
+      roomNumber: "",
+      aliasText: "",
+      warpKey: "",
+      poiType: POI_TYPES[0] || "",
+    });
   };
 
   const saveListEdit = () => {
@@ -161,7 +179,26 @@ export default function MapEditor({ imageSrc }) {
       .map((s) => s.replace(/[\u2013\u2014]/g, '-').toUpperCase().replace(/\s+/g, '').trim())
       .filter(Boolean)));
     const warpKey = (listDraft.warpKey || "").trim();
-    setPoints((prev) => prev.map((p) => (p.id === listEditId ? { ...p, name, roomNumber, aliases: normAliases, warpKey } : p)));
+    const poiType = (listDraft.poiType || "").toString();
+    setPoints((prev) =>
+      prev.map((p) => {
+        if (p.id !== listEditId) return p;
+        const next = { ...p, name, roomNumber, aliases: normAliases };
+        if (p.kind === "poi") {
+          const normalizedType = poiType || p.poiType || POI_TYPES[0] || "";
+          next.poiType = normalizedType;
+          if (normalizedType === "stairs" || normalizedType === "elevator") {
+            next.warpKey = warpKey;
+          } else {
+            next.warpKey = "";
+          }
+        } else {
+          next.poiType = undefined;
+          next.warpKey = undefined;
+        }
+        return next;
+      })
+    );
     if (selectedId === listEditId) {
       // keep selection
       setSelectedId(listEditId);
@@ -671,7 +708,7 @@ export default function MapEditor({ imageSrc }) {
     try {
       const key = `wf_route_dest:${imageSrc || ''}`;
       if (routeDestId) localStorage.setItem(key, routeDestId);
-    } catch {}
+    } catch { }
   }, [routeDestId, imageSrc]);
 
   // Baseline OCR (whole image)
@@ -1446,7 +1483,11 @@ export default function MapEditor({ imageSrc }) {
     // Ensure aliases is always an array in the draft for editing
     const aliases = Array.isArray(p.aliases) ? p.aliases : [];
     const aliasText = aliases.length ? aliases.join(", ") : "";
-    setEditing({ id: p.id, xPx, yPx, draft: { ...p, aliases }, aliasText });
+    const draft = { ...p, aliases };
+    if (draft.kind === "poi") {
+      draft.poiType = draft.poiType || POI_TYPES[0] || "";
+    }
+    setEditing({ id: p.id, xPx, yPx, draft, aliasText });
   };
 
   /*
@@ -1467,6 +1508,17 @@ export default function MapEditor({ imageSrc }) {
       .map((s) => s.replace(/[\u2013\u2014]/g, '-').toUpperCase().replace(/\s+/g, '').trim())
       .filter(Boolean)));
     const toSave = { ...d, aliases: normAliases };
+    if (toSave.kind === "poi") {
+      toSave.poiType = toSave.poiType || POI_TYPES[0] || "";
+      if (toSave.poiType === "stairs" || toSave.poiType === "elevator") {
+        toSave.warpKey = (toSave.warpKey || "").trim();
+      } else {
+        toSave.warpKey = "";
+      }
+    } else {
+      delete toSave.poiType;
+      delete toSave.warpKey;
+    }
     setPoints((prev) => {
       const idx = prev.findIndex((p) => p.id === editing.id);
       if (idx >= 0) {
@@ -1515,7 +1567,7 @@ export default function MapEditor({ imageSrc }) {
             points: Array.isArray(state?.points) ? state.points : [],
             walkable: state?.walkable || { color: '#9F9383', tolerance: 12 },
           });
-        } catch {}
+        } catch { }
       }
       // If none found in storage (unlikely), fall back to current state as single floor
       if (!floors.length) {
@@ -1532,7 +1584,7 @@ export default function MapEditor({ imageSrc }) {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
-    } catch {}
+    } catch { }
   };
 
   /*
@@ -1669,8 +1721,8 @@ export default function MapEditor({ imageSrc }) {
           typeof w?.confidence === "number"
             ? w.confidence
             : typeof w?.conf === "number"
-            ? w.conf
-            : 0;
+              ? w.conf
+              : 0;
         if (isRoomLike(n) && conf >= 65 && conf > bestConf) {
           best = n;
           bestConf = conf;
@@ -1991,25 +2043,19 @@ export default function MapEditor({ imageSrc }) {
                     <select
                       className="form-select form-select-sm"
                       value={editing.draft.kind}
-                      onChange={(e) => setEditing((s) => ({ ...s, draft: { ...s.draft, kind: e.target.value } }))}
-                    >
-                      <option value="room">Room</option>
-                      <option value="door">Door</option>
-                      <option value="poi">POI</option>
-                    </select>
-                  </div>
-
-                {editing.draft.kind === "poi" && (
-                  <div className="mb-2">
-                    <label className="form-label">Kind</label>
-                    <select
-                      className="form-select form-select-sm"
-                      value={editing.draft.kind}
                       onChange={(e) =>
-                        setEditing((s) => ({
-                          ...s,
-                          draft: { ...s.draft, kind: e.target.value },
-                        }))
+                        setEditing((s) => {
+                          if (!s) return s;
+                          const nextKind = e.target.value;
+                          const nextDraft = { ...s.draft, kind: nextKind };
+                          if (nextKind === "poi") {
+                            nextDraft.poiType = nextDraft.poiType || POI_TYPES[0] || "";
+                          } else {
+                            nextDraft.poiType = undefined;
+                            nextDraft.warpKey = "";
+                          }
+                          return { ...s, draft: nextDraft };
+                        })
                       }
                     >
                       <option value="room">Room</option>
@@ -2017,21 +2063,47 @@ export default function MapEditor({ imageSrc }) {
                       <option value="poi">POI</option>
                     </select>
                   </div>
-                )}
 
-                {editing.draft.kind === "poi" && (editing.draft.poiType === 'stairs' || editing.draft.poiType === 'elevator') && (
-                  <div className="mb-2">
-                    <label className="form-label">Warp Key</label>
-                    <input
-                      className="form-control form-control-sm"
-                      type="text"
-                      value={editing.draft.warpKey || ""}
-                      onChange={(e) => setEditing((s) => ({ ...s, draft: { ...s.draft, warpKey: e.target.value } }))}
-                      placeholder="e.g., STAIRS-A, ELEV-1"
-                    />
-                    <small className="text-muted">Points with matching Warp Key connect across floors.</small>
-                  </div>
-                )}
+                  {editing.draft.kind === "poi" && (
+                    <div className="mb-2">
+                      <label className="form-label">POI Type</label>
+                      <select
+                        className="form-select form-select-sm"
+                        value={editing.draft.poiType || POI_TYPES[0] || ""}
+                        onChange={(e) =>
+                          setEditing((s) => {
+                            if (!s) return s;
+                            const nextType = e.target.value;
+                            const nextDraft = { ...s.draft, poiType: nextType };
+                            if (nextType !== "stairs" && nextType !== "elevator") {
+                              nextDraft.warpKey = "";
+                            }
+                            return { ...s, draft: nextDraft };
+                          })
+                        }
+                      >
+                        {POI_TYPES.map((type) => (
+                          <option key={type} value={type}>
+                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {editing.draft.kind === "poi" && (editing.draft.poiType === 'stairs' || editing.draft.poiType === 'elevator') && (
+                    <div className="mb-2">
+                      <label className="form-label">Warp Key</label>
+                      <input
+                        className="form-control form-control-sm"
+                        type="text"
+                        value={editing.draft.warpKey || ""}
+                        onChange={(e) => setEditing((s) => ({ ...s, draft: { ...s.draft, warpKey: e.target.value } }))}
+                        placeholder="e.g., STAIRS-A, ELEV-1"
+                      />
+                      <small className="text-muted">Points with matching Warp Key connect across floors.</small>
+                    </div>
+                  )}
 
                   <div className="mb-2">
                     <label className="form-label">Name</label>
@@ -2196,46 +2268,63 @@ export default function MapEditor({ imageSrc }) {
                     onDoubleClick={() => beginEdit(p)}
                     style={{ cursor: listEditId === p.id ? "default" : "pointer" }}
                   >
-                  {listEditId === p.id ? (
-                    <div className="d-flex flex-column gap-2" onClick={(e) => e.stopPropagation()}>
-                      <div className="d-flex align-items-center gap-2">
-                        <span className={`badge ${markerClass(p.kind)}`}> </span>
-                        <input
-                          className="form-control form-control-sm"
-                          style={{ maxWidth: 160 }}
-                          placeholder="Room number"
-                          value={listDraft.roomNumber}
-                          onChange={(e) => setListDraft((s) => ({ ...s, roomNumber: e.target.value }))}
-                        />
-                        <input
-                          className="form-control form-control-sm"
-                          style={{ maxWidth: 220 }}
-                          placeholder="Name"
-                          value={listDraft.name}
-                          onChange={(e) => setListDraft((s) => ({ ...s, name: e.target.value }))}
-                        />
-                      </div>
-                      {(p.kind === 'poi' && (p.poiType === 'stairs' || p.poiType === 'elevator')) && (
+                    {listEditId === p.id ? (
+                      <div className="d-flex flex-column gap-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="d-flex align-items-center gap-2">
+                          <span className={`badge ${markerClass(p.kind)}`}> </span>
+                          <input
+                            className="form-control form-control-sm"
+                            style={{ maxWidth: 160 }}
+                            placeholder="Room number"
+                            value={listDraft.roomNumber}
+                            onChange={(e) => setListDraft((s) => ({ ...s, roomNumber: e.target.value }))}
+                          />
+                          <input
+                            className="form-control form-control-sm"
+                            style={{ maxWidth: 220 }}
+                            placeholder="Name"
+                            value={listDraft.name}
+                            onChange={(e) => setListDraft((s) => ({ ...s, name: e.target.value }))}
+                          />
+                        </div>
+                        {p.kind === 'poi' && (
+                          <div className="d-flex align-items-center gap-2">
+                            <span style={{ width: 16 }}></span>
+                            <select
+                              className="form-select form-select-sm"
+                              style={{ maxWidth: 220 }}
+                              value={listDraft.poiType || POI_TYPES[0] || ""}
+                              onChange={(e) => setListDraft((s) => ({ ...s, poiType: e.target.value }))}
+                            >
+                              {POI_TYPES.map((type) => (
+                                <option key={type} value={type}>
+                                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        {p.kind === 'poi' && (listDraft.poiType === 'stairs' || listDraft.poiType === 'elevator') && (
+                          <div className="d-flex align-items-center gap-2">
+                            <span style={{ width: 16 }}></span>
+                            <input
+                              className="form-control form-control-sm"
+                              style={{ maxWidth: 220 }}
+                              placeholder="Warp Key (e.g., STAIRS-A)"
+                              value={listDraft.warpKey || ''}
+                              onChange={(e) => setListDraft((s) => ({ ...s, warpKey: e.target.value }))}
+                            />
+                          </div>
+                        )}
                         <div className="d-flex align-items-center gap-2">
                           <span style={{ width: 16 }}></span>
                           <input
                             className="form-control form-control-sm"
-                            style={{ maxWidth: 220 }}
-                            placeholder="Warp Key (e.g., STAIRS-A)"
-                            value={listDraft.warpKey || ''}
-                            onChange={(e) => setListDraft((s) => ({ ...s, warpKey: e.target.value }))}
+                            placeholder="Aliases / Ranges (e.g., AC210-AC221, AC301)"
+                            value={listDraft.aliasText}
+                            onChange={(e) => setListDraft((s) => ({ ...s, aliasText: e.target.value }))}
                           />
                         </div>
-                      )}
-                      <div className="d-flex align-items-center gap-2">
-                        <span style={{ width: 16 }}></span>
-                        <input
-                          className="form-control form-control-sm"
-                          placeholder="Aliases / Ranges (e.g., AC210-AC221, AC301)"
-                          value={listDraft.aliasText}
-                          onChange={(e) => setListDraft((s) => ({ ...s, aliasText: e.target.value }))}
-                        />
-                      </div>
                         <div className="d-flex justify-content-end gap-2">
                           <button className="btn btn-sm btn-secondary" onClick={cancelListEdit}>Cancel</button>
                           <button className="btn btn-sm btn-primary" onClick={saveListEdit} disabled={!listDraft.name && !listDraft.roomNumber}>Save</button>
