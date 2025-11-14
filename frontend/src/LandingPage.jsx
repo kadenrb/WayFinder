@@ -1,10 +1,14 @@
 // LANDING PAGE — concise overview
 // Hosts the Map Editor and a small sidebar. Left: upload and edit. Right: account info and a public map URL.
-import React from "react";
+import React, { useEffect} from "react";
 import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./index.css";
 import MapEditor from "./MapEditor";
+import logo from "./images/logo.png";
+
+
+
 
 function Stat({ label, value }) {
   return (
@@ -33,7 +37,6 @@ function QuickAction({ label, onClick, kind = "primary" }) {
 // Simple, client-side landing page for authenticated users
 // Expects a user object if available; falls back to generic copy
 export default function LandingPage({ user }) {
-  const name = user?.name || user?.email || "Explorer";
   const navigate = useNavigate();
   // Multi-image working set kept in memory for this session (multi-floor editing)
   const [images, setImages] = React.useState([]); // [{id,name,url,size}]
@@ -76,6 +79,30 @@ export default function LandingPage({ user }) {
   const clearAllImages = () => {
     setImages((prev) => { prev.forEach((i) => { try { URL.revokeObjectURL(i.url); } catch {} }); return []; });
     setSelectedImageId(null);
+  const [editorImageUrl, setEditorImageUrl] = React.useState("");
+  const [publicMapUrl, setPublicMapUrl] = React.useState(
+    () =>
+      (typeof window !== "undefined" &&
+        localStorage.getItem("wf_public_map_url")) ||
+      ""
+  );
+
+
+  //kris: 
+  useEffect(() => {
+    const token = localStorage.getItem("token"); 
+    if (!token) {
+      navigate("/");  // Redirect to SignIn if no token
+    }
+  }, [navigate]);
+  //kris ^
+
+
+  const savePublicMapUrl = () => {
+    try {
+      localStorage.setItem("wf_public_map_url", publicMapUrl);
+    } catch {}
+    alert("Public map URL saved for homepage preview");
   };
 
   // Cycle selection forward/backward
@@ -142,24 +169,38 @@ export default function LandingPage({ user }) {
   }
 
   const handleSignOut = () => {
-    try { localStorage.removeItem("token"); } catch {}
+    try {
+      localStorage.removeItem("token");
+    } catch {}
     navigate("/");
   };
 
   return (
     <div className="landing">
-      <header className="d-flex justify-content-between align-items-center p-1 bg-head border-bottom">
-        <div className="brand">
-          <span className="brand__logo" aria-hidden></span>
-          <span className="brand__name text-white fw-bold">Wayfinder</span>
-        </div>
-        <h1 className="title text-2xl fw-bold text-center text-white m-0">
-          Welcome, {name}
-        </h1>
-        <button className="btn btn-primary fw-bold" onClick={handleSignOut}>
-          Sign out
-        </button>
-      </header>
+      <div className="bg-head p-3 rounded mb-5 border-bottom">
+        <header
+          className="d-flex flex-column flex-md-row justify-content-between 
+          align-items-center mb-3 text-center text-md-start"
+        >
+          <div
+            className="display-3 fw-bold text-shadow mb-3 mb-md-0 d-flex align-items-center 
+            justify-content-center justify-content-md-start"
+          >
+            <img src={logo} alt="WayFinder Logo" className="me-2" />
+            <span className="text-blue">Way</span>
+            <span className="text-orange">Finder</span>
+          </div>
+
+          <nav className="d-flex flex-column me-2">
+            <button
+              className="btn btn-outline-primary fw-bold px-5"
+              onClick={() => handleSignOut()}
+            >
+              Sign Out
+            </button>
+          </nav>
+        </header>
+      </div>
 
       <main className="landing__main container">
         <section className="main-grid">
@@ -199,22 +240,26 @@ export default function LandingPage({ user }) {
             </div>
 
             <div className="card shadow-sm">
-              <h2 className="card__title">Quick Actions</h2>
+              <h2 className="">
+                My opinions on each button will be shown on click (Kaden)
+              </h2>
               <div className="actions">
                 <QuickAction
                   label="View Uploads"
                   kind="secondary"
-                  onClick={() => alert("Coming soon: uploads view")}
+                  onClick={() =>
+                    alert("Are we just gonna open a file explorer?")
+                  }
                 />
                 <QuickAction
                   label="Preferences"
                   kind="secondary"
-                  onClick={() => alert("Coming soon: preferences")}
+                  onClick={() => alert("What is this")}
                 />
                 <QuickAction
                   label="Help & Docs"
                   kind="ghost"
-                  onClick={() => alert("Coming soon: docs")}
+                  onClick={() => alert("Are we writing docs?")}
                 />
               </div>
             </div>
@@ -224,12 +269,15 @@ export default function LandingPage({ user }) {
             </div>
           </div>
 
-                    <aside className="grid-right">
-            <div className="card shadow-sm">
-              <h3 className="card__title">Your Overview</h3>
-              <div className="stats">
-                <Stat label="Maps Saved" value="—" />
-                <Stat label="Last Upload" value="—" />
+          <aside className="grid-right">
+            <div className="card shadow-sm bg-card text-card px-4 py-3 border-4 mb-4 mt-4">
+              <h3 className="card__title">Account Information</h3>
+              <div className="">
+                <Stat
+                  label="Maps Saved - How we do this if its stored locally? Save old paths?"
+                  value="—"
+                />
+                <Stat label="Last Upload - Same here" value="—" />
                 <Stat label="Tag" value={user?.tags || "RDP"} />
               </div>
               <p className="muted">
@@ -237,7 +285,7 @@ export default function LandingPage({ user }) {
               </p>
             </div>
 
-            <div className="card shadow-sm">
+            <div className="card shadow-sm bg-card text-card px-4 py-3 border-4 mb-4">
               <h3 className="card__title">Account</h3>
               <ul className="list">
                 <li>
@@ -258,7 +306,27 @@ export default function LandingPage({ user }) {
               </div>
             </div>
 
-            {/* Removed: Public Map (Homepage) card; user viewer handles floors */}
+            <div className="card shadow-sm bg-card text-card px-4 py-3 border-4 mb-4">
+              <h3 className="">Public Map (Homepage)</h3>
+              <p className="c">
+                Set the URL of the map image to display on the public homepage.
+              </p>
+              <div className="field">
+                <span className="form-label text-card">Image URL</span>
+                <input
+                  className="form-control bg-card-inner text-card mt-2"
+                  type="url"
+                  placeholder="https://example.com/map.png"
+                  value={publicMapUrl}
+                  onChange={(e) => setPublicMapUrl(e.target.value)}
+                />
+              </div>
+              <div className="actions mt-3">
+                <button className="btn btn-success" onClick={savePublicMapUrl}>
+                  Save
+                </button>
+              </div>
+            </div>
           </aside>
         </section>
       </main>

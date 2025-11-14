@@ -19,5 +19,6 @@ model admin {
 model user {
   id    Int    @id @default(autoincrement())
   email String @unique
-  tags  String @default("RDP")
+  tags  String[] @default([])
+  
 }

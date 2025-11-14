@@ -17,7 +17,7 @@
 */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ensureDbnet, detectDbnet } from './detectors/dbnet';
+import { ensureDbnet, detectDbnet } from "./detectors/dbnet";
 
 // Point schema
 // { id, kind: 'room'|'door'|'poi', poiType?, name?, roomNumber?, aliases?: string[], x, y }
@@ -77,14 +77,15 @@ export default function MapEditor({ imageSrc }) {
   const [pulseId, setPulseId] = useState(null);
   const cancelScanRef = useRef(false);
   // Sort pins nicely (numbers in order). Collator is a fancy sorter.
-  const collator = useMemo(() => new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }), []);
-  // ===============================
-  // SECTION: DB Detector Controls
-  // ===============================
-  // Detector always on (DB). UI toggle removed.
+  const collator = useMemo(
+    () => new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }),
+    []
+  );
+  // Detector controls
+  const [detectorMode, setDetectorMode] = useState("none"); // 'none' | 'db'
   const [progActive, setProgActive] = useState(false);
   const [progPct, setProgPct] = useState(0);
-  const [progLabel, setProgLabel] = useState('');
+  const [progLabel, setProgLabel] = useState("");
   const lastProgRef = useRef(0);
   // Detector results (boxes outline places where text likely is)
   const [dbBoxes, setDbBoxes] = useState([]); // [{xN,yN,wN,hN,score}]
@@ -95,11 +96,11 @@ export default function MapEditor({ imageSrc }) {
   const [selectMode, setSelectMode] = useState('none'); // 'none' | 'db' | 'points'
   const [selectRect, setSelectRect] = useState(null); // {x0,y0,x1,y1} in normalized coords
   const [dbThresh, setDbThresh] = useState(0.12);
-  const [dbNorm, setDbNorm] = useState('imagenet'); // 'imagenet' | 'raw'
+  const [dbNorm, setDbNorm] = useState("imagenet"); // 'imagenet' | 'raw'
   const [dbBgr, setDbBgr] = useState(false);
   const [dbStride, setDbStride] = useState(32); // 16 or 32
   const [dbSigmoid, setDbSigmoid] = useState(false);
-  const [dbForceCh, setDbForceCh] = useState('auto'); // internal only
+  const [dbForceCh, setDbForceCh] = useState("auto"); // internal only
   const [dbSoftmax, setDbSoftmax] = useState(false);
 
   // ===============================
@@ -191,20 +192,27 @@ export default function MapEditor({ imageSrc }) {
     if (!window.Tesseract) {
       await new Promise((resolve, reject) => {
         const s = document.createElement("script");
-        s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js";
+        s.src =
+          "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js";
         s.crossOrigin = "anonymous";
-        s.onload = resolve; s.onerror = () => reject(new Error("Failed to load OCR library"));
+        s.onload = resolve;
+        s.onerror = () => reject(new Error("Failed to load OCR library"));
         document.body.appendChild(s);
       });
     }
     if (!ocrWorkerRef.current) {
       const worker = await window.Tesseract.createWorker({
-        workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/worker.min.js",
-        corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@2.2.0/tesseract-core.wasm.js",
+        workerPath:
+          "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/worker.min.js",
+        corePath:
+          "https://cdn.jsdelivr.net/npm/tesseract.js-core@2.2.0/tesseract-core.wasm.js",
         langPath: "https://tessdata.projectnaptha.com/4.0.0",
         workerBlobURL: true,
         logger: (m) => {
-          if (m?.status === "recognizing text" && typeof m.progress === "number") {
+          if (
+            m?.status === "recognizing text" &&
+            typeof m.progress === "number"
+          ) {
             setBusy(`${ocrPrefixRef.current} ${Math.round(m.progress * 100)}%`);
           }
         },
@@ -228,13 +236,26 @@ export default function MapEditor({ imageSrc }) {
   const [skipExisting, setSkipExisting] = useState(true);
   const [dupRadius, setDupRadius] = useState(0.004);
   // Dedup by label so adjacent different rooms aren't dropped
-  const labelKey = (p) => (p.roomNumber || p.name || p.poiType || p.kind || "").toString().replace(/[^A-Za-z0-9-]/g, "").toUpperCase();
+  const labelKey = (p) =>
+    (p.roomNumber || p.name || p.poiType || p.kind || "")
+      .toString()
+      .replace(/[^A-Za-z0-9-]/g, "")
+      .toUpperCase();
   const dedupByLabel = (arr, minDist = 0.006) => {
     const out = [];
     for (const c of arr) {
       const key = labelKey(c);
-      if (!key) { out.push(c); continue; }
-      if (!out.some((d) => labelKey(d) === key && Math.hypot(d.x - c.x, d.y - c.y) < minDist)) out.push(c);
+      if (!key) {
+        out.push(c);
+        continue;
+      }
+      if (
+        !out.some(
+          (d) =>
+            labelKey(d) === key && Math.hypot(d.x - c.x, d.y - c.y) < minDist
+        )
+      )
+        out.push(c);
     }
     return out;
   };
@@ -246,15 +267,20 @@ export default function MapEditor({ imageSrc }) {
     if (!Array.isArray(points) || !points.length) return arr;
     if (!skipExisting) return arr;
     const r = typeof radius === "number" ? radius : dupRadius;
-    return arr.filter((c) =>
-      !points.some(
-        (p) => labelKey(p) === labelKey(c) && Math.hypot(p.x - c.x, p.y - c.y) < r
-      )
+    return arr.filter(
+      (c) =>
+        !points.some(
+          (p) =>
+            labelKey(p) === labelKey(c) && Math.hypot(p.x - c.x, p.y - c.y) < r
+        )
     );
   };
 
   // Persist/load per imageSrc
-  const storageKey = useMemo(() => `wf_map_editor_state:${imageSrc || ""}`, [imageSrc]);
+  const storageKey = useMemo(
+    () => `wf_map_editor_state:${imageSrc || ""}`,
+    [imageSrc]
+  );
 
   /*
     Rebuild the mask image preview when toggled or when walkable settings/image change.
@@ -314,11 +340,9 @@ export default function MapEditor({ imageSrc }) {
     if (!drag) return;
     const onMove = (e) => {
       const { x, y } = toNorm(e.clientX, e.clientY);
-      if (drag.kind === 'user') {
-        setUserPos({ x, y });
-      } else if (drag.id) {
-        setPoints((prev) => prev.map((p) => (p.id === drag.id ? { ...p, x, y } : p)));
-      }
+      setPoints((prev) =>
+        prev.map((p) => (p.id === drag.id ? { ...p, x, y } : p))
+      );
     };
     const onUp = () => setDrag(null);
     window.addEventListener("mousemove", onMove);
@@ -674,7 +698,14 @@ export default function MapEditor({ imageSrc }) {
         const cx = ((b?.x0 || 0) + (b?.x1 || 0)) / 2 / nw;
         const cy = ((b?.y0 || 0) + (b?.y1 || 0)) / 2 / nh;
         if (cx > 0 && cy > 0 && cx < 1 && cy < 1) {
-          candidates.push({ id: uid(), kind: "room", roomNumber: t, name: "", x: cx, y: cy });
+          candidates.push({
+            id: uid(),
+            kind: "room",
+            roomNumber: t,
+            name: "",
+            x: cx,
+            y: cy,
+          });
         }
       }
       const picked = dedupByLabel(candidates, 0.006).slice(0, 800);
@@ -697,31 +728,41 @@ export default function MapEditor({ imageSrc }) {
     if (busy) return;
     cancelScanRef.current = false;
     try {
-      setProgActive(true); setProgress(0, 'Preparing…');
+      setProgActive(true);
+      setProgress(0, "Preparing…");
       if (!window.Tesseract) {
         await new Promise((resolve, reject) => {
           const s = document.createElement("script");
-          s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js";
+          s.src =
+            "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js";
           s.crossOrigin = "anonymous";
-          s.onload = resolve; s.onerror = () => reject(new Error("Failed to load OCR library"));
+          s.onload = resolve;
+          s.onerror = () => reject(new Error("Failed to load OCR library"));
           document.body.appendChild(s);
         });
       }
       const ocrOptsBase = {
-        workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/worker.min.js",
-        corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@2.2.0/tesseract-core.wasm.js",
+        workerPath:
+          "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/worker.min.js",
+        corePath:
+          "https://cdn.jsdelivr.net/npm/tesseract.js-core@2.2.0/tesseract-core.wasm.js",
         langPath: "https://tessdata.projectnaptha.com/4.0.0",
         logger: (m) => {
-          if (m?.status === "recognizing text" && typeof m.progress === "number") {
+          if (
+            m?.status === "recognizing text" &&
+            typeof m.progress === "number"
+          ) {
             setBusy(`Deep OCR ${Math.round(m.progress * 100)}%`);
           }
         },
       };
 
-      const tilesX = 4, tilesY = 4; // 4x4 grid for higher recall
+      const tilesX = 4,
+        tilesY = 4; // 4x4 grid for higher recall
       const overlap = 0.07; // 7% overlap to avoid cutting labels
       const scale = 3; // stronger upsample per tile
-      const w = natSize.w, h = natSize.h;
+      const w = natSize.w,
+        h = natSize.h;
       const stepX = Math.floor(w / tilesX);
       const stepY = Math.floor(h / tilesY);
       const ox = Math.floor(stepX * overlap);
@@ -729,9 +770,11 @@ export default function MapEditor({ imageSrc }) {
 
       const makeTileUrl = (sx, sy, sw, sh, invert = false) => {
         const c = document.createElement("canvas");
-        c.width = sw * scale; c.height = sh * scale;
+        c.width = sw * scale;
+        c.height = sh * scale;
         const ctx = c.getContext("2d");
-        ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
         // draw source image region
         // To draw, we need the image element loaded. Use an offscreen image.
         return new Promise((resolve, reject) => {
@@ -757,7 +800,8 @@ export default function MapEditor({ imageSrc }) {
       const processWords = (words, tile) => {
         const { sx, sy } = tile; // unscaled tile origin
         const candidates = [];
-        const roomRe = /^(?:[A-Za-z]?\d{2,4}[A-Za-z]?|\d{1,2}[A-Za-z]-?\d{2,4})$/;
+        const roomRe =
+          /^(?:[A-Za-z]?\d{2,4}[A-Za-z]?|\d{1,2}[A-Za-z]-?\d{2,4})$/;
         for (let i = 0; i < words.length; i++) {
           const w0 = words[i];
           const tRaw = (w0.text || "").toUpperCase();
@@ -780,7 +824,14 @@ export default function MapEditor({ imageSrc }) {
                 const cy = (by0 + by1) / 2 / scale;
                 const ux = (sx + cx) / w; // normalize to full image
                 const uy = (sy + cy) / h;
-                candidates.push({ id: uid(), kind: "room", roomNumber: t + nRaw, name: "", x: ux, y: uy });
+                candidates.push({
+                  id: uid(),
+                  kind: "room",
+                  roomNumber: t + nRaw,
+                  name: "",
+                  x: ux,
+                  y: uy,
+                });
                 i++; // skip next
                 continue;
               }
@@ -794,7 +845,14 @@ export default function MapEditor({ imageSrc }) {
           const ux = (sx + cx) / w;
           const uy = (sy + cy) / h;
           if (ux > 0 && uy > 0 && ux < 1 && uy < 1) {
-            candidates.push({ id: uid(), kind: "room", roomNumber: t, name: "", x: ux, y: uy });
+            candidates.push({
+              id: uid(),
+              kind: "room",
+              roomNumber: t,
+              name: "",
+              x: ux,
+              y: uy,
+            });
           }
         }
         return candidates;
@@ -843,8 +901,9 @@ export default function MapEditor({ imageSrc }) {
               const cropUrl = c.toDataURL('image/png');
               const res = await window.Tesseract.recognize(cropUrl, 'eng', {
                 ...ocrOptsBase,
-                tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-',
-                tessedit_pageseg_mode: '7',
+                tessedit_char_whitelist:
+                  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-",
+                tessedit_pageseg_mode: "7",
               });
               const raw = (res?.data?.text || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').trim();
               if (!raw) continue;
@@ -868,13 +927,21 @@ export default function MapEditor({ imageSrc }) {
             // Fallback: normal + inverted passes for the entire tile
             tileIndex += 1; setBusy(`Deep OCR: tile ${tileIndex}/${totalTiles}`); setProgress(Math.round(tileIndex * 100 / totalTiles), `Deep OCR: tile ${tileIndex}/${totalTiles}`);
             const urlA = await makeTileUrl(sx0, sy0, sw, sh, false);
-            const resA = await window.Tesseract.recognize(urlA, 'eng', ocrOptsBase);
+            const resA = await window.Tesseract.recognize(
+              urlA,
+              "eng",
+              ocrOptsBase
+            );
             all.push(...processWords(resA?.data?.words || [], tile));
 
             if (cancelScanRef.current) throw new Error('Canceled');
             tileIndex += 1; setBusy(`Deep OCR: tile ${tileIndex}/${totalTiles}`); setProgress(Math.round(tileIndex * 100 / totalTiles), `Deep OCR: tile ${tileIndex}/${totalTiles}`);
             const urlB = await makeTileUrl(sx0, sy0, sw, sh, true);
-            const resB = await window.Tesseract.recognize(urlB, 'eng', ocrOptsBase);
+            const resB = await window.Tesseract.recognize(
+              urlB,
+              "eng",
+              ocrOptsBase
+            );
             all.push(...processWords(resB?.data?.words || [], tile));
           }
         }
@@ -884,7 +951,8 @@ export default function MapEditor({ imageSrc }) {
       const byLabel = dedupByLabel(all, 0.005);
       const filtered = filterOutExistingSameLabel(byLabel);
       setPoints((prev) => [...prev, ...filtered]);
-      setBusy(`Deep OCR: added ${filtered.length}`); setProgress(100, 'Deep OCR complete');
+      setBusy(`Deep OCR: added ${filtered.length}`);
+      setProgress(100, "Deep OCR complete");
       setTimeout(() => setBusy(""), 2500);
     } catch (err) {
       if (err?.message === "Canceled") {
@@ -909,27 +977,36 @@ export default function MapEditor({ imageSrc }) {
       if (!window.Tesseract) {
         await new Promise((resolve, reject) => {
           const s = document.createElement("script");
-          s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js";
+          s.src =
+            "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js";
           s.crossOrigin = "anonymous";
-          s.onload = resolve; s.onerror = () => reject(new Error("Failed to load OCR library"));
+          s.onload = resolve;
+          s.onerror = () => reject(new Error("Failed to load OCR library"));
           document.body.appendChild(s);
         });
       }
       const ocrOptsBase = {
-        workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/worker.min.js",
-        corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@2.2.0/tesseract-core.wasm.js",
+        workerPath:
+          "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/worker.min.js",
+        corePath:
+          "https://cdn.jsdelivr.net/npm/tesseract.js-core@2.2.0/tesseract-core.wasm.js",
         langPath: "https://tessdata.projectnaptha.com/4.0.0",
         logger: (m) => {
-          if (m?.status === "recognizing text" && typeof m.progress === "number") {
+          if (
+            m?.status === "recognizing text" &&
+            typeof m.progress === "number"
+          ) {
             setBusy(`Super Deep OCR ${Math.round(m.progress * 100)}%`);
           }
         },
       };
 
-      const tilesX = 8, tilesY = 8; // 8x8 grid
+      const tilesX = 8,
+        tilesY = 8; // 8x8 grid
       const overlap = 0.08; // 8% overlap
       const scale = 3; // strong upsample
-      const w = natSize.w, h = natSize.h;
+      const w = natSize.w,
+        h = natSize.h;
       const stepX = Math.floor(w / tilesX);
       const stepY = Math.floor(h / tilesY);
       const ox = Math.floor(stepX * overlap);
@@ -937,9 +1014,11 @@ export default function MapEditor({ imageSrc }) {
 
       const makeTileUrl = (sx, sy, sw, sh, invert = false) => {
         const c = document.createElement("canvas");
-        c.width = sw * scale; c.height = sh * scale;
+        c.width = sw * scale;
+        c.height = sh * scale;
         const ctx = c.getContext("2d");
-        ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
         return new Promise((resolve, reject) => {
           const img = new Image();
           img.crossOrigin = "anonymous";
@@ -963,7 +1042,8 @@ export default function MapEditor({ imageSrc }) {
       const processWords = (words, tile) => {
         const { sx, sy } = tile;
         const candidates = [];
-        const roomRe = /^(?:[A-Za-z]?\d{2,4}[A-Za-z]?|\d{1,2}[A-Za-z]-?\d{2,4})$/;
+        const roomRe =
+          /^(?:[A-Za-z]?\d{2,4}[A-Za-z]?|\d{1,2}[A-Za-z]-?\d{2,4})$/;
         for (let i = 0; i < words.length; i++) {
           const w0 = words[i];
           const tRaw = (w0.text || "").toUpperCase();
@@ -984,7 +1064,14 @@ export default function MapEditor({ imageSrc }) {
                 const cy = (by0 + by1) / 2 / scale;
                 const ux = (sx + cx) / w;
                 const uy = (sy + cy) / h;
-                candidates.push({ id: uid(), kind: "room", roomNumber: t + nRaw, name: "", x: ux, y: uy });
+                candidates.push({
+                  id: uid(),
+                  kind: "room",
+                  roomNumber: t + nRaw,
+                  name: "",
+                  x: ux,
+                  y: uy,
+                });
                 i++;
                 continue;
               }
@@ -998,7 +1085,14 @@ export default function MapEditor({ imageSrc }) {
           const ux = (sx + cx) / w;
           const uy = (sy + cy) / h;
           if (ux > 0 && uy > 0 && ux < 1 && uy < 1) {
-            candidates.push({ id: uid(), kind: "room", roomNumber: t, name: "", x: ux, y: uy });
+            candidates.push({
+              id: uid(),
+              kind: "room",
+              roomNumber: t,
+              name: "",
+              x: ux,
+              y: uy,
+            });
           }
         }
         return candidates;
@@ -1022,7 +1116,8 @@ export default function MapEditor({ imageSrc }) {
           let usedDetector = false;
           if (await ensureDbnet()) {
             const urlA = await makeTileUrl(sx0, sy0, sw, sh, false);
-            tileIndex += 1; setBusy(`Super Deep OCR: tile ${tileIndex}/${totalTiles} (DB)`);
+            tileIndex += 1;
+            setBusy(`Super Deep OCR: tile ${tileIndex}/${totalTiles} (DB)`);
             const urlB = await makeTileUrl(sx0, sy0, sw, sh, true);
             const boxesA = await detectDbnet(urlA, { maxSide: 1536 });
             const boxesB = await detectDbnet(urlB, { maxSide: 1536 });
@@ -1054,13 +1149,22 @@ export default function MapEditor({ imageSrc }) {
           if (!usedDetector) {
             setBusy(`Super Deep OCR: tile ${tileIndex}/${totalTiles}`);
             const urlA = await makeTileUrl(sx0, sy0, sw, sh, false);
-            const resA = await window.Tesseract.recognize(urlA, 'eng', ocrOptsBase);
+            const resA = await window.Tesseract.recognize(
+              urlA,
+              "eng",
+              ocrOptsBase
+            );
             all.push(...processWords(resA?.data?.words || [], tile));
 
-            if (cancelScanRef.current) throw new Error('Canceled');
-            tileIndex += 1; setBusy(`Super Deep OCR: tile ${tileIndex}/${totalTiles}`);
+            if (cancelScanRef.current) throw new Error("Canceled");
+            tileIndex += 1;
+            setBusy(`Super Deep OCR: tile ${tileIndex}/${totalTiles}`);
             const urlB = await makeTileUrl(sx0, sy0, sw, sh, true);
-            const resB = await window.Tesseract.recognize(urlB, 'eng', ocrOptsBase);
+            const resB = await window.Tesseract.recognize(
+              urlB,
+              "eng",
+              ocrOptsBase
+            );
             all.push(...processWords(resB?.data?.words || [], tile));
           }
         }
@@ -1070,10 +1174,13 @@ export default function MapEditor({ imageSrc }) {
       const filtered = filterOutExistingSameLabel(byLabel);
       setPoints((prev) => [...prev, ...filtered]);
       setBusy(`Super Deep OCR: added ${filtered.length}`);
-      setProgress(100, 'Super Deep complete');
+      setProgress(100, "Super Deep complete");
       setTimeout(() => setBusy(""), 2500);
     } catch (err) {
-      if (err?.message === "Canceled") { setBusy(""); return; }
+      if (err?.message === "Canceled") {
+        setBusy("");
+        return;
+      }
       console.error(err);
       setBusy(`Super Deep OCR failed: ${err?.message || "Unknown error"}`);
       setTimeout(() => setBusy(""), 2500);
@@ -1090,33 +1197,45 @@ export default function MapEditor({ imageSrc }) {
       // Load OpenCV from same‑origin static file under public/opencv/
       if (!(window.cv && window.cv.Mat)) {
         await new Promise((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = '/opencv/opencv.js';
+          const s = document.createElement("script");
+          s.src = "/opencv/opencv.js";
           s.async = true;
           s.onload = () => {
             if (window.cv && window.cv.Mat) resolve();
-            else if (window.cv && window.cv['onRuntimeInitialized']) {
-              window.cv['onRuntimeInitialized'] = resolve;
+            else if (window.cv && window.cv["onRuntimeInitialized"]) {
+              window.cv["onRuntimeInitialized"] = resolve;
             } else setTimeout(resolve, 150);
           };
-          s.onerror = () => reject(new Error('OpenCV local script load failed (ensure frontend/public/opencv/opencv.js and opencv_js.wasm exist)'));
+          s.onerror = () =>
+            reject(
+              new Error(
+                "OpenCV local script load failed (ensure frontend/public/opencv/opencv.js and opencv_js.wasm exist)"
+              )
+            );
           document.body.appendChild(s);
         });
       }
       const cv = window.cv;
-      if (!cv || !cv.Mat) throw new Error('OpenCV not ready');
+      if (!cv || !cv.Mat) throw new Error("OpenCV not ready");
       setBusy("Light detect: proposing regions…");
       // Draw image to canvas at 2.5x for better small text
       const scale = 2.5;
       const dw = Math.floor(natSize.w * scale);
       const dh = Math.floor(natSize.h * scale);
       const canvas = document.createElement("canvas");
-      canvas.width = dw; canvas.height = dh;
+      canvas.width = dw;
+      canvas.height = dh;
       const ctx = canvas.getContext("2d");
-      const img = new Image(); img.crossOrigin = "anonymous";
+      const img = new Image();
+      img.crossOrigin = "anonymous";
       const srcUrl = imageSrc;
-      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = () => reject(new Error("Image load failed")); img.src = srcUrl; });
-      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error("Image load failed"));
+        img.src = srcUrl;
+      });
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
       ctx.drawImage(img, 0, 0, dw, dh);
 
       const src = cv.imread(canvas);
@@ -1131,7 +1250,13 @@ export default function MapEditor({ imageSrc }) {
 
       const contours = new cv.MatVector();
       const hierarchy = new cv.Mat();
-      cv.findContours(bin, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+      cv.findContours(
+        bin,
+        contours,
+        hierarchy,
+        cv.RETR_EXTERNAL,
+        cv.CHAIN_APPROX_SIMPLE
+      );
 
       const boxes = [];
       for (let i = 0; i < contours.size(); i++) {
@@ -1145,13 +1270,22 @@ export default function MapEditor({ imageSrc }) {
         boxes.push({ x, y, w: width, h: height });
         cnt.delete();
       }
-      contours.delete(); hierarchy.delete(); kernel.delete(); blur.delete(); gray.delete(); bin.delete(); src.delete();
+      contours.delete();
+      hierarchy.delete();
+      kernel.delete();
+      blur.delete();
+      gray.delete();
+      bin.delete();
+      src.delete();
 
       setBusy(`Light detect: OCR ${boxes.length} regions…`);
-      const nw = natSize.w, nh = natSize.h;
+      const nw = natSize.w,
+        nh = natSize.h;
       const ocrOpts = {
-        workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/worker.min.js",
-        corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@2.2.0/tesseract-core.wasm.js",
+        workerPath:
+          "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/worker.min.js",
+        corePath:
+          "https://cdn.jsdelivr.net/npm/tesseract.js-core@2.2.0/tesseract-core.wasm.js",
         langPath: "https://tessdata.projectnaptha.com/4.0.0",
         tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-",
         psm: 7,
@@ -1164,14 +1298,20 @@ export default function MapEditor({ imageSrc }) {
         const rx = Math.max(0, b.x - pad), ry = Math.max(0, b.y - pad);
         const rw = Math.min(dw - rx, b.w + pad * 2), rh = Math.min(dh - ry, b.h + pad * 2);
         // Crop region to dataURL
-        const c2 = document.createElement("canvas"); c2.width = rw; c2.height = rh;
+        const c2 = document.createElement("canvas");
+        c2.width = rw;
+        c2.height = rh;
         const c2x = c2.getContext("2d");
         c2x.drawImage(canvas, rx, ry, rw, rh, 0, 0, rw, rh);
         const dataA = c2.toDataURL("image/png");
         const text = await ocrImage(dataA);
-        const word = (text || "").toUpperCase().replace(/[^A-Z0-9-]/g, "").trim();
+        const word = (text || "")
+          .toUpperCase()
+          .replace(/[^A-Z0-9-]/g, "")
+          .trim();
         if (!word || word.length < 3) continue;
-        const roomRe = /^(?:[A-Z]?\d{2,4}[A-Z]?|\d{1,2}[A-Z]-?\d{2,4}|\d{3,4}[A-Z]-?\d{1,2})$/;
+        const roomRe =
+          /^(?:[A-Z]?\d{2,4}[A-Z]?|\d{1,2}[A-Z]-?\d{2,4}|\d{3,4}[A-Z]-?\d{1,2})$/;
         if (!roomRe.test(word)) continue;
         // Center in natural coords
         const cx = (rx + rw / 2) / scale / nw;
@@ -1258,7 +1398,7 @@ export default function MapEditor({ imageSrc }) {
   */
   const onImageClick = (e) => {
     // When selection tools are active, disable click-to-add
-    if (selectMode !== 'none') return;
+    if (selectMode !== "none") return;
     // Avoid triggering when clicking on marker/form
     if (e.target.closest("[data-marker]")) return;
     if (e.target.closest("[data-editor]")) return;
@@ -1278,7 +1418,7 @@ export default function MapEditor({ imageSrc }) {
   */
   const onMarkerMouseDown = (e, id) => {
     e.stopPropagation();
-    if (selectMode !== 'none') return; // disable dragging while selection tool is active
+    if (selectMode !== "none") return; // disable dragging while selection tool is active
     setDrag({ id });
     setSelectedId(id);
   };
@@ -1291,7 +1431,7 @@ export default function MapEditor({ imageSrc }) {
     - Seeds the editor draft with the point data (ensures aliases array).
   */
   const beginEdit = (p) => {
-    if (selectMode !== 'none') return; // disable editing while selection tool is active
+    if (selectMode !== "none") return; // disable editing while selection tool is active
     const { x, y } = p;
     const { x: baseUx, y: baseUy } = toPx(x, y);
     const rect = spacerRef.current?.getBoundingClientRect();
@@ -1423,10 +1563,13 @@ export default function MapEditor({ imageSrc }) {
     - Strips non [A-Z0-9-], fixes common OCR confusions (O->0, B->8, I/L->1).
   */
   const normalizeRoom = (raw) => {
-    if (!raw) return '';
-    let t = raw.toUpperCase().replace(/[^A-Z0-9-]/g, '').trim();
+    if (!raw) return "";
+    let t = raw
+      .toUpperCase()
+      .replace(/[^A-Z0-9-]/g, "")
+      .trim();
     // common confusions
-    t = t.replace(/O/g, '0').replace(/B/g, '8').replace(/[IL]/g, '1');
+    t = t.replace(/O/g, "0").replace(/B/g, "8").replace(/[IL]/g, "1");
     return t;
   };
   // Tighten room pattern to avoid short false positives like "11" from letters
@@ -1454,21 +1597,28 @@ export default function MapEditor({ imageSrc }) {
     - Optionally inverts and boosts contrast to help OCR on low-contrast labels.
   */
   const enhanceCanvas = (srcCanvas, { invert = false, boost = true } = {}) => {
-    const w = srcCanvas.width, h = srcCanvas.height;
-    const c = document.createElement('canvas'); c.width = w; c.height = h;
-    const ctx = c.getContext('2d');
+    const w = srcCanvas.width,
+      h = srcCanvas.height;
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext("2d");
     ctx.drawImage(srcCanvas, 0, 0);
     const id = ctx.getImageData(0, 0, w, h);
     const d = id.data;
     // grayscale + simple contrast stretch
-    let min = 255, max = 0;
+    let min = 255,
+      max = 0;
     for (let i = 0; i < d.length; i += 4) {
       const y = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0;
-      d[i] = d[i + 1] = d[i + 2] = y; if (y < min) min = y; if (y > max) max = y;
+      d[i] = d[i + 1] = d[i + 2] = y;
+      if (y < min) min = y;
+      if (y > max) max = y;
     }
-    const a = max > min ? 255 / (max - min) : 1; const b = -min * a;
+    const a = max > min ? 255 / (max - min) : 1;
+    const b = -min * a;
     for (let i = 0; i < d.length; i += 4) {
-      let y = (d[i] * a + b);
+      let y = d[i] * a + b;
       if (boost) y = Math.min(255, Math.max(0, (y - 128) * 1.25 + 128));
       if (invert) y = 255 - y;
       d[i] = d[i + 1] = d[i + 2] = y;
@@ -1496,30 +1646,42 @@ export default function MapEditor({ imageSrc }) {
       { invert: false, psm: '13', scale: 3 },
     ];
     for (const v of variants) {
-      const c = document.createElement('canvas');
+      const c = document.createElement("canvas");
       c.width = Math.max(1, Math.round(baseCanvas.width * v.scale));
       c.height = Math.max(1, Math.round(baseCanvas.height * v.scale));
-      const ct = c.getContext('2d');
-      ct.imageSmoothingEnabled = true; ct.imageSmoothingQuality = 'high';
+      const ct = c.getContext("2d");
+      ct.imageSmoothingEnabled = true;
+      ct.imageSmoothingQuality = "high";
       ct.drawImage(baseCanvas, 0, 0, c.width, c.height);
       const e = enhanceCanvas(c, { invert: v.invert, boost: true });
-      const url = e.toDataURL('image/png');
-      const res = await window.Tesseract.recognize(url, 'eng', { ...ocrOptsBase, tessedit_pageseg_mode: v.psm });
+      const url = e.toDataURL("image/png");
+      const res = await window.Tesseract.recognize(url, "eng", {
+        ...ocrOptsBase,
+        tessedit_pageseg_mode: v.psm,
+      });
       // Prefer the most confident room-like token
-      let best = '';
+      let best = "";
       let bestConf = -1;
       const words = Array.isArray(res?.data?.words) ? res.data.words : [];
       for (const w of words) {
-        const n = normalizeRoom(w?.text || '');
-        const conf = typeof w?.confidence === 'number' ? w.confidence : (typeof w?.conf === 'number' ? w.conf : 0);
-        if (isRoomLike(n) && conf >= 65 && conf > bestConf) { best = n; bestConf = conf; }
+        const n = normalizeRoom(w?.text || "");
+        const conf =
+          typeof w?.confidence === "number"
+            ? w.confidence
+            : typeof w?.conf === "number"
+            ? w.conf
+            : 0;
+        if (isRoomLike(n) && conf >= 65 && conf > bestConf) {
+          best = n;
+          bestConf = conf;
+        }
       }
       if (best) return best;
       // Fallback: whole text block
-      const norm = normalizeRoom(res?.data?.text || '');
+      const norm = normalizeRoom(res?.data?.text || "");
       if (isRoomLike(norm)) return norm;
     }
-    return '';
+    return "";
   };
 
   /*
@@ -1603,11 +1765,18 @@ export default function MapEditor({ imageSrc }) {
         {progActive && (
           <div className="mb-2">
             <div className="d-flex justify-content-between small text-muted">
-              <span>{progLabel || 'Scanning…'}</span>
+              <span>{progLabel || "Scanning…"}</span>
               <span>{progPct}%</span>
             </div>
             <div className="progress" style={{ height: 6 }}>
-              <div className="progress-bar" role="progressbar" style={{ width: `${progPct}%` }} aria-valuenow={progPct} aria-valuemin="0" aria-valuemax="100"></div>
+              <div
+                className="progress-bar"
+                role="progressbar"
+                style={{ width: `${progPct}%` }}
+                aria-valuenow={progPct}
+                aria-valuemin="0"
+                aria-valuemax="100"
+              ></div>
             </div>
           </div>
         )}
@@ -1662,8 +1831,8 @@ export default function MapEditor({ imageSrc }) {
                     return null;
                   });
                 };
-                window.addEventListener('mousemove', move);
-                window.addEventListener('mouseup', up);
+                window.addEventListener("mousemove", move);
+                window.addEventListener("mouseup", up);
               }}
             >
               <style>{`@keyframes routeDash { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }`}</style>
@@ -1672,7 +1841,13 @@ export default function MapEditor({ imageSrc }) {
                 src={imageSrc}
                 alt="Map"
                 onLoad={onImgLoad}
-                style={{ width: "100%", height: "100%", display: "block", userSelect: "none", pointerEvents: "none" }}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  display: "block",
+                  userSelect: "none",
+                  pointerEvents: "none",
+                }}
                 draggable={false}
               />
 
@@ -1826,15 +2001,20 @@ export default function MapEditor({ imageSrc }) {
 
                 {editing.draft.kind === "poi" && (
                   <div className="mb-2">
-                    <label className="form-label">POI Type</label>
+                    <label className="form-label">Kind</label>
                     <select
                       className="form-select form-select-sm"
-                      value={editing.draft.poiType || POI_TYPES[0]}
-                      onChange={(e) => setEditing((s) => ({ ...s, draft: { ...s.draft, poiType: e.target.value } }))}
+                      value={editing.draft.kind}
+                      onChange={(e) =>
+                        setEditing((s) => ({
+                          ...s,
+                          draft: { ...s.draft, kind: e.target.value },
+                        }))
+                      }
                     >
-                      {POI_TYPES.map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
+                      <option value="room">Room</option>
+                      <option value="door">Door</option>
+                      <option value="poi">POI</option>
                     </select>
                   </div>
                 )}
@@ -1929,7 +2109,12 @@ export default function MapEditor({ imageSrc }) {
           <button className="btn btn-primary" onClick={exportFloorsJson}>Export Floors (JSON)</button>
           <label className="btn btn-outline-secondary mb-0">
             Import JSON
-            <input type="file" accept="application/json" hidden onChange={onImport} />
+            <input
+              type="file"
+              accept="application/json"
+              hidden
+              onChange={onImport}
+            />
           </label>
           <button className="btn btn-outline-danger" onClick={() => setPoints([])}>Clear Points</button>
 
@@ -1987,8 +2172,20 @@ export default function MapEditor({ imageSrc }) {
               {points
                 .slice()
                 .sort((a, b) => {
-                  const ka = (a.roomNumber || a.name || a.poiType || a.kind || "").toString();
-                  const kb = (b.roomNumber || b.name || b.poiType || b.kind || "").toString();
+                  const ka = (
+                    a.roomNumber ||
+                    a.name ||
+                    a.poiType ||
+                    a.kind ||
+                    ""
+                  ).toString();
+                  const kb = (
+                    b.roomNumber ||
+                    b.name ||
+                    b.poiType ||
+                    b.kind ||
+                    ""
+                  ).toString();
                   return collator.compare(ka, kb);
                 })
                 .map((p) => (
