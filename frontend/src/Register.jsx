@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 export default function Register() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -16,7 +18,7 @@ export default function Register() {
     setLoading(true);
     try {
       // Minimal backend tie-in: user signup endpoint
-      const res = await fetch("http://localhost:5000/auth/signup", {
+      const res = await fetch(`${API_URL}/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, tags }),

@@ -1,5 +1,7 @@
 import { useState } from "react";
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 function sendEmailBtn() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -8,7 +10,7 @@ function sendEmailBtn() {
     setLoading(true);
     setMessage("");
     try {
-      const res = await fetch("http://localhost:5000/auth/notify", {
+      const res = await fetch(`${API_URL}/auth/notify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });

@@ -15,13 +15,14 @@ function App() {
   const [showToast, setShowToast] = useState(false); // Controls display of notification toast
   const [toastMessage, setToastMessage] = useState(""); // Stores notification message
 
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const handleSubmit = async () => {
     if (!validateEmail(userEmail) || !location) return;
 
     try {
-      const response = await fetch("http://localhost:5000/auth/signup", {
+      const response = await fetch(`${API_URL}/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: userEmail, tags: location }),
@@ -53,7 +54,7 @@ function App() {
     if (!validateEmail(userEmail)) return;
 
     try {
-      const response = await fetch("http://localhost:5000/auth/delete-user", {
+      const response = await fetch(`${API_URL}/auth/delete-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: userEmail }),

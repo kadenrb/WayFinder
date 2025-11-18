@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import logo from "./images/logo.png";
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 export default function SignIn() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -15,7 +17,7 @@ export default function SignIn() {
     setLoading(true);
     try {
       // Minimal backend tie-in: admin login endpoint
-      const res = await fetch("http://localhost:5000/auth/admin/login", {
+      const res = await fetch(`${API_URL}/auth/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

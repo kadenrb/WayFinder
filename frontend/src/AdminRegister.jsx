@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 import logo from "./images/logo.png";
 
 export default function AdminRegister() {
@@ -17,7 +19,7 @@ export default function AdminRegister() {
     setLoading(true);
     try {
       localStorage.setItem("wf_admin_company", company);
-      const res = await fetch("http://localhost:5000/auth/create-admin", {
+      const res = await fetch(`${API_URL}/auth/create-admin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
