@@ -80,31 +80,6 @@ export default function LandingPage({ user }) {
     setImages((prev) => { prev.forEach((i) => { try { URL.revokeObjectURL(i.url); } catch {} }); return []; });
     setSelectedImageId(null);
   };
-  const [editorImageUrl, setEditorImageUrl] = React.useState("");
-  const [publicMapUrl, setPublicMapUrl] = React.useState(
-    () =>
-      (typeof window !== "undefined" &&
-        localStorage.getItem("wf_public_map_url")) ||
-      ""
-  );
-
-  
-  //kris: 
-  useEffect(() => {
-    const token = localStorage.getItem("token"); 
-    if (!token) {
-      navigate("/");  // Redirect to SignIn if no token
-    }
-  }, [navigate]);
-  //kris ^
-  
-
-  const savePublicMapUrl = () => {
-    try {
-      localStorage.setItem("wf_public_map_url", publicMapUrl);
-    } catch {}
-    alert("Public map URL saved for homepage preview");
-  };
 
   const [editorImageUrl, setEditorImageUrl] = React.useState("");
   const [publicMapUrl, setPublicMapUrl] = React.useState(
@@ -114,16 +89,14 @@ export default function LandingPage({ user }) {
       ""
   );
 
-
-  //kris: 
+  //kris:
   useEffect(() => {
-    const token = localStorage.getItem("token"); 
+    const token = localStorage.getItem("token");
     if (!token) {
-      navigate("/");  // Redirect to SignIn if no token
+      navigate("/"); // Redirect to SignIn if no token
     }
   }, [navigate]);
   //kris ^
-
 
   const savePublicMapUrl = () => {
     try {
