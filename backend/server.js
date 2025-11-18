@@ -26,7 +26,6 @@ app.use(
     credentials: true,
   })
 ); // Allow frontend to access backend
-app.options("*", cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
