@@ -8,7 +8,25 @@ const notifyRoutes = require("./routes/notify");
 
 const app = express();
 
-app.use(cors()); // Allow frontend to access backend
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  process.env.FRONTEND_URL,
+  process.env.CORS_ORIGIN,
+  "https://wayfinderfront.onrender.com",
+].filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  })
+); // Allow frontend to access backend
+app.options("*", cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
