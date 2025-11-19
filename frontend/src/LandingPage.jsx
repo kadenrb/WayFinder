@@ -218,12 +218,14 @@ export default function LandingPage({ user }) {
           };
         })
       );
-      localStorage.setItem(
-        "wf_public_floors",
-        JSON.stringify({
-          floors: floors.map((f) => ({ ...f, url: f.imageData })),
-        })
-      );
+      try {
+        localStorage.setItem(
+          "wf_public_floors_meta",
+          JSON.stringify({ updatedAt: Date.now(), count: floors.length })
+        );
+      } catch (err) {
+        console.warn("Unable to cache publish metadata locally", err);
+      }
       const res = await fetch(`${API_URL}/floors/publish`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
