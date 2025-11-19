@@ -12,7 +12,7 @@ ADD COLUMN     "tags" TEXT[] DEFAULT ARRAY[]::TEXT[];
 CREATE TABLE "PublishedFloor" (
     "id" SERIAL NOT NULL,
     "name" TEXT NOT NULL,
-    "imageData" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
     "points" JSONB NOT NULL,
     "walkable" JSONB NOT NULL,
     "sortOrder" INTEGER NOT NULL DEFAULT 0,
