@@ -22,3 +22,13 @@ model user {
   tags  String[] @default([])
   
 }
+
+model PublishedFloor {
+  id        Int      @id @default(autoincrement())
+  name      String
+  imageData String
+  points    Json
+  walkable  Json
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}

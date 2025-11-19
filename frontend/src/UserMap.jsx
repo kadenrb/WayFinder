@@ -27,6 +27,7 @@ function markerClass(kind) {
 }
 
 export default function UserMap() {
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const [floors, setFloors] = useState([]); // [{id,name,url,points,walkable}]
   const [selUrl, setSelUrl] = useState('');
   const [userPos, setUserPos] = useState(null); // {x,y}
@@ -49,23 +50,65 @@ export default function UserMap() {
   const contentRef = useRef(null);
   const imgRef = useRef(null);
   const [natSize, setNatSize] = useState({ w: 0, h: 0 });
+  const initialFloorSetRef = useRef(false);
   const headingRef = useRef(0);
   const userPosRef = useRef(null);
   const lastMotionTsRef = useRef(null);
   const motionIdleRef = useRef(0);
 
-  // Load published floors from localStorage (admin published manifest)
+  // Load published floors from API with localStorage fallback
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('wf_public_floors');
-      if (!raw) return;
-      const data = JSON.parse(raw);
-      if (Array.isArray(data?.floors)) {
-        setFloors(data.floors);
-        if (data.floors.length && !selUrl) setSelUrl(data.floors[0].url);
+    let aborted = false;
+    const normalizeFloors = (arr = []) =>
+      arr
+        .map((f, index) => ({
+          ...f,
+          url: f.url || f.imageData || '',
+          points: Array.isArray(f.points) ? f.points : [],
+          walkable: f.walkable || { color: '#9F9383', tolerance: 12 },
+          sortOrder: typeof f.sortOrder === 'number' ? f.sortOrder : index,
+        }))
+        .filter((f) => f.url);
+
+    const setInitialFloor = (list) => {
+      if (!initialFloorSetRef.current && list.length) {
+        setSelUrl((prev) => prev || list[0].url);
+        initialFloorSetRef.current = true;
       }
-    } catch {}
-  }, []);
+    };
+
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_URL}/floors`);
+        if (!res.ok) throw new Error('Failed to fetch floors');
+        const data = await res.json();
+        if (aborted) return;
+        const normalized = normalizeFloors(data?.floors);
+        if (normalized.length) {
+          setFloors(normalized);
+          setInitialFloor(normalized);
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to load published floors from API', err);
+      }
+      if (aborted) return;
+      try {
+        const raw = localStorage.getItem('wf_public_floors');
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        const normalized = normalizeFloors(data?.floors);
+        setFloors(normalized);
+        setInitialFloor(normalized);
+      } catch (e) {
+        console.error('Failed to load local published floors', e);
+      }
+    };
+    load();
+    return () => {
+      aborted = true;
+    };
+  }, [API_URL]);
 
   // Load per-floor user position
   useEffect(() => {
