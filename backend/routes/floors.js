@@ -27,7 +27,7 @@ router.get("/", async (_req, res) => {
   }
 });
 
-router.put("/", async (req, res) => {
+router.put(["/", "/publish"], async (req, res) => {
   const floors = Array.isArray(req.body?.floors) ? req.body.floors : null;
   if (!floors || !floors.length) {
     return res.status(400).json({ error: "floors array is required" });
