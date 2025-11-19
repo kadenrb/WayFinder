@@ -58,7 +58,6 @@ router.post("/floors", upload.single("image"), async (req, res) => {
         Key: key,
         Body: req.file.buffer,
         ContentType: req.file.mimetype || "image/png",
-        ACL: "public-read",
       })
     );
     res.json({
