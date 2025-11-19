@@ -271,14 +271,14 @@ export default function UserMap() {
         Math.pow(acc.y || 0, 2) +
         Math.pow(acc.z || 0, 2)
       );
-      const motionThreshold = 0.12;
+      const motionThreshold = 0.5;
       if (magnitude < motionThreshold) {
         motionIdleRef.current += dt;
         return;
       }
       motionIdleRef.current = 0;
       const heading = headingRef.current || 0;
-      const speed = Math.min(0.08, magnitude * 0.0035);
+      const speed = Math.min(0.02, magnitude * 0.001);
       if (speed <= 0) return;
       const rad = (heading * Math.PI) / 180;
       const dx = Math.sin(rad) * speed;
