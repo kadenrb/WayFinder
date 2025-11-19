@@ -41,12 +41,18 @@ export default function UserMap() {
   const [moveStep, setMoveStep] = useState(0.01); // normalized delta per arrow key press
   const [searchText, setSearchText] = useState("");
   const [searchMsg, setSearchMsg] = useState("");
+  const [sensorTracking, setSensorTracking] = useState(false);
+  const [sensorMsg, setSensorMsg] = useState("");
   const gridRef = useRef(null); // cached walkable grid for current floor
   const scrollRef = useRef(null);
   const spacerRef = useRef(null);
   const contentRef = useRef(null);
   const imgRef = useRef(null);
   const [natSize, setNatSize] = useState({ w: 0, h: 0 });
+  const headingRef = useRef(0);
+  const userPosRef = useRef(null);
+  const lastMotionTsRef = useRef(null);
+  const motionIdleRef = useRef(0);
 
   // Load published floors from localStorage (admin published manifest)
   useEffect(() => {
@@ -71,6 +77,7 @@ export default function UserMap() {
       if (p && typeof p.x === 'number' && typeof p.y === 'number') setUserPos({ x: p.x, y: p.y }); else setUserPos(null);
     } catch { setUserPos(null); }
   }, [selUrl]);
+  useEffect(() => { userPosRef.current = userPos; if (!userPos && sensorTracking) { setSensorTracking(false); setSensorMsg("Tap 'I'm here' before enabling sensors."); } }, [userPos, sensorTracking]);
 
   const floor = useMemo(() => floors.find(f => f.url === selUrl) || null, [floors, selUrl]);
 
@@ -148,6 +155,38 @@ export default function UserMap() {
     setSearchMsg('No matching room found');
   };
 
+  const requestMotionPermissions = async () => {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      const res = await DeviceMotionEvent.requestPermission();
+      if (res !== 'granted') throw new Error('Motion permission denied');
+    }
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const res = await DeviceOrientationEvent.requestPermission();
+      if (res !== 'granted') throw new Error('Orientation permission denied');
+    }
+  };
+
+  const startSensorTracking = async () => {
+    if (!userPos) { setSensorMsg("Place yourself on the map first."); return; }
+    if (typeof window === 'undefined' || typeof DeviceMotionEvent === 'undefined') {
+      setSensorMsg("Device motion API not supported.");
+      return;
+    }
+    try {
+      await requestMotionPermissions();
+      setSensorTracking(true);
+      setSensorMsg("Tracking phone motion…");
+    } catch (err) {
+      setSensorMsg(err?.message || "Sensor permission denied.");
+      setSensorTracking(false);
+    }
+  };
+
+  const stopSensorTracking = () => {
+    setSensorTracking(false);
+    setSensorMsg("Tracking paused.");
+  };
+
   // Arrow key movement to spoof walking on desktop
   useEffect(() => {
     const onKey = (e) => {
@@ -168,6 +207,66 @@ export default function UserMap() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [userPos, moveStep, selUrl]);
+
+  useEffect(() => {
+    if (!sensorTracking) return;
+    if (!userPosRef.current) {
+      setSensorTracking(false);
+      setSensorMsg("Place yourself on the map first.");
+      return;
+    }
+    const updateHeading = (event) => {
+      if (typeof event.webkitCompassHeading === 'number') {
+        headingRef.current = event.webkitCompassHeading;
+      } else if (typeof event.alpha === 'number') {
+        headingRef.current = 360 - event.alpha;
+      }
+    };
+    const handleMotion = (event) => {
+      const pos = userPosRef.current;
+      if (!pos) return;
+      const acc = event.accelerationIncludingGravity || event.acceleration;
+      if (!acc) return;
+      const now = event.timeStamp || performance.now();
+      const lastTs = lastMotionTsRef.current || now;
+      const dt = Math.min(0.3, Math.max(0.016, (now - lastTs) / 1000));
+      lastMotionTsRef.current = now;
+      const magnitude = Math.sqrt(
+        Math.pow(acc.x || 0, 2) +
+        Math.pow(acc.y || 0, 2) +
+        Math.pow(acc.z || 0, 2)
+      );
+      const motionThreshold = 0.12;
+      if (magnitude < motionThreshold) {
+        motionIdleRef.current += dt;
+        return;
+      }
+      motionIdleRef.current = 0;
+      const heading = headingRef.current || 0;
+      const speed = Math.min(0.08, magnitude * 0.0035);
+      if (speed <= 0) return;
+      const rad = (heading * Math.PI) / 180;
+      const dx = Math.sin(rad) * speed;
+      const dy = -Math.cos(rad) * speed;
+      const nx = Math.min(1, Math.max(0, pos.x + dx));
+      const ny = Math.min(1, Math.max(0, pos.y + dy));
+      const snapped = snapToWalkable(nx, ny);
+      if (snapped.x !== pos.x || snapped.y !== pos.y) {
+        setUserPos(snapped);
+        saveUserPos(selUrl, snapped);
+      }
+    };
+    window.addEventListener('deviceorientationabsolute', updateHeading);
+    window.addEventListener('deviceorientation', updateHeading);
+    window.addEventListener('devicemotion', handleMotion);
+    setSensorMsg("Tracking phone motion…");
+    return () => {
+      window.removeEventListener('deviceorientationabsolute', updateHeading);
+      window.removeEventListener('deviceorientation', updateHeading);
+      window.removeEventListener('devicemotion', handleMotion);
+      lastMotionTsRef.current = null;
+    };
+  }, [sensorTracking, selUrl, snapToWalkable]);
 
   // Helpers similar to editor for routing
   const normHex = (s) => {
@@ -311,6 +410,13 @@ export default function UserMap() {
           <button className={`btn btn-sm ${placing? 'btn-warning':'btn-outline-warning'}`} onClick={()=> setPlacing(p=>!p)}>
             {placing ? "Click map: I'm here" : "I'm here"}
           </button>
+          <button
+            className={`btn btn-sm ${sensorTracking ? 'btn-success' : 'btn-outline-success'}`}
+            onClick={() => sensorTracking ? stopSensorTracking() : startSensorTracking()}
+            title="Use phone sensors (motion + compass) to move the marker"
+          >
+            {sensorTracking ? "Stop tracking" : "Use phone sensors"}
+          </button>
           <input className="form-control form-control-sm" placeholder="Search room (e.g., B500)" value={searchText} onChange={(e)=> setSearchText(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') searchRoom(); }} style={{ maxWidth: 180 }} />
           <button className="btn btn-sm btn-outline-primary" onClick={searchRoom}>Search</button>
         </div>
@@ -369,6 +475,7 @@ export default function UserMap() {
           </div>
           {searchMsg && <span className="small text-muted">{searchMsg}</span>}
         </div>
+        {sensorMsg && <div className="small text-muted mt-2">{sensorMsg}</div>}
       </div>
     </div>
   );
