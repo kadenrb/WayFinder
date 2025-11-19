@@ -27,7 +27,6 @@ function markerClass(kind) {
 }
 
 export default function UserMap() {
-  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const [floors, setFloors] = useState([]); // [{id,name,url,points,walkable}]
   const [selUrl, setSelUrl] = useState('');
   const [userPos, setUserPos] = useState(null); // {x,y}
@@ -56,7 +55,11 @@ export default function UserMap() {
   const lastMotionTsRef = useRef(null);
   const motionIdleRef = useRef(0);
 
-  // Load published floors from API with localStorage fallback
+  const MANIFEST_URL =
+    process.env.REACT_APP_MANIFEST_URL ||
+    "https://wayfinder-floors.s3.us-east-2.amazonaws.com/floors/manifest.json";
+
+  // Load published floors from S3 manifest
   useEffect(() => {
     let aborted = false;
     const normalizeFloors = (arr = []) =>
@@ -79,7 +82,7 @@ export default function UserMap() {
 
     const load = async () => {
       try {
-        const res = await fetch(`${API_URL}/floors`);
+        const res = await fetch(MANIFEST_URL, { cache: "no-store" });
         if (!res.ok) throw new Error('Failed to fetch floors');
         const data = await res.json();
         if (aborted) return;
@@ -90,25 +93,14 @@ export default function UserMap() {
           return;
         }
       } catch (err) {
-        console.error('Failed to load published floors from API', err);
-      }
-      if (aborted) return;
-      try {
-        const raw = localStorage.getItem('wf_public_floors');
-        if (!raw) return;
-        const data = JSON.parse(raw);
-        const normalized = normalizeFloors(data?.floors);
-        setFloors(normalized);
-        setInitialFloor(normalized);
-      } catch (e) {
-        console.error('Failed to load local published floors', e);
+        console.error('Failed to load published floors from manifest', err);
       }
     };
     load();
     return () => {
       aborted = true;
     };
-  }, [API_URL]);
+  }, [MANIFEST_URL]);
 
   // Load per-floor user position
   useEffect(() => {
