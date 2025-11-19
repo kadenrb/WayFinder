@@ -4,7 +4,7 @@ const cors = require("cors");
 
 const authRoutes = require("./routes/auth");
 const notifyRoutes = require("./routes/notify");
-const floorRoutes = require("./routes/floors");
+const storageRoutes = require("./routes/storage");
 
 const app = express();
 
@@ -31,7 +31,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/auth", authRoutes);
 app.use("/notify", notifyRoutes);
-app.use("/floors", floorRoutes);
+app.use("/storage", storageRoutes);
 
 //Start server
 app.listen(5000, () => console.log("Server running on port 5000"));
