@@ -54,6 +54,14 @@ export default function UserMap() {
   const userPosRef = useRef(null);
   const lastMotionTsRef = useRef(null);
   const motionIdleRef = useRef(0);
+  const sensorBaselineRef = useRef({
+    start: 0,
+    samples: 0,
+    ax: 0,
+    ay: 0,
+    az: 0,
+    ready: false,
+  });
 
   const MANIFEST_URL =
     process.env.REACT_APP_MANIFEST_URL ||
@@ -250,6 +258,14 @@ export default function UserMap() {
       setSensorMsg("Place yourself on the map first.");
       return;
     }
+    sensorBaselineRef.current = {
+      start: performance.now(),
+      samples: 0,
+      ax: 0,
+      ay: 0,
+      az: 0,
+      ready: false,
+    };
     const updateHeading = (event) => {
       if (typeof event.webkitCompassHeading === 'number') {
         headingRef.current = event.webkitCompassHeading;
@@ -262,23 +278,40 @@ export default function UserMap() {
       if (!pos) return;
       const acc = event.accelerationIncludingGravity || event.acceleration;
       if (!acc) return;
+      const baseline = sensorBaselineRef.current;
+      let ax = acc.x || 0;
+      let ay = acc.y || 0;
+      let az = acc.z || 0;
+      if (!baseline.ready) {
+        baseline.samples += 1;
+        baseline.ax += ax;
+        baseline.ay += ay;
+        baseline.az += az;
+        const elapsed = (performance.now() - baseline.start) / 1000;
+        if (baseline.samples >= 40 || elapsed >= 1.5) {
+          baseline.ax /= baseline.samples;
+          baseline.ay /= baseline.samples;
+          baseline.az /= baseline.samples;
+          baseline.ready = true;
+        }
+        return;
+      }
+      ax -= baseline.ax;
+      ay -= baseline.ay;
+      az -= baseline.az;
       const now = event.timeStamp || performance.now();
       const lastTs = lastMotionTsRef.current || now;
       const dt = Math.min(0.3, Math.max(0.016, (now - lastTs) / 1000));
       lastMotionTsRef.current = now;
-      const magnitude = Math.sqrt(
-        Math.pow(acc.x || 0, 2) +
-        Math.pow(acc.y || 0, 2) +
-        Math.pow(acc.z || 0, 2)
-      );
-      const motionThreshold = 0.5;
+      const magnitude = Math.sqrt(ax * ax + ay * ay + az * az);
+      const motionThreshold = 0.08;
       if (magnitude < motionThreshold) {
         motionIdleRef.current += dt;
         return;
       }
       motionIdleRef.current = 0;
       const heading = headingRef.current || 0;
-      const speed = Math.min(0.02, magnitude * 0.001);
+      const speed = Math.min(0.01, magnitude * 0.0006);
       if (speed <= 0) return;
       const rad = (heading * Math.PI) / 180;
       const dx = Math.sin(rad) * speed;
