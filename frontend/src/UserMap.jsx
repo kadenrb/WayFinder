@@ -1,20 +1,21 @@
 /*
-  ===============================================
-  USER MAP VIEWER (Public Landing Page Experience)
-  ===============================================
-  Read-only, multi-floor wayfinding viewer used by end-users.
-  Key capabilities:
-  - Load published floors (images + points + walkable settings)
-  - Let the user set their current location ("I'm here")
-  - Search for a room (supports aliases/ranges)
-  - Draw a route on the current floor using the walkable color mask
-  - Auto-warp between floors via stairs/elevator POIs with the same Warp Key
-  - Keyboard movement with arrow keys (snaps to walkable color)
+  ===================================================================
+  USER MAP VIEWER (Public Landing Page Experience) - CLEANED VERSION
+  ===================================================================
+  This version removes duplicated helpers and obvious Python-isms while
+  keeping the core behavior:
+    - Loads published floors via manifest/API/localStorage
+    - Lets the user place themselves ("I'm here")
+    - Room search (roomNumber + aliases/ranges)
+    - Walkable-grid routing with gap support
+    - Auto-warp between floors via shared warp keys
+    - Arrow-key movement on desktop
+    - Optional phone sensors (step detection + compass) to move marker
 
-  Important: This viewer reads from localStorage (wf_public_floors). In a SaaS
-  deployment, this would fetch floors.json from a hosted location on the client's
-  website.
+  If anything breaks, you can patch on top; this should at least stop
+  VS Code Tim from screaming about duplicate definitions.
 */
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 function markerClass(kind) {
@@ -35,11 +36,17 @@ export default function UserMap() {
     "https://wayfinder-floors.s3.us-east-2.amazonaws.com/floors/manifest.json";
   const MANIFEST_URL = process.env.REACT_APP_MANIFEST_URL || DEFAULT_MANIFEST;
 
+  // -------------------------------------------------------------------
+  // Core state and refs for floors, routing, sensors, and UI controls
+  // -------------------------------------------------------------------
   const [floors, setFloors] = useState([]); // [{id,name,url,points,walkable}]
   const [selUrl, setSelUrl] = useState("");
-  const [userPos, setUserPos] = useState(null); // {x,y}
+  const [userPos, setUserPos] = useState(null); // { x, y }
+  const userPosRef = useRef(null);
+
   const [placing, setPlacing] = useState(false);
   const [dest, setDest] = useState(null); // { url, id }
+
   const [routePts, setRoutePts] = useState([]);
   const routePtsRef = useRef([]);
   useEffect(() => {
@@ -49,45 +56,37 @@ export default function UserMap() {
   const [autoWarp, setAutoWarp] = useState(true);
   const [gapCells, setGapCells] = useState(1);
   const [warpProximity, setWarpProximity] = useState(0.02); // normalized distance
+
   const [plan, setPlan] = useState(null); // { steps:[{ url, kind:"warp"|"dest", key?, target:{x,y} }], index }
-  const dragRef = useRef(null);
+
   const [moveStep, setMoveStep] = useState(0.01); // normalized delta per arrow key press
   const [searchText, setSearchText] = useState("");
   const [searchMsg, setSearchMsg] = useState("");
+
   const [sensorTracking, setSensorTracking] = useState(false);
   const [sensorMsg, setSensorMsg] = useState("");
-  const gridRef = useRef(null); // cached walkable grid for current floor
-  const scrollRef = useRef(null);
+
+  const gridRef = useRef(null); // walkable grid cache
   const spacerRef = useRef(null);
-  const contentRef = useRef(null);
   const imgRef = useRef(null);
   const [natSize, setNatSize] = useState({ w: 0, h: 0 });
   const initialFloorSetRef = useRef(false);
 
+  // Heading/sensor-related refs
   const headingRef = useRef(0);
-  const compassHeadingRef = useRef(0);
-  const gyroInitializedRef = useRef(false);
-  const userPosRef = useRef(null);
-  const lastMotionTsRef = useRef(null);
-  const lastGyroTsRef = useRef(null);
-  const motionIdleRef = useRef(0);
-  const sensorBaselineRef = useRef({
-    start: 0,
-    samples: 0,
-    ax: 0,
-    ay: 0,
-    az: 0,
-    ready: false,
-  });
-  const calibrationRef = useRef({ baseline: 0, samples: 0, done: false });
-  const stepStateRef = useRef({ lastStepTs: 0, active: false });
+  const headingReadyRef = useRef(false);
   const northOffsetRef = useRef(0);
   const [displayHeading, setDisplayHeading] = useState(0);
+  const lastMotionTsRef = useRef(null);
+  const calibrationRef = useRef({ baseline: 0, samples: 0, done: false });
+  const stepStateRef = useRef({ lastStepTs: 0, active: false });
 
   const STEP_DISTANCE = 0.0014; // ~2 ft per step assuming 1.0 normalized ~= 1,400 ft
   const STEP_REFRACTORY_MS = 300; // ignore spikes for 0.3s after a step
-  const GYRO_WEIGHT = 0.97;
 
+  // -------------------------------------------------------------------
+  // Shared heading helpers (used by route bias + phone sensor movement)
+  // -------------------------------------------------------------------
   const getScreenOrientationAngle = () => {
     if (typeof window === "undefined") return 0;
     const orientation = window.screen && window.screen.orientation;
@@ -110,13 +109,15 @@ export default function UserMap() {
   const quantizeHeading = (value) =>
     normalizeAngle(Math.round(value / 45) * 45);
 
-  const shortestAngleDiff = (target, current) => {
-    return (target - current + 540) % 360 - 180;
-  };
+  const shortestAngleDiff = (target, current) =>
+    (target - current + 540) % 360 - 180;
 
-  const blendTowards = (current, target, strength = 0.35) => {
-    return normalizeAngle(
-      current + shortestAngleDiff(target, current) * strength
+  const blendTowards = (current, target, strength = 0.35) =>
+    normalizeAngle(current + shortestAngleDiff(target, current) * strength);
+
+  const applyHeadingDelta = (delta) => {
+    headingRef.current = normalizeAngle(
+      (headingRef.current || 0) + (delta || 0)
     );
   };
 
@@ -131,16 +132,20 @@ export default function UserMap() {
     if (!plan || !routePtsRef.current.length) return null;
     const pos = userPosRef.current;
     if (!pos) return null;
+
     const pts = routePtsRef.current;
     let idx = pts.findIndex(
       (p) => Math.hypot(p.x - pos.x, p.y - pos.y) > 0.01
     );
     if (idx === -1) idx = pts.length - 1;
+
     const target = pts[Math.min(idx + 1, pts.length - 1)];
     if (!target) return null;
+
     const dx = target.x - pos.x;
     const dy = target.y - pos.y;
     if (Math.hypot(dx, dy) < 0.0005) return null;
+
     const rad = Math.atan2(dx, -dy);
     return normalizeAngle((rad * 180) / Math.PI);
   };
@@ -156,7 +161,9 @@ export default function UserMap() {
     return { heading, snapped };
   };
 
-  // Load published floors from manifest (preferred) or API with localStorage fallback
+  // -------------------------------------------------------------------
+  // Floor loading: manifest -> API -> localStorage fallback
+  // -------------------------------------------------------------------
   useEffect(() => {
     let aborted = false;
 
@@ -172,8 +179,7 @@ export default function UserMap() {
           url: f.url || f.imageData || "",
           points: Array.isArray(f.points) ? f.points : [],
           walkable: f.walkable || { color: "#9F9383", tolerance: 12 },
-          sortOrder:
-            typeof f.sortOrder === "number" ? f.sortOrder : index,
+          sortOrder: typeof f.sortOrder === "number" ? f.sortOrder : index,
           northOffset: toNumber(f.northOffset),
         }))
         .filter((f) => f.url);
@@ -215,11 +221,7 @@ export default function UserMap() {
     const load = async () => {
       try {
         const manifestFloors = await loadFromManifest();
-        if (
-          !aborted &&
-          manifestFloors &&
-          manifestFloors.length
-        ) {
+        if (!aborted && manifestFloors && manifestFloors.length) {
           setFloors(manifestFloors);
           setInitialFloor(manifestFloors);
           persistLocal(manifestFloors);
@@ -258,7 +260,9 @@ export default function UserMap() {
     };
   }, [API_URL, MANIFEST_URL]);
 
-  // Load per-floor user position
+  // -------------------------------------------------------------------
+  // Load and persist per-floor user position
+  // -------------------------------------------------------------------
   useEffect(() => {
     try {
       if (!selUrl) {
@@ -289,11 +293,22 @@ export default function UserMap() {
     }
   }, [userPos, sensorTracking]);
 
+  const saveUserPos = (url, p) => {
+    try {
+      localStorage.setItem("wf_user_pos:" + (url || ""), JSON.stringify(p));
+    } catch (e) {
+      // ignore
+    }
+  };
+
   const floor = useMemo(
     () => floors.find((f) => f.url === selUrl) || null,
     [floors, selUrl]
   );
 
+  // -------------------------------------------------------------------
+  // Coordinate transforms + walkable snapping
+  // -------------------------------------------------------------------
   const toNorm = (clientX, clientY) => {
     const el = spacerRef.current;
     const rect = el && el.getBoundingClientRect();
@@ -334,46 +349,32 @@ export default function UserMap() {
     }
   };
 
-  const saveUserPos = (url, p) => {
-    try {
-      localStorage.setItem(
-        "wf_user_pos:" + (url || ""),
-        JSON.stringify(p)
-      );
-    } catch (e) {
-      // ignore
-    }
-  };
-
-  // Snap a normalized position to nearest walkable cell center (using cached grid)
   const snapToWalkable = (nx, ny) => {
     const g = gridRef.current;
     const img = imgRef.current;
     const f = floors.find((fl) => fl.url === selUrl);
     if (!g || !img || !f) return { x: nx, y: ny };
+
     const grid = g.grid;
     const gw = g.gw;
     const gh = g.gh;
     const step = g.step;
     const w = g.w;
     const h = g.h;
-    const cx = Math.max(
-      0,
-      Math.min(gw - 1, Math.round((nx * w) / step))
-    );
-    const cy = Math.max(
-      0,
-      Math.min(gh - 1, Math.round((ny * h) / step))
-    );
+
+    const cx = Math.max(0, Math.min(gw - 1, Math.round((nx * w) / step)));
+    const cy = Math.max(0, Math.min(gh - 1, Math.round((ny * h) / step)));
     const near = nearestWalkable(grid, gw, gh, cx, cy);
     if (!near) return { x: nx, y: ny };
     return {
-      x: ((near[0] * step + step / 2) / w),
-      y: ((near[1] * step + step / 2) / h),
+      x: (near[0] * step + step / 2) / w,
+      y: (near[1] * step + step / 2) / h,
     };
   };
 
+  // -------------------------------------------------------------------
   // Room search helpers (roomNumber and aliases/ranges)
+  // -------------------------------------------------------------------
   const normCode = (s) =>
     (s || "")
       .toString()
@@ -404,10 +405,12 @@ export default function UserMap() {
     const c = normCode(code);
     const rn = normCode(p.roomNumber || "");
     if (rn && rn === c) return true;
+
     const aliases = Array.isArray(p.aliases) ? p.aliases : [];
     for (const a of aliases) {
       const an = normCode(a);
       if (!an) continue;
+
       if (an.indexOf("-") !== -1) {
         const r = parseRange(an);
         const pc = parseCode(c);
@@ -420,8 +423,8 @@ export default function UserMap() {
         ) {
           return true;
         }
-      } else {
-        if (an === c) return true;
+      } else if (an === c) {
+        return true;
       }
     }
     return false;
@@ -441,10 +444,7 @@ export default function UserMap() {
         setSelUrl(f.url);
         setSearchMsg(
           "Destination set: " +
-          (hit.roomNumber ||
-            hit.name ||
-            hit.poiType ||
-            hit.kind)
+          (hit.roomNumber || hit.name || hit.poiType || hit.kind)
         );
         return;
       }
@@ -452,6 +452,9 @@ export default function UserMap() {
     setSearchMsg("No matching room found");
   };
 
+  // -------------------------------------------------------------------
+  // Motion permission + sensor tracking toggles
+  // -------------------------------------------------------------------
   const requestMotionPermissions = async () => {
     if (
       typeof DeviceMotionEvent !== "undefined" &&
@@ -464,8 +467,7 @@ export default function UserMap() {
       typeof DeviceOrientationEvent !== "undefined" &&
       typeof DeviceOrientationEvent.requestPermission === "function"
     ) {
-      const res =
-        await DeviceOrientationEvent.requestPermission();
+      const res = await DeviceOrientationEvent.requestPermission();
       if (res !== "granted") {
         throw new Error("Orientation permission denied");
       }
@@ -492,19 +494,17 @@ export default function UserMap() {
         done: false,
       };
       stepStateRef.current = {
-        lastStepTs: performance.now
-          ? performance.now()
-          : Date.now(),
+        lastStepTs: performance.now ? performance.now() : Date.now(),
         active: false,
       };
       setSensorTracking(true);
       setSensorMsg("Calibrating sensors. Hold still...");
     } catch (err) {
-      setSensorMsg(
-        (err && err.message) || "Sensor permission denied."
-      );
+      setSensorMsg((err && err.message) || "Sensor permission denied.");
       setSensorTracking(false);
     }
+
+    headingReadyRef.current = false;
   };
 
   const stopSensorTracking = () => {
@@ -519,9 +519,12 @@ export default function UserMap() {
       lastStepTs: 0,
       active: false,
     };
+    headingReadyRef.current = false;
   };
 
-  // Arrow key movement to spoof walking on desktop
+  // -------------------------------------------------------------------
+  // Arrow key movement (desktop spoofed walking)
+  // -------------------------------------------------------------------
   useEffect(() => {
     const onKey = (e) => {
       if (!userPos) return;
@@ -532,24 +535,22 @@ export default function UserMap() {
       else if (e.key === "ArrowUp") dy = -moveStep;
       else if (e.key === "ArrowDown") dy = moveStep;
       else return;
+
       e.preventDefault();
-      const nx = Math.min(
-        1,
-        Math.max(0, userPos.x + dx)
-      );
-      const ny = Math.min(
-        1,
-        Math.max(0, userPos.y + dy)
-      );
+      const nx = Math.min(1, Math.max(0, userPos.x + dx));
+      const ny = Math.min(1, Math.max(0, userPos.y + dy));
       const p = snapToWalkable(nx, ny);
       setUserPos(p);
       saveUserPos(selUrl, p);
     };
+
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [userPos, moveStep, selUrl]);
 
-  // Sensor tracking: heading + step detection
+  // -------------------------------------------------------------------
+  // Sensor tracking: orientation + step detection using shared helpers
+  // -------------------------------------------------------------------
   useEffect(() => {
     if (!sensorTracking) return;
     if (!userPosRef.current) {
@@ -558,48 +559,30 @@ export default function UserMap() {
       return;
     }
 
+    // Push floor-specific northOffset into the shared ref used by helpers
     const northOffset =
-      typeof floor === "object" &&
-        floor &&
-        typeof floor.northOffset === "number" &&
-        Number.isFinite(floor.northOffset)
+      floor && typeof floor.northOffset === "number" && Number.isFinite(floor.northOffset)
         ? floor.northOffset
         : 0;
-
-    const normalizeHeadingLocal = (value) => {
-      let heading = value;
-      if (Number.isNaN(heading)) heading = 0;
-      heading -= getScreenOrientationAngle();
-      heading -= northOffset;
-      heading %= 360;
-      if (heading < 0) heading += 360;
-      return heading;
-    };
-
-    const quantizeHeadingLocal = (value) => {
-      let heading = Math.round(value / 45) * 45;
-      heading %= 360;
-      if (heading < 0) heading += 360;
-      return heading;
-    };
-
-    const updateDisplayHeadingLocal = () => {
-      const normalized =
-        normalizeHeadingLocal(headingRef.current || 0);
-      const snapped = quantizeHeadingLocal(normalized);
-      setDisplayHeading(snapped);
-      return snapped;
-    };
+    northOffsetRef.current = northOffset;
+    headingReadyRef.current = false;
 
     const applyStep = () => {
       const pos = userPosRef.current;
       if (!pos) return;
-      // Use blended heading (compass + route bias)
+
       const result = updateDisplayedHeading();
-      const heading = result.heading;
+      const heading =
+        typeof result.snapped === "number"
+          ? result.snapped
+          : typeof result.heading === "number"
+          ? result.heading
+          : 0;
       const rad = (heading * Math.PI) / 180;
+
       const dx = Math.sin(rad) * STEP_DISTANCE;
       const dy = -Math.cos(rad) * STEP_DISTANCE;
+
       const nx = Math.min(1, Math.max(0, pos.x + dx));
       const ny = Math.min(1, Math.max(0, pos.y + dy));
       const snapped = snapToWalkable(nx, ny);
@@ -610,25 +593,52 @@ export default function UserMap() {
     };
 
     const updateHeading = (event) => {
+      let next = null;
       if (typeof event.webkitCompassHeading === "number") {
-        headingRef.current = event.webkitCompassHeading;
+        next = event.webkitCompassHeading;
       } else if (typeof event.alpha === "number") {
-        headingRef.current = 360 - event.alpha;
+        next = 360 - event.alpha;
       }
-      updateDisplayHeadingLocal();
+      if (typeof next === "number" && Number.isFinite(next)) {
+        headingRef.current = normalizeAngle(next);
+        headingReadyRef.current = true;
+        updateDisplayedHeading();
+      }
     };
 
     const handleMotion = (event) => {
       const pos = userPosRef.current;
       if (!pos) return;
+
+      const now = event.timeStamp ? event.timeStamp : performance.now();
+      const prev = lastMotionTsRef.current;
+      lastMotionTsRef.current = now;
+      const dt = prev ? Math.max(0, (now - prev) / 1000) : 0;
+
+      const rot = event.rotationRate;
+      if (rot && headingReadyRef.current && dt > 0) {
+        const yaw =
+          typeof rot.alpha === "number"
+            ? rot.alpha
+            : typeof rot.gamma === "number"
+            ? rot.gamma
+            : 0;
+        if (Math.abs(yaw) > 0.01) {
+          applyHeadingDelta(-yaw * dt);
+          updateDisplayedHeading();
+        }
+      }
+
       const acc =
         event.accelerationIncludingGravity || event.acceleration;
       if (!acc) return;
+
       const magnitude = Math.sqrt(
         Math.pow(acc.x || 0, 2) +
         Math.pow(acc.y || 0, 2) +
         Math.pow(acc.z || 0, 2)
       );
+
       const calibrator = calibrationRef.current;
       if (!calibrator.done) {
         calibrator.baseline += magnitude;
@@ -640,13 +650,12 @@ export default function UserMap() {
         }
         return;
       }
+
       const delta = magnitude - calibrator.baseline;
       const stepState = stepStateRef.current;
-      const now = event.timeStamp
-        ? event.timeStamp
-        : performance.now();
-      const activationThreshold = 0.6;
-      const releaseThreshold = 0.25;
+      const activationThreshold = 1.05;
+      const releaseThreshold = 0.4;
+
       if (
         !stepState.active &&
         delta > activationThreshold &&
@@ -666,27 +675,18 @@ export default function UserMap() {
       done: false,
     };
     stepStateRef.current = {
-      lastStepTs: performance.now
-        ? performance.now()
-        : Date.now(),
+      lastStepTs: performance.now ? performance.now() : Date.now(),
       active: false,
     };
     lastMotionTsRef.current = null;
-    window.addEventListener(
-      "deviceorientationabsolute",
-      updateHeading
-    );
+
+    window.addEventListener("deviceorientationabsolute", updateHeading);
     window.addEventListener("deviceorientation", updateHeading);
     window.addEventListener("devicemotion", handleMotion);
+
     return () => {
-      window.removeEventListener(
-        "deviceorientationabsolute",
-        updateHeading
-      );
-      window.removeEventListener(
-        "deviceorientation",
-        updateHeading
-      );
+      window.removeEventListener("deviceorientationabsolute", updateHeading);
+      window.removeEventListener("deviceorientation", updateHeading);
       window.removeEventListener("devicemotion", handleMotion);
       lastMotionTsRef.current = null;
       calibrationRef.current = {
@@ -698,23 +698,19 @@ export default function UserMap() {
         lastStepTs: 0,
         active: false,
       };
+      headingReadyRef.current = false;
     };
   }, [sensorTracking, selUrl, snapToWalkable, floor]);
 
-  // Routing helpers
+  // -------------------------------------------------------------------
+  // Routing helpers: walkable mask, BFS, warp plan, and route building
+  // -------------------------------------------------------------------
   const normHex = (s) => {
     if (!s) return "#000000";
     let t = s.toString().trim().toUpperCase();
     if (!t.startsWith("#")) t = "#" + t;
     if (t.length === 4) {
-      t =
-        "#" +
-        t[1] +
-        t[1] +
-        t[2] +
-        t[2] +
-        t[3] +
-        t[3];
+      t = "#" + t[1] + t[1] + t[2] + t[2] + t[3] + t[3];
     }
     return /^#[0-9A-F]{6}$/.test(t) ? t : "#000000";
   };
@@ -747,6 +743,7 @@ export default function UserMap() {
     const gh = Math.max(1, Math.floor(h / step));
     const grid = new Uint8Array(gw * gh);
     const tolv = Math.max(0, Math.min(255, tol || 0));
+
     for (let gy = 0; gy < gh; gy++) {
       for (let gx = 0; gx < gw; gx++) {
         const px = Math.min(w - 1, gx * step + (step >> 1));
@@ -766,11 +763,12 @@ export default function UserMap() {
   };
 
   const nearestWalkable = (grid, gw, gh, sx, sy) => {
-    const inb = (x, y) =>
-      x >= 0 && y >= 0 && x < gw && y < gh;
+    const inb = (x, y) => x >= 0 && y >= 0 && x < gw && y < gh;
     const q = [[sx, sy]];
     const seen = new Set([sy * gw + sx]);
+
     if (grid[sy * gw + sx]) return [sx, sy];
+
     const dirs = [
       [1, 0],
       [-1, 0],
@@ -781,6 +779,7 @@ export default function UserMap() {
       [1, -1],
       [-1, -1],
     ];
+
     while (q.length) {
       const cell = q.shift();
       const x = cell[0];
@@ -802,8 +801,7 @@ export default function UserMap() {
 
   const bfs = (grid, gw, gh, s, t, gap) => {
     if (!gap) gap = 0;
-    const inb = (x, y) =>
-      x >= 0 && y >= 0 && x < gw && y < gh;
+    const inb = (x, y) => x >= 0 && y >= 0 && x < gw && y < gh;
     const dirs = [
       [1, 0],
       [-1, 0],
@@ -856,6 +854,7 @@ export default function UserMap() {
         q.push(tgt);
       }
     }
+
     if (prev[tIdx] === -1 && sIdx !== tIdx) return null;
     const out = [];
     for (let cur = tIdx; cur !== -1; cur = prev[cur]) {
@@ -868,7 +867,6 @@ export default function UserMap() {
     return out;
   };
 
-  // Build a cross-floor plan from current floor to destination floor using shared warp keys
   const sharedWarpKeys = (a, b) => {
     const A = new Set();
     const B = new Set();
@@ -906,6 +904,7 @@ export default function UserMap() {
     const urls = floors.map((f) => f.url);
     const prev = new Map([[fromUrl, null]]);
     const q = [fromUrl];
+
     const keysByUrl = new Map(
       floors.map((f) => [
         f.url,
@@ -915,13 +914,13 @@ export default function UserMap() {
               (p) =>
                 p &&
                 p.warpKey &&
-                (p.poiType === "stairs" ||
-                  p.poiType === "elevator")
+                (p.poiType === "stairs" || p.poiType === "elevator")
             )
             .map((p) => p.warpKey.trim())
         ),
       ])
     );
+
     while (q.length) {
       const u = q.shift();
       if (u === toUrl) break;
@@ -942,6 +941,7 @@ export default function UserMap() {
         }
       }
     }
+
     if (!prev.has(toUrl)) return [{ url: fromUrl, kind: "dest" }];
     const chain = [];
     for (let at = toUrl; at; at = prev.get(at)) {
@@ -959,6 +959,7 @@ export default function UserMap() {
     if (!curFloor) return;
     const img = imgRef.current;
     if (!img || !img.naturalWidth) return;
+
     const gridObj = await buildGrid(
       img,
       curFloor.walkable && curFloor.walkable.color,
@@ -971,6 +972,7 @@ export default function UserMap() {
     const stp = gridObj.step;
     const w = gridObj.w;
     const h = gridObj.h;
+
     const ux = Math.max(
       0,
       Math.min(gw - 1, Math.round((userPos.x * w) / stp))
@@ -984,12 +986,11 @@ export default function UserMap() {
       setRoutePts([]);
       return;
     }
+
     let target = null;
     if (step.kind === "dest") {
       const destFloor = floors.find(
-        (f) =>
-          f.points &&
-          f.points.some((p) => p.id === (dest && dest.id))
+        (f) => f.points && f.points.some((p) => p.id === (dest && dest.id))
       );
       const dp =
         destFloor &&
@@ -1020,10 +1021,7 @@ export default function UserMap() {
           p.warpKey &&
           shared.indexOf(p.warpKey.trim()) !== -1
         ) {
-          const d = Math.hypot(
-            p.x - userPos.x,
-            p.y - userPos.y
-          );
+          const d = Math.hypot(p.x - userPos.x, p.y - userPos.y);
           if (d < bestD) {
             bestD = d;
             best = p;
@@ -1052,6 +1050,7 @@ export default function UserMap() {
       setRoutePts([]);
       return;
     }
+
     const path = bfs(
       grid,
       gw,
@@ -1101,18 +1100,14 @@ export default function UserMap() {
     const step = plan.steps[plan.index];
     if (step.kind !== "warp" || !step.target) return;
     if (!userPos) return;
-    const d = Math.hypot(
-      userPos.x - step.target.x,
-      userPos.y - step.target.y
-    );
+
+    const d = Math.hypot(userPos.x - step.target.x, userPos.y - step.target.y);
     if (d <= warpProximity) {
       const next = plan.steps[plan.index + 1];
       if (!next) return;
-      const curFloor = floors.find((f) => f.url === selUrl);
       const nextFloor = floors.find((f) => f.url === next.url);
-      const match =
-        (nextFloor && nextFloor.points) || [];
-      const matchWarp = match.find(
+      const matchList = (nextFloor && nextFloor.points) || [];
+      const matchWarp = matchList.find(
         (p) =>
           p &&
           p.kind === "poi" &&
@@ -1121,14 +1116,9 @@ export default function UserMap() {
           p.warpKey.trim() === step.key
       );
       if (matchWarp) {
-        saveUserPos(nextFloor.url, {
-          x: matchWarp.x,
-          y: matchWarp.y,
-        });
+        saveUserPos(nextFloor.url, { x: matchWarp.x, y: matchWarp.y });
         setSelUrl(nextFloor.url);
-        setPlan((p) =>
-          p ? { ...p, index: p.index + 1 } : p
-        );
+        setPlan((p) => (p ? { ...p, index: p.index + 1 } : p));
         setRoutePts([]);
       }
     }
@@ -1147,6 +1137,9 @@ export default function UserMap() {
     })();
   }, [selUrl, plan, userPos, gapCells]);
 
+  // -------------------------------------------------------------------
+  // Render: layout, controls, markers, route polyline
+  // -------------------------------------------------------------------
   return (
     <div className="card shadow-sm">
       <div className="card-body">
@@ -1176,20 +1169,14 @@ export default function UserMap() {
             <button
               className={
                 "btn btn-sm " +
-                (sensorTracking
-                  ? "btn-success"
-                  : "btn-outline-success")
+                (sensorTracking ? "btn-success" : "btn-outline-success")
               }
               onClick={() =>
-                sensorTracking
-                  ? stopSensorTracking()
-                  : startSensorTracking()
+                sensorTracking ? stopSensorTracking() : startSensorTracking()
               }
               title="Use phone sensors (motion + compass) to move the marker"
             >
-              {sensorTracking
-                ? "Stop tracking"
-                : "Use phone sensors"}
+              {sensorTracking ? "Stop tracking" : "Use phone sensors"}
             </button>
             <input
               className="form-control form-control-sm"
@@ -1209,10 +1196,10 @@ export default function UserMap() {
             </button>
           </div>
         </div>
+
         {floor && (
           <div
             className="position-relative"
-            ref={scrollRef}
             style={{
               overflow: "auto",
               maxHeight: 600,
@@ -1228,7 +1215,6 @@ export default function UserMap() {
               }}
             >
               <div
-                ref={contentRef}
                 className="position-absolute"
                 style={{
                   left: 0,
@@ -1292,8 +1278,7 @@ export default function UserMap() {
                             borderRadius: "50%",
                             background: "#ff3366",
                             border: "3px solid #fff",
-                            boxShadow:
-                              "0 0 0 4px rgba(255,51,102,0.35)",
+                            boxShadow: "0 0 0 4px rgba(255,51,102,0.35)",
                           }}
                         />
                         <div
@@ -1304,9 +1289,7 @@ export default function UserMap() {
                             width: size,
                             height: size,
                             transform:
-                              "translate(-50%,-50%) rotate(" +
-                              angle +
-                              "deg)",
+                              "translate(-50%,-50%) rotate(" + angle + "deg)",
                             transformOrigin: "50% 50%",
                           }}
                         >
@@ -1317,14 +1300,10 @@ export default function UserMap() {
                               top: "0%",
                               width: 0,
                               height: 0,
-                              borderLeft:
-                                "6px solid transparent",
-                              borderRight:
-                                "6px solid transparent",
-                              borderBottom:
-                                "12px solid #fff",
-                              transform:
-                                "translate(-50%, 2px)",
+                              borderLeft: "6px solid transparent",
+                              borderRight: "6px solid transparent",
+                              borderBottom: "12px solid #fff",
+                              transform: "translate(-50%, 2px)",
                             }}
                           />
                           <div
@@ -1336,8 +1315,7 @@ export default function UserMap() {
                               height: size / 2.2,
                               background: "#fff",
                               borderRadius: 2,
-                              transform:
-                                "translateX(-50%)",
+                              transform: "translateX(-50%)",
                             }}
                           />
                         </div>
@@ -1345,10 +1323,7 @@ export default function UserMap() {
                     );
                   })()}
 
-                {(Array.isArray(floor.points)
-                  ? floor.points
-                  : []
-                ).map((p) => {
+                {(Array.isArray(floor.points) ? floor.points : []).map((p) => {
                   const pos = toPx(p.x, p.y);
                   const size = 8;
                   const isDest = dest && dest.id === p.id;
@@ -1368,14 +1343,10 @@ export default function UserMap() {
                         cursor: "pointer",
                       }}
                       title={
-                        (p.roomNumber
-                          ? "#" + p.roomNumber + " "
-                          : "") +
+                        (p.roomNumber ? "#" + p.roomNumber + " " : "") +
                         (p.name || p.poiType || p.kind)
                       }
-                      onClick={() =>
-                        setDest({ url: selUrl, id: p.id })
-                      }
+                      onClick={() => setDest({ url: selUrl, id: p.id })}
                     />
                   );
                 })}
@@ -1393,12 +1364,7 @@ export default function UserMap() {
                   >
                     <polyline
                       points={routePts
-                        .map(
-                          (p) =>
-                            p.x * natSize.w +
-                            "," +
-                            p.y * natSize.h
-                        )
+                        .map((p) => p.x * natSize.w + "," + p.y * natSize.h)
                         .join(" ")}
                       fill="none"
                       stroke="#00D1FF"
@@ -1407,18 +1373,12 @@ export default function UserMap() {
                       strokeLinejoin="round"
                       strokeDasharray="8 10"
                       style={{
-                        animation:
-                          "routeDash 1.5s linear infinite",
+                        animation: "routeDash 1.5s linear infinite",
                       }}
                     />
                     <polyline
                       points={routePts
-                        .map(
-                          (p) =>
-                            p.x * natSize.w +
-                            "," +
-                            p.y * natSize.h
-                        )
+                        .map((p) => p.x * natSize.w + "," + p.y * natSize.h)
                         .join(" ")}
                       fill="none"
                       stroke="rgba(0,209,255,0.35)"
@@ -1428,8 +1388,7 @@ export default function UserMap() {
                       strokeDasharray="12 14"
                       style={{
                         filter: "blur(1px)",
-                        animation:
-                          "routeDash 1.5s linear infinite",
+                        animation: "routeDash 1.5s linear infinite",
                       }}
                     />
                   </svg>
@@ -1438,11 +1397,11 @@ export default function UserMap() {
             </div>
           </div>
         )}
+
         {!floor && (
-          <div className="text-muted">
-            No published floors available yet.
-          </div>
+          <div className="text-muted">No published floors available yet.</div>
         )}
+
         <div className="d-flex align-items-center gap-2 mt-2">
           <button
             className="btn btn-primary btn-sm"
@@ -1478,9 +1437,7 @@ export default function UserMap() {
           </div>
           <button
             className={
-              "btn btn-" +
-              (autoWarp ? "info" : "outline-info") +
-              " btn-sm"
+              "btn btn-" + (autoWarp ? "info" : "outline-info") + " btn-sm"
             }
             onClick={() => setAutoWarp((v) => !v)}
           >
@@ -1498,24 +1455,19 @@ export default function UserMap() {
               step="0.001"
               value={moveStep}
               onChange={(e) =>
-                setMoveStep(
-                  parseFloat(e.target.value) || 0.01
-                )
+                setMoveStep(parseFloat(e.target.value) || 0.01)
               }
               style={{ width: 120 }}
             />
             <span>{moveStep.toFixed(3)}</span>
           </div>
           {searchMsg && (
-            <span className="small text-muted">
-              {searchMsg}
-            </span>
+            <span className="small text-muted">{searchMsg}</span>
           )}
         </div>
+
         {sensorMsg && (
-          <div className="small text-muted mt-2">
-            {sensorMsg}
-          </div>
+          <div className="small text-muted mt-2">{sensorMsg}</div>
         )}
       </div>
     </div>
