@@ -75,6 +75,7 @@ export default function UserMap() {
   // Heading/sensor-related refs
   const headingRef = useRef(0);
   const headingReadyRef = useRef(false);
+  const pendingHeadingRef = useRef(null);
   const northOffsetRef = useRef(0);
   const [displayHeading, setDisplayHeading] = useState(0);
   const lastMotionTsRef = useRef(null);
@@ -84,8 +85,8 @@ export default function UserMap() {
 
   const STEP_DISTANCE = 0.0014; // ~2 ft per step assuming 1.0 normalized ~= 1,400 ft
   const STEP_REFRACTORY_MS = 300; // ignore spikes for 0.3s after a step
-  const TURN_START_THRESHOLD = 7; // deg/sec to consider a turn beginning
-  const TURN_STOP_THRESHOLD = 3; // deg/sec to consider a turn done
+  const TURN_START_THRESHOLD = 15; // deg/sec to consider a turn beginning
+  const TURN_STOP_THRESHOLD = 5; // deg/sec to consider a turn done
   const TURN_RELEASE_MS = 150;
 
   // -------------------------------------------------------------------
@@ -119,10 +120,11 @@ export default function UserMap() {
   const blendTowards = (current, target, strength = 0.35) =>
     normalizeAngle(current + shortestAngleDiff(target, current) * strength);
 
-  const applyHeadingDelta = (delta) => {
-    headingRef.current = normalizeAngle(
-      (headingRef.current || 0) + (delta || 0)
-    );
+  const commitHeading = (value) => {
+    headingRef.current = normalizeAngle(value);
+    headingReadyRef.current = true;
+    pendingHeadingRef.current = null;
+    updateDisplayedHeading();
   };
 
   const getNormalizedHeading = () => {
@@ -509,6 +511,7 @@ export default function UserMap() {
     }
 
     headingReadyRef.current = false;
+    pendingHeadingRef.current = null;
     rotationStateRef.current = { active: false, lastActiveTs: 0 };
   };
 
@@ -525,6 +528,7 @@ export default function UserMap() {
       active: false,
     };
     headingReadyRef.current = false;
+    pendingHeadingRef.current = null;
     rotationStateRef.current = { active: false, lastActiveTs: 0 };
   };
 
@@ -573,6 +577,7 @@ export default function UserMap() {
         : 0;
     northOffsetRef.current = northOffset;
     headingReadyRef.current = false;
+    pendingHeadingRef.current = null;
     rotationStateRef.current = { active: false, lastActiveTs: 0 };
 
     const applyStep = () => {
@@ -608,13 +613,7 @@ export default function UserMap() {
           const mz = magnetometer.z;
           if (!Number.isFinite(mx) || !Number.isFinite(mz)) return;
           const rawDeg = (Math.atan2(mx, -mz) * 180) / Math.PI;
-          const headingDeg = normalizeAngle(rawDeg);
-          const turnState = rotationStateRef.current;
-          const ready = headingReadyRef.current;
-          if (ready && !turnState.active) return;
-          headingRef.current = headingDeg;
-          headingReadyRef.current = true;
-          updateDisplayedHeading();
+          pushHeadingReading(normalizeAngle(rawDeg));
         });
         magnetometer.addEventListener("error", (err) => {
           console.warn("Magnetometer error", err && err.name);
@@ -628,6 +627,13 @@ export default function UserMap() {
 
     const usingMagnetometer = !!magnetometer;
 
+    const pushHeadingReading = (deg) => {
+      pendingHeadingRef.current = deg;
+      if (!rotationStateRef.current.active || !headingReadyRef.current) {
+        commitHeading(deg);
+      }
+    };
+
     const updateHeading = (event) => {
       let next = null;
       if (typeof event.webkitCompassHeading === "number") {
@@ -636,9 +642,7 @@ export default function UserMap() {
         next = 360 - event.alpha;
       }
       if (typeof next === "number" && Number.isFinite(next)) {
-        headingRef.current = normalizeAngle(next);
-        headingReadyRef.current = true;
-        updateDisplayedHeading();
+        pushHeadingReading(normalizeAngle(next));
       }
     };
 
@@ -671,23 +675,22 @@ export default function UserMap() {
             turnState.lastActiveTs = now;
           } else if (now - turnState.lastActiveTs > TURN_RELEASE_MS) {
             turnState.active = false;
+            const pending = pendingHeadingRef.current;
+            if (typeof pending === "number") {
+              commitHeading(pending);
+            }
           }
         }
 
-        if (
-          turnState.active &&
-          headingReadyRef.current &&
-          dt > 0 &&
-          yawAbs > 0.01
-        ) {
-          applyHeadingDelta(-yaw * dt);
-          updateDisplayedHeading();
-        }
       } else if (
         turnState.active &&
         now - turnState.lastActiveTs > TURN_RELEASE_MS
       ) {
         turnState.active = false;
+        const pending = pendingHeadingRef.current;
+        if (typeof pending === "number") {
+          commitHeading(pending);
+        }
       }
 
       const acc =
@@ -766,6 +769,7 @@ export default function UserMap() {
         active: false,
       };
       headingReadyRef.current = false;
+      pendingHeadingRef.current = null;
       rotationStateRef.current = { active: false, lastActiveTs: 0 };
       if (magnetometer && typeof magnetometer.stop === "function") {
         try {
