@@ -37,6 +37,10 @@ export default function UserMap() {
   const [placing, setPlacing] = useState(false);
   const [dest, setDest] = useState(null); // { url, id }
   const [routePts, setRoutePts] = useState([]);
+  const routePtsRef = useRef([]);
+  useEffect(() => {
+    routePtsRef.current = Array.isArray(routePts) ? routePts : [];
+  }, [routePts]);
   const [autoWarp, setAutoWarp] = useState(true);
   const [gapCells, setGapCells] = useState(1);
   const [warpProximity, setWarpProximity] = useState(0.02); // normalized distance
@@ -59,9 +63,18 @@ export default function UserMap() {
   const gyroInitializedRef = useRef(false);
   const userPosRef = useRef(null);
   const lastMotionTsRef = useRef(null);
+  const lastGyroTsRef = useRef(null);
+  const motionIdleRef = useRef(0);
+  const sensorBaselineRef = useRef({
+    start: 0,
+    samples: 0,
+    ax: 0,
+    ay: 0,
+    az: 0,
+    ready: false,
+  });
   const calibrationRef = useRef({ baseline: 0, samples: 0, done: false });
   const stepStateRef = useRef({ lastStepTs: 0, active: false });
-  const routePtsRef = useRef([]);
   const northOffsetRef = useRef(0);
   const [displayHeading, setDisplayHeading] = useState(0);
   const STEP_DISTANCE = 0.0014; // ~2 ft per step assuming 1.0 normalized ~= 1,400 ft
