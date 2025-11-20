@@ -1609,12 +1609,37 @@ export default function MapEditor({ imageSrc }) {
     try {
       const text = await f.text();
       const data = JSON.parse(text);
-      if (Array.isArray(data?.points)) setPoints(data.points);
-      if (Array.isArray(data?.dbBoxes)) setDbBoxes(data.dbBoxes);
-      if (data && typeof data.userPos === 'object' && data.userPos && typeof data.userPos.x === 'number' && typeof data.userPos.y === 'number') setUserPos({ x: data.userPos.x, y: data.userPos.y });
-      if (data && typeof data.walkable === 'object' && data.walkable && typeof data.walkable.color === 'string') {
-        const tol = typeof data.walkable.tolerance === 'number' ? data.walkable.tolerance : 12;
-        setWalkable({ color: normHex(data.walkable.color), tolerance: tol });
+      const applyState = (state) => {
+        if (Array.isArray(state?.points)) setPoints(state.points);
+        if (Array.isArray(state?.dbBoxes)) setDbBoxes(state.dbBoxes);
+        if (
+          state &&
+          typeof state.userPos === 'object' &&
+          state.userPos &&
+          typeof state.userPos.x === 'number' &&
+          typeof state.userPos.y === 'number'
+        ) {
+          setUserPos({ x: state.userPos.x, y: state.userPos.y });
+        }
+        if (state && typeof state.walkable === 'object' && state.walkable && typeof state.walkable.color === 'string') {
+          const tol = typeof state.walkable.tolerance === 'number' ? state.walkable.tolerance : 12;
+          setWalkable({ color: normHex(state.walkable.color), tolerance: tol });
+        }
+      };
+
+      if (Array.isArray(data?.floors)) {
+        let chosen = null;
+        if (imageSrc) {
+          chosen = data.floors.find((floor) => floor?.url === imageSrc);
+        }
+        if (!chosen) {
+          chosen = data.floors
+            .slice()
+            .sort((a, b) => (Array.isArray(b?.points) ? b.points.length : 0) - (Array.isArray(a?.points) ? a.points.length : 0))[0];
+        }
+        if (chosen) applyState(chosen);
+      } else {
+        applyState(data);
       }
     } catch { }
   };
