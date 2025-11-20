@@ -146,7 +146,6 @@ export default function LandingPage({ user }) {
     alert("Public map URL saved for homepage preview");
   };
 
-<<<<<<< HEAD
   const deletePublishedFloor = async (id) => {
     if (!window.confirm("Remove this published floor?")) return;
     try {
@@ -167,8 +166,6 @@ export default function LandingPage({ user }) {
     }
   };
 
-=======
->>>>>>> e4a83e600d4aab126edd9c82258557ada71e7f44
   const uploadFloorImage = async (img) => {
     if (img.remoteUrl) return img.remoteUrl;
     if (!img.file) throw new Error("Missing original image file. Re-upload the floor.");
