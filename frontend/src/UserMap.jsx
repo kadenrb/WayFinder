@@ -559,6 +559,7 @@ export default function UserMap() {
       return;
     }
 
+    let magnetometer = null;
     // Push floor-specific northOffset into the shared ref used by helpers
     const northOffset =
       floor && typeof floor.northOffset === "number" && Number.isFinite(floor.northOffset)
@@ -591,6 +592,29 @@ export default function UserMap() {
         saveUserPos(selUrl, snapped);
       }
     };
+
+    if (typeof window !== "undefined" && "Magnetometer" in window) {
+      try {
+        magnetometer = new window.Magnetometer({ frequency: 10 });
+        magnetometer.addEventListener("reading", () => {
+          const mx = magnetometer.x;
+          const mz = magnetometer.z;
+          if (!Number.isFinite(mx) || !Number.isFinite(mz)) return;
+          const rawDeg = (Math.atan2(mx, -mz) * 180) / Math.PI;
+          const headingDeg = normalizeAngle(rawDeg);
+          headingRef.current = headingDeg;
+          headingReadyRef.current = true;
+          updateDisplayedHeading();
+        });
+        magnetometer.addEventListener("error", (err) => {
+          console.warn("Magnetometer error", err && err.name);
+        });
+        magnetometer.start();
+      } catch (err) {
+        console.warn("Magnetometer not available or blocked", err);
+        magnetometer = null;
+      }
+    }
 
     const updateHeading = (event) => {
       let next = null;
@@ -699,6 +723,13 @@ export default function UserMap() {
         active: false,
       };
       headingReadyRef.current = false;
+      if (magnetometer && typeof magnetometer.stop === "function") {
+        try {
+          magnetometer.stop();
+        } catch (e) {
+          // ignore
+        }
+      }
     };
   }, [sensorTracking, selUrl, snapToWalkable, floor]);
 
