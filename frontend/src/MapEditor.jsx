@@ -1632,10 +1632,31 @@ export default function MapEditor({ imageSrc }) {
         if (imageSrc) {
           chosen = data.floors.find((floor) => floor?.url === imageSrc);
         }
+        if (!chosen && data.floors.length > 1) {
+          const labels = data.floors.map((floor, index) => {
+            const label = floor?.name || floor?.id || floor?.url || `Floor ${index + 1}`;
+            const count = Array.isArray(floor?.points) ? floor.points.length : 0;
+            return `${index + 1}. ${label} (${count} pts)`;
+          });
+          const promptMsg = [
+            "Multiple floors found in this file.",
+            "Enter the number of the floor you want to import:",
+            labels.join("\n"),
+          ].join("\n");
+          const input = window.prompt(promptMsg, "1");
+          const idx = Number.parseInt(input || "", 10);
+          if (Number.isInteger(idx) && idx >= 1 && idx <= data.floors.length) {
+            chosen = data.floors[idx - 1];
+          }
+        }
         if (!chosen) {
           chosen = data.floors
             .slice()
-            .sort((a, b) => (Array.isArray(b?.points) ? b.points.length : 0) - (Array.isArray(a?.points) ? a.points.length : 0))[0];
+            .sort(
+              (a, b) =>
+                (Array.isArray(b?.points) ? b.points.length : 0) -
+                (Array.isArray(a?.points) ? a.points.length : 0)
+            )[0];
         }
         if (chosen) applyState(chosen);
       } else {
