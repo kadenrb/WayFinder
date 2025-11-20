@@ -59,7 +59,7 @@ export default function UserMap() {
   const lastMotionTsRef = useRef(null);
   const calibrationRef = useRef({ baseline: 0, samples: 0, done: false });
   const stepStateRef = useRef({ lastStepTs: 0, active: false });
-  const STEP_DISTANCE = 0.012;
+  const STEP_DISTANCE = 0.0014; // ~2 ft per step assuming 1.0 normalized ≈ 1,400 ft
 
   // Load published floors from manifest (preferred) or API with localStorage fallback
   useEffect(() => {
