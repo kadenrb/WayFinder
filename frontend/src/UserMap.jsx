@@ -80,9 +80,13 @@ export default function UserMap() {
   const lastMotionTsRef = useRef(null);
   const calibrationRef = useRef({ baseline: 0, samples: 0, done: false });
   const stepStateRef = useRef({ lastStepTs: 0, active: false });
+  const rotationStateRef = useRef({ active: false, lastActiveTs: 0 });
 
   const STEP_DISTANCE = 0.0014; // ~2 ft per step assuming 1.0 normalized ~= 1,400 ft
   const STEP_REFRACTORY_MS = 300; // ignore spikes for 0.3s after a step
+  const TURN_START_THRESHOLD = 7; // deg/sec to consider a turn beginning
+  const TURN_STOP_THRESHOLD = 3; // deg/sec to consider a turn done
+  const TURN_RELEASE_MS = 150;
 
   // -------------------------------------------------------------------
   // Shared heading helpers (used by route bias + phone sensor movement)
@@ -505,6 +509,7 @@ export default function UserMap() {
     }
 
     headingReadyRef.current = false;
+    rotationStateRef.current = { active: false, lastActiveTs: 0 };
   };
 
   const stopSensorTracking = () => {
@@ -520,6 +525,7 @@ export default function UserMap() {
       active: false,
     };
     headingReadyRef.current = false;
+    rotationStateRef.current = { active: false, lastActiveTs: 0 };
   };
 
   // -------------------------------------------------------------------
@@ -567,6 +573,7 @@ export default function UserMap() {
         : 0;
     northOffsetRef.current = northOffset;
     headingReadyRef.current = false;
+    rotationStateRef.current = { active: false, lastActiveTs: 0 };
 
     const applyStep = () => {
       const pos = userPosRef.current;
@@ -602,6 +609,9 @@ export default function UserMap() {
           if (!Number.isFinite(mx) || !Number.isFinite(mz)) return;
           const rawDeg = (Math.atan2(mx, -mz) * 180) / Math.PI;
           const headingDeg = normalizeAngle(rawDeg);
+          const turnState = rotationStateRef.current;
+          const ready = headingReadyRef.current;
+          if (ready && !turnState.active) return;
           headingRef.current = headingDeg;
           headingReadyRef.current = true;
           updateDisplayedHeading();
@@ -615,6 +625,8 @@ export default function UserMap() {
         magnetometer = null;
       }
     }
+
+    const usingMagnetometer = !!magnetometer;
 
     const updateHeading = (event) => {
       let next = null;
@@ -640,17 +652,42 @@ export default function UserMap() {
       const dt = prev ? Math.max(0, (now - prev) / 1000) : 0;
 
       const rot = event.rotationRate;
-      if (rot && headingReadyRef.current && dt > 0) {
+      const turnState = rotationStateRef.current;
+      if (rot) {
         const yaw =
           typeof rot.alpha === "number"
             ? rot.alpha
             : typeof rot.gamma === "number"
             ? rot.gamma
             : 0;
-        if (Math.abs(yaw) > 0.01) {
+        const yawAbs = Math.abs(yaw);
+        if (yawAbs >= TURN_START_THRESHOLD) {
+          if (!turnState.active) {
+            turnState.active = true;
+          }
+          turnState.lastActiveTs = now;
+        } else if (turnState.active) {
+          if (yawAbs > TURN_STOP_THRESHOLD) {
+            turnState.lastActiveTs = now;
+          } else if (now - turnState.lastActiveTs > TURN_RELEASE_MS) {
+            turnState.active = false;
+          }
+        }
+
+        if (
+          turnState.active &&
+          headingReadyRef.current &&
+          dt > 0 &&
+          yawAbs > 0.01
+        ) {
           applyHeadingDelta(-yaw * dt);
           updateDisplayedHeading();
         }
+      } else if (
+        turnState.active &&
+        now - turnState.lastActiveTs > TURN_RELEASE_MS
+      ) {
+        turnState.active = false;
       }
 
       const acc =
@@ -704,13 +741,19 @@ export default function UserMap() {
     };
     lastMotionTsRef.current = null;
 
-    window.addEventListener("deviceorientationabsolute", updateHeading);
-    window.addEventListener("deviceorientation", updateHeading);
+    let orientationBound = false;
+    if (!usingMagnetometer) {
+      window.addEventListener("deviceorientationabsolute", updateHeading);
+      window.addEventListener("deviceorientation", updateHeading);
+      orientationBound = true;
+    }
     window.addEventListener("devicemotion", handleMotion);
 
     return () => {
-      window.removeEventListener("deviceorientationabsolute", updateHeading);
-      window.removeEventListener("deviceorientation", updateHeading);
+      if (orientationBound) {
+        window.removeEventListener("deviceorientationabsolute", updateHeading);
+        window.removeEventListener("deviceorientation", updateHeading);
+      }
       window.removeEventListener("devicemotion", handleMotion);
       lastMotionTsRef.current = null;
       calibrationRef.current = {
@@ -723,6 +766,7 @@ export default function UserMap() {
         active: false,
       };
       headingReadyRef.current = false;
+      rotationStateRef.current = { active: false, lastActiveTs: 0 };
       if (magnetometer && typeof magnetometer.stop === "function") {
         try {
           magnetometer.stop();
