@@ -30,5 +30,6 @@ model PublishedFloor {
   points    Json
   walkable  Json
   sortOrder Int      @default(0)
+  northOffset Float  @default(0)
   createdAt DateTime @default(now())
 }

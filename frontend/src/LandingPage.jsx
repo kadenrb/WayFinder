@@ -149,7 +149,12 @@ export default function LandingPage({ user }) {
     try {
       const res = await fetch(`${API_URL}/floors/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete");
-      setPublishedFloors((prev) => prev.filter((f) => f.id !== id));
+      const data = await res.json();
+      if (Array.isArray(data?.floors)) {
+        setPublishedFloors(data.floors);
+      } else {
+        setPublishedFloors((prev) => prev.filter((f) => f.id !== id));
+      }
       setPublishMsg("Floor removed.");
     } catch (err) {
       console.error(err);
@@ -241,6 +246,10 @@ export default function LandingPage({ user }) {
           points: Array.isArray(state?.points) ? state.points : [],
           walkable: state?.walkable || { color: "#9F9383", tolerance: 12 },
           sortOrder: index,
+          northOffset:
+            typeof state?.northOffset === "number" && Number.isFinite(state.northOffset)
+              ? state.northOffset
+              : 0,
         });
       }
       localStorage.setItem("wf_public_floors", JSON.stringify({ floors }));
@@ -323,14 +332,17 @@ export default function LandingPage({ user }) {
               {images.length > 0 && (
                 <ul className="list mt-3">
                   {images.map((img, i) => (
-                    <li key={img.id} className="d-flex justify-content-between align-items-center">
+                    <li key={img.id} className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
                       <span style={{ cursor: 'pointer' }} onClick={() => setSelectedImageId(img.id)}>
                         {selectedImageId === img.id ? <strong>{i+1}. {img.name}</strong> : <>{i+1}. {img.name}</>}
                       </span>
-                      <span className="d-flex align-items-center gap-2">
+                      <div className="d-flex align-items-center gap-2 flex-wrap">
+                        <small className="text-muted">
+                          Set north in the editor (default 0°).
+                        </small>
                         <button className="btn btn-sm btn-outline-primary" onClick={() => setSelectedImageId(img.id)}>Select</button>
                         <button className="btn btn-sm btn-outline-danger" onClick={() => removeImage(img.id)}>Remove</button>
-                      </span>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -366,6 +378,9 @@ export default function LandingPage({ user }) {
                         <strong>{floor.name}</strong>
                         <small className="text-muted">
                           URL: {floor.url.slice(0, 40)}...
+                        </small>
+                        <small className="text-muted">
+                          North offset: {Number.isFinite(Number(floor.northOffset)) ? Number(floor.northOffset) : 0}°
                         </small>
                       </span>
                       <button

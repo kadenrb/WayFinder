@@ -28,6 +28,7 @@ function markerClass(kind) {
 
 export default function UserMap() {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const MANIFEST_URL = process.env.REACT_APP_MANIFEST_URL || "";
   const [floors, setFloors] = useState([]); // [{id,name,url,points,walkable}]
   const [selUrl, setSelUrl] = useState('');
   const [userPos, setUserPos] = useState(null); // {x,y}
@@ -54,21 +55,30 @@ export default function UserMap() {
   const headingRef = useRef(0);
   const userPosRef = useRef(null);
   const lastMotionTsRef = useRef(null);
-  const motionIdleRef = useRef(0);
+  const calibrationRef = useRef({ baseline: 0, samples: 0, done: false });
+  const stepStateRef = useRef({ lastStepTs: 0, active: false });
+  const STEP_DISTANCE = 0.012;
 
-  // Load published floors from API with localStorage fallback
+  // Load published floors from manifest (preferred) or API with localStorage fallback
   useEffect(() => {
     let aborted = false;
-    const normalizeFloors = (arr = []) =>
-      arr
+    const normalizeFloors = (arr = []) => {
+      const toNumber = (value) => {
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+        const parsed = parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
+      return arr
         .map((f, index) => ({
           ...f,
           url: f.url || f.imageData || '',
           points: Array.isArray(f.points) ? f.points : [],
           walkable: f.walkable || { color: '#9F9383', tolerance: 12 },
           sortOrder: typeof f.sortOrder === 'number' ? f.sortOrder : index,
+          northOffset: toNumber(f.northOffset),
         }))
         .filter((f) => f.url);
+    };
 
     const setInitialFloor = (list) => {
       if (!initialFloorSetRef.current && list.length) {
@@ -77,16 +87,47 @@ export default function UserMap() {
       }
     };
 
+    const persistLocal = (list) => {
+      try {
+        localStorage.setItem('wf_public_floors', JSON.stringify({ floors: list }));
+      } catch {
+        /* ignore quota errors */
+      }
+    };
+
+    const loadFromManifest = async () => {
+      if (!MANIFEST_URL) return null;
+      const res = await fetch(MANIFEST_URL, { cache: 'no-store' });
+      if (!res.ok) throw new Error('Failed to fetch manifest');
+      const data = await res.json();
+      return normalizeFloors(data?.floors);
+    };
+
+    const loadFromApi = async () => {
+      const res = await fetch(`${API_URL}/floors`);
+      if (!res.ok) throw new Error('Failed to fetch floors');
+      const data = await res.json();
+      return normalizeFloors(data?.floors);
+    };
+
     const load = async () => {
       try {
-        const res = await fetch(`${API_URL}/floors`);
-        if (!res.ok) throw new Error('Failed to fetch floors');
-        const data = await res.json();
-        if (aborted) return;
-        const normalized = normalizeFloors(data?.floors);
-        if (normalized.length) {
-          setFloors(normalized);
-          setInitialFloor(normalized);
+        const manifestFloors = await loadFromManifest();
+        if (!aborted && manifestFloors && manifestFloors.length) {
+          setFloors(manifestFloors);
+          setInitialFloor(manifestFloors);
+          persistLocal(manifestFloors);
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to load published floors from manifest', err);
+      }
+      try {
+        const apiFloors = await loadFromApi();
+        if (!aborted && apiFloors.length) {
+          setFloors(apiFloors);
+          setInitialFloor(apiFloors);
+          persistLocal(apiFloors);
           return;
         }
       } catch (err) {
@@ -108,7 +149,7 @@ export default function UserMap() {
     return () => {
       aborted = true;
     };
-  }, [API_URL]);
+  }, [API_URL, MANIFEST_URL]);
 
   // Load per-floor user position
   useEffect(() => {
@@ -217,8 +258,10 @@ export default function UserMap() {
     }
     try {
       await requestMotionPermissions();
+      calibrationRef.current = { baseline: 0, samples: 0, done: false };
+      stepStateRef.current = { lastStepTs: performance.now ? performance.now() : Date.now(), active: false };
       setSensorTracking(true);
-      setSensorMsg("Tracking phone motion…");
+      setSensorMsg("Calibrating sensors. Hold still...");
     } catch (err) {
       setSensorMsg(err?.message || "Sensor permission denied.");
       setSensorTracking(false);
@@ -228,6 +271,8 @@ export default function UserMap() {
   const stopSensorTracking = () => {
     setSensorTracking(false);
     setSensorMsg("Tracking paused.");
+    calibrationRef.current = { baseline: 0, samples: 0, done: false };
+    stepStateRef.current = { lastStepTs: 0, active: false };
   };
 
   // Arrow key movement to spoof walking on desktop
@@ -258,39 +303,26 @@ export default function UserMap() {
       setSensorMsg("Place yourself on the map first.");
       return;
     }
-    const updateHeading = (event) => {
-      if (typeof event.webkitCompassHeading === 'number') {
-        headingRef.current = event.webkitCompassHeading;
-      } else if (typeof event.alpha === 'number') {
-        headingRef.current = 360 - event.alpha;
-      }
+    const northOffset = typeof floor?.northOffset === 'number' && Number.isFinite(floor.northOffset)
+      ? floor.northOffset
+      : 0;
+
+    const normalizeHeading = (value) => {
+      let heading = value;
+      if (Number.isNaN(heading)) heading = 0;
+      heading = heading - northOffset;
+      heading %= 360;
+      if (heading < 0) heading += 360;
+      return heading;
     };
-    const handleMotion = (event) => {
+
+    const applyStep = () => {
       const pos = userPosRef.current;
       if (!pos) return;
-      const acc = event.accelerationIncludingGravity || event.acceleration;
-      if (!acc) return;
-      const now = event.timeStamp || performance.now();
-      const lastTs = lastMotionTsRef.current || now;
-      const dt = Math.min(0.3, Math.max(0.016, (now - lastTs) / 1000));
-      lastMotionTsRef.current = now;
-      const magnitude = Math.sqrt(
-        Math.pow(acc.x || 0, 2) +
-        Math.pow(acc.y || 0, 2) +
-        Math.pow(acc.z || 0, 2)
-      );
-      const motionThreshold = 0.12;
-      if (magnitude < motionThreshold) {
-        motionIdleRef.current += dt;
-        return;
-      }
-      motionIdleRef.current = 0;
-      const heading = headingRef.current || 0;
-      const speed = Math.min(0.08, magnitude * 0.0035);
-      if (speed <= 0) return;
+      const heading = normalizeHeading(headingRef.current || 0);
       const rad = (heading * Math.PI) / 180;
-      const dx = Math.sin(rad) * speed;
-      const dy = -Math.cos(rad) * speed;
+      const dx = Math.sin(rad) * STEP_DISTANCE;
+      const dy = -Math.cos(rad) * STEP_DISTANCE;
       const nx = Math.min(1, Math.max(0, pos.x + dx));
       const ny = Math.min(1, Math.max(0, pos.y + dy));
       const snapped = snapToWalkable(nx, ny);
@@ -299,17 +331,64 @@ export default function UserMap() {
         saveUserPos(selUrl, snapped);
       }
     };
+
+    const updateHeading = (event) => {
+      if (typeof event.webkitCompassHeading === 'number') {
+        headingRef.current = event.webkitCompassHeading;
+      } else if (typeof event.alpha === 'number') {
+        headingRef.current = 360 - event.alpha;
+      }
+    };
+
+    const handleMotion = (event) => {
+      const pos = userPosRef.current;
+      if (!pos) return;
+      const acc = event.accelerationIncludingGravity || event.acceleration;
+      if (!acc) return;
+      const magnitude = Math.sqrt(
+        Math.pow(acc.x || 0, 2) +
+        Math.pow(acc.y || 0, 2) +
+        Math.pow(acc.z || 0, 2)
+      );
+      const calibrator = calibrationRef.current;
+      if (!calibrator.done) {
+        calibrator.baseline += magnitude;
+        calibrator.samples += 1;
+        if (calibrator.samples >= 40) {
+          calibrator.baseline /= calibrator.samples;
+          calibrator.done = true;
+          setSensorMsg("Tracking phone motion...");
+        }
+        return;
+      }
+      const delta = magnitude - calibrator.baseline;
+      const stepState = stepStateRef.current;
+      const now = event.timeStamp ? event.timeStamp : performance.now();
+      const activationThreshold = 0.35;
+      const releaseThreshold = 0.15;
+      const minStepMs = 250;
+      if (!stepState.active && delta > activationThreshold && now - stepState.lastStepTs > minStepMs) {
+        stepState.active = true;
+        stepState.lastStepTs = now;
+        applyStep();
+      } else if (stepState.active && delta < releaseThreshold) {
+        stepState.active = false;
+      }
+    };
+
+    lastMotionTsRef.current = null;
     window.addEventListener('deviceorientationabsolute', updateHeading);
     window.addEventListener('deviceorientation', updateHeading);
     window.addEventListener('devicemotion', handleMotion);
-    setSensorMsg("Tracking phone motion…");
     return () => {
       window.removeEventListener('deviceorientationabsolute', updateHeading);
       window.removeEventListener('deviceorientation', updateHeading);
       window.removeEventListener('devicemotion', handleMotion);
       lastMotionTsRef.current = null;
+      calibrationRef.current = { baseline: 0, samples: 0, done: false };
+      stepStateRef.current = { lastStepTs: 0, active: false };
     };
-  }, [sensorTracking, selUrl, snapToWalkable]);
+  }, [sensorTracking, selUrl, snapToWalkable, floor]);
 
   // Helpers similar to editor for routing
   const normHex = (s) => {

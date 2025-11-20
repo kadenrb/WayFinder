@@ -124,6 +124,7 @@ export default function MapEditor({ imageSrc }) {
   // SECTION: Walkable Path Color (admin)
   // ===============================
   const [walkable, setWalkable] = useState({ color: '#9F9383', tolerance: 12 });
+  const [northOffset, setNorthOffset] = useState(0);
   // Routing overlay (dev tool): path from user to selected point, constrained to walkable color
   const [routePts, setRoutePts] = useState([]); // [{x,y}] in normalized coords
   const [routeBusy, setRouteBusy] = useState(false);
@@ -342,11 +343,17 @@ export default function MapEditor({ imageSrc }) {
         } else {
           setWalkable({ color: '#9F9383', tolerance: 12 });
         }
+        if (typeof data?.northOffset === 'number' && Number.isFinite(data.northOffset)) {
+          setNorthOffset(data.northOffset);
+        } else {
+          setNorthOffset(0);
+        }
       } else {
         setPoints([]);
         setDbBoxes([]);
         setUserPos(null);
         setWalkable({ color: '#9F9383', tolerance: 12 });
+        setNorthOffset(0);
       }
     } catch { }
   }, [storageKey]);
@@ -364,9 +371,12 @@ export default function MapEditor({ imageSrc }) {
   useEffect(() => {
     // Save current state (points + DB boxes) so edits and box cleanups persist
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ points, dbBoxes, userPos, walkable }));
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({ points, dbBoxes, userPos, walkable, northOffset })
+      );
     } catch { }
-  }, [points, dbBoxes, userPos, walkable, storageKey]);
+  }, [points, dbBoxes, userPos, walkable, northOffset, storageKey]);
 
   // Must declare hooks before any early returns
   /*
@@ -1811,6 +1821,19 @@ export default function MapEditor({ imageSrc }) {
                 placeholder="#9F9383"
               />
               <button className="btn btn-sm btn-outline-secondary" onClick={pickWalkableFromScreen}>Pick</button>
+              <span>North offset</span>
+              <input
+                type="number"
+                className="form-control form-control-sm"
+                style={{ width: 80 }}
+                value={Number.isFinite(northOffset) ? northOffset : 0}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setNorthOffset(Number.isFinite(val) ? Math.max(-360, Math.min(360, val)) : 0);
+                }}
+                title="Degrees between map up and true north"
+              />
+              <span className="text-muted">deg</span>
             </div>
           </div>
         </div>
