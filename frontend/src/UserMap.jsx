@@ -60,6 +60,7 @@ export default function UserMap() {
   const calibrationRef = useRef({ baseline: 0, samples: 0, done: false });
   const stepStateRef = useRef({ lastStepTs: 0, active: false });
   const STEP_DISTANCE = 0.0014; // ~2 ft per step assuming 1.0 normalized ≈ 1,400 ft
+  const STEP_REFRACTORY_MS = 300; // ignore spikes for 0.3s after a step
 
   // Load published floors from manifest (preferred) or API with localStorage fallback
   useEffect(() => {
@@ -322,7 +323,10 @@ export default function UserMap() {
     const applyStep = () => {
       const pos = userPosRef.current;
       if (!pos) return;
-      const heading = normalizeHeading(headingRef.current || 0);
+      let heading = normalizeHeading(headingRef.current || 0);
+      heading = Math.round(heading / 45) * 45;
+      heading %= 360;
+      if (heading < 0) heading += 360;
       const rad = (heading * Math.PI) / 180;
       const dx = Math.sin(rad) * STEP_DISTANCE;
       const dy = -Math.cos(rad) * STEP_DISTANCE;
@@ -367,13 +371,12 @@ export default function UserMap() {
       const delta = magnitude - calibrator.baseline;
       const stepState = stepStateRef.current;
       const now = event.timeStamp ? event.timeStamp : performance.now();
-      const activationThreshold = 0.35;
-      const releaseThreshold = 0.15;
-      const minStepMs = 250;
+      const activationThreshold = 0.6;
+      const releaseThreshold = 0.25;
       if (
         !stepState.active &&
         delta > activationThreshold &&
-        now - stepState.lastStepTs > minStepMs
+        now - stepState.lastStepTs > STEP_REFRACTORY_MS
       ) {
         stepState.active = true;
         stepState.lastStepTs = now;
