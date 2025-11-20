@@ -28,7 +28,9 @@ function markerClass(kind) {
 
 export default function UserMap() {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-  const MANIFEST_URL = process.env.REACT_APP_MANIFEST_URL || "";
+  const DEFAULT_MANIFEST =
+    "https://wayfinder-floors.s3.us-east-2.amazonaws.com/floors/manifest.json";
+  const MANIFEST_URL = process.env.REACT_APP_MANIFEST_URL || DEFAULT_MANIFEST;
   const [floors, setFloors] = useState([]); // [{id,name,url,points,walkable}]
   const [selUrl, setSelUrl] = useState('');
   const [userPos, setUserPos] = useState(null); // {x,y}
@@ -303,14 +305,15 @@ export default function UserMap() {
       setSensorMsg("Place yourself on the map first.");
       return;
     }
-    const northOffset = typeof floor?.northOffset === 'number' && Number.isFinite(floor.northOffset)
-      ? floor.northOffset
-      : 0;
+    const northOffset =
+      typeof floor?.northOffset === 'number' && Number.isFinite(floor.northOffset)
+        ? floor.northOffset
+        : 0;
 
     const normalizeHeading = (value) => {
       let heading = value;
       if (Number.isNaN(heading)) heading = 0;
-      heading = heading - northOffset;
+      heading -= northOffset;
       heading %= 360;
       if (heading < 0) heading += 360;
       return heading;
@@ -367,7 +370,11 @@ export default function UserMap() {
       const activationThreshold = 0.35;
       const releaseThreshold = 0.15;
       const minStepMs = 250;
-      if (!stepState.active && delta > activationThreshold && now - stepState.lastStepTs > minStepMs) {
+      if (
+        !stepState.active &&
+        delta > activationThreshold &&
+        now - stepState.lastStepTs > minStepMs
+      ) {
         stepState.active = true;
         stepState.lastStepTs = now;
         applyStep();
@@ -376,6 +383,11 @@ export default function UserMap() {
       }
     };
 
+    calibrationRef.current = { baseline: 0, samples: 0, done: false };
+    stepStateRef.current = {
+      lastStepTs: performance.now ? performance.now() : Date.now(),
+      active: false,
+    };
     lastMotionTsRef.current = null;
     window.addEventListener('deviceorientationabsolute', updateHeading);
     window.addEventListener('deviceorientation', updateHeading);

@@ -72,4 +72,32 @@ router.post("/floors", upload.single("image"), async (req, res) => {
   }
 });
 
+router.put("/floors/manifest", async (req, res) => {
+  if (!s3Client) {
+    return res
+      .status(500)
+      .json({ error: "S3 is not configured on the server." });
+  }
+  try {
+    const manifestKey = "floors/manifest.json";
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: S3_BUCKET,
+        Key: manifestKey,
+        Body: Buffer.from(JSON.stringify(req.body || {})),
+        ContentType: "application/json",
+      })
+    );
+    res.json({
+      key: manifestKey,
+      url: resolvePublicUrl(manifestKey),
+    });
+  } catch (err) {
+    console.error("Failed to upload floor manifest:", err);
+    res
+      .status(500)
+      .json({ error: "Failed to upload manifest to storage." });
+  }
+});
+
 module.exports = router;

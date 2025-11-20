@@ -55,7 +55,9 @@ export default function LandingPage({ user }) {
   const fetchPublishedFloors = React.useCallback(async () => {
     setLoadingPublished(true);
     try {
-      const res = await fetch(`${API_URL}/floors`);
+      const manifestUrl = process.env.REACT_APP_MANIFEST_URL;
+      if (!manifestUrl) throw new Error("Missing manifest URL");
+      const res = await fetch(manifestUrl, { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch floors");
       const data = await res.json();
       setPublishedFloors(Array.isArray(data?.floors) ? data.floors : []);
@@ -66,7 +68,7 @@ export default function LandingPage({ user }) {
     } finally {
       setLoadingPublished(false);
     }
-  }, [API_URL]);
+  }, []);
 
   useEffect(() => {
     fetchPublishedFloors();
@@ -144,6 +146,7 @@ export default function LandingPage({ user }) {
     alert("Public map URL saved for homepage preview");
   };
 
+<<<<<<< HEAD
   const deletePublishedFloor = async (id) => {
     if (!window.confirm("Remove this published floor?")) return;
     try {
@@ -153,7 +156,7 @@ export default function LandingPage({ user }) {
       if (Array.isArray(data?.floors)) {
         setPublishedFloors(data.floors);
       } else {
-        setPublishedFloors((prev) => prev.filter((f) => f.id !== id));
+        setPublishedFloors((prev) => prev.filter((f) => `${f.id}` !== `${id}`));
       }
       setPublishMsg("Floor removed.");
     } catch (err) {
@@ -164,6 +167,8 @@ export default function LandingPage({ user }) {
     }
   };
 
+=======
+>>>>>>> e4a83e600d4aab126edd9c82258557ada71e7f44
   const uploadFloorImage = async (img) => {
     if (img.remoteUrl) return img.remoteUrl;
     if (!img.file) throw new Error("Missing original image file. Re-upload the floor.");
@@ -253,14 +258,14 @@ export default function LandingPage({ user }) {
         });
       }
       localStorage.setItem("wf_public_floors", JSON.stringify({ floors }));
-      const res = await fetch(`${API_URL}/floors`, {
+      const res = await fetch(`${API_URL}/storage/floors/manifest`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ floors }),
       });
-      if (!res.ok) throw new Error("Server rejected floors");
+      if (!res.ok) throw new Error("Server rejected floors manifest");
       const data = await res.json();
-      setPublishedFloors(Array.isArray(data?.floors) ? data.floors : []);
+      setPublishedFloors(floors);
       setPublishMsg(`Published ${floors.length} floor(s).`);
       alert(`Published ${floors.length} floor(s) to public viewer`);
     } catch (e) {
@@ -371,16 +376,16 @@ export default function LandingPage({ user }) {
                 <ul className="list mt-3">
                   {publishedFloors.map((floor) => (
                     <li
-                      key={floor.id}
+                      key={floor.id || floor.name}
                       className="d-flex justify-content-between align-items-center"
                     >
                       <span className="d-flex flex-column">
                         <strong>{floor.name}</strong>
                         <small className="text-muted">
-                          URL: {floor.url.slice(0, 40)}...
+                          URL: {floor.url ? floor.url.slice(0, 40) : ""}
                         </small>
                         <small className="text-muted">
-                          North offset: {Number.isFinite(Number(floor.northOffset)) ? Number(floor.northOffset) : 0}°
+                          North offset: {Number.isFinite(Number(floor.northOffset)) ? Number(floor.northOffset) : 0}&deg;
                         </small>
                       </span>
                       <button
