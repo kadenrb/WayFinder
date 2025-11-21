@@ -65,6 +65,7 @@ export default function UserMap() {
 
   const [sensorTracking, setSensorTracking] = useState(false);
   const [sensorMsg, setSensorMsg] = useState("");
+  const [needsHeadingCal, setNeedsHeadingCal] = useState(false);
 
   const gridRef = useRef(null); // walkable grid cache
   const spacerRef = useRef(null);
@@ -505,6 +506,7 @@ export default function UserMap() {
       };
       setSensorTracking(true);
       setSensorMsg("Calibrating sensors. Hold still...");
+      setNeedsHeadingCal(true);
     } catch (err) {
       setSensorMsg((err && err.message) || "Sensor permission denied.");
       setSensorTracking(false);
@@ -530,6 +532,24 @@ export default function UserMap() {
     headingReadyRef.current = false;
     pendingHeadingRef.current = null;
     rotationStateRef.current = { active: false, lastActiveTs: 0 };
+    setNeedsHeadingCal(false);
+  };
+
+  const lockHeading = () => {
+    if (!sensorTracking) return;
+    const candidate =
+      typeof pendingHeadingRef.current === "number"
+        ? pendingHeadingRef.current
+        : headingReadyRef.current
+        ? headingRef.current
+        : null;
+    if (candidate == null) {
+      setSensorMsg("Still waiting for heading data. Move phone in a figure eight, then try again.");
+      return;
+    }
+    commitHeading(candidate);
+    setNeedsHeadingCal(false);
+    setSensorMsg("Heading locked. Start walking.");
   };
 
   // -------------------------------------------------------------------
@@ -583,6 +603,10 @@ export default function UserMap() {
     const applyStep = () => {
       const pos = userPosRef.current;
       if (!pos) return;
+      if (needsHeadingCal || !headingReadyRef.current) {
+        setSensorMsg("Face map north and tap 'Set heading' first.");
+        return;
+      }
 
       const result = updateDisplayedHeading();
       const heading =
@@ -710,7 +734,11 @@ export default function UserMap() {
         if (calibrator.samples >= 40) {
           calibrator.baseline /= calibrator.samples;
           calibrator.done = true;
-          setSensorMsg("Tracking phone motion...");
+          setSensorMsg(
+            needsHeadingCal
+              ? "Motion calibrated. Face map north and tap 'Set heading'."
+              : "Tracking phone motion..."
+          );
         }
         return;
       }
@@ -779,7 +807,7 @@ export default function UserMap() {
         }
       }
     };
-  }, [sensorTracking, selUrl, snapToWalkable, floor]);
+  }, [sensorTracking, selUrl, snapToWalkable, floor, needsHeadingCal]);
 
   // -------------------------------------------------------------------
   // Routing helpers: walkable mask, BFS, warp plan, and route building
@@ -1257,6 +1285,15 @@ export default function UserMap() {
             >
               {sensorTracking ? "Stop tracking" : "Use phone sensors"}
             </button>
+            {sensorTracking && needsHeadingCal && (
+              <button
+                className="btn btn-sm btn-outline-info"
+                onClick={lockHeading}
+                title="Face the map's north direction, then click"
+              >
+                Set heading
+              </button>
+            )}
             <input
               className="form-control form-control-sm"
               placeholder="Search room (e.g., B500)"
