@@ -1412,6 +1412,7 @@ export default function UserMap() {
                 <img
                   ref={imgRef}
                   src={floor.url}
+                  crossOrigin="anonymous"
                   alt={floor.name || "floor"}
                   onLoad={onImgLoad}
                   style={{
