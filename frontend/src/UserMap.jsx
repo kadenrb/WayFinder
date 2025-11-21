@@ -34,6 +34,10 @@ export default function UserMap() {
   const [placing, setPlacing] = useState(false);
   const [dest, setDest] = useState(null); // { url, id }
   const [routePts, setRoutePts] = useState([]);
+  const routePtsRef = useRef([]);
+  useEffect(() => {
+    routePtsRef.current = Array.isArray(routePts) ? routePts : [];
+  }, [routePts]);
   const [displayHeading, setDisplayHeading] = useState(0);
   useEffect(() => {
     routePtsRef.current = Array.isArray(routePts) ? routePts : [];
