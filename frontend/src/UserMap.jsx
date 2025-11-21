@@ -825,17 +825,6 @@ export default function UserMap() {
       }
     };
 
-    calibrationRef.current = {
-      baseline: 0,
-      samples: 0,
-      done: false,
-    };
-    stepStateRef.current = {
-      lastStepTs: performance.now ? performance.now() : Date.now(),
-      active: false,
-    };
-    lastMotionTsRef.current = null;
-
     let orientationBound = false;
     if (!usingMagnetometer) {
       window.addEventListener("deviceorientationabsolute", updateHeading);
@@ -851,15 +840,6 @@ export default function UserMap() {
       }
       window.removeEventListener("devicemotion", handleMotion);
       lastMotionTsRef.current = null;
-      calibrationRef.current = {
-        baseline: 0,
-        samples: 0,
-        done: false,
-      };
-      stepStateRef.current = {
-        lastStepTs: 0,
-        active: false,
-      };
       headingReadyRef.current = false;
       pendingHeadingRef.current = null;
       rotationStateRef.current = { active: false, lastActiveTs: 0 };
