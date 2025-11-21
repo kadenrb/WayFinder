@@ -66,6 +66,7 @@ export default function UserMap() {
   const [sensorTracking, setSensorTracking] = useState(false);
   const [sensorMsg, setSensorMsg] = useState("");
   const [needsHeadingCal, setNeedsHeadingCal] = useState(false);
+  const [headingSettling, setHeadingSettling] = useState(false);
 
   const gridRef = useRef(null); // walkable grid cache
   const spacerRef = useRef(null);
@@ -77,6 +78,13 @@ export default function UserMap() {
   const headingRef = useRef(0);
   const headingReadyRef = useRef(false);
   const pendingHeadingRef = useRef(null);
+  const headingOffsetRef = useRef(0);
+  const headingCalAccumRef = useRef({
+    sin: 0,
+    cos: 0,
+    samples: 0,
+    timer: null,
+  });
   const northOffsetRef = useRef(0);
   const [displayHeading, setDisplayHeading] = useState(0);
   const lastMotionTsRef = useRef(null);
@@ -126,6 +134,17 @@ export default function UserMap() {
     headingReadyRef.current = true;
     pendingHeadingRef.current = null;
     updateDisplayedHeading();
+  };
+
+  const resetHeadingCalAccum = () => {
+    const acc = headingCalAccumRef.current;
+    if (acc.timer) {
+      clearTimeout(acc.timer);
+    }
+    acc.sin = 0;
+    acc.cos = 0;
+    acc.samples = 0;
+    acc.timer = null;
   };
 
   const getNormalizedHeading = () => {
@@ -504,9 +523,16 @@ export default function UserMap() {
         lastStepTs: performance.now ? performance.now() : Date.now(),
         active: false,
       };
+      headingOffsetRef.current = 0;
+      headingRef.current = 0;
+      headingReadyRef.current = true;
+      pendingHeadingRef.current = null;
+      setDisplayHeading(0);
+      setNeedsHeadingCal(true);
+      setHeadingSettling(false);
+      resetHeadingCalAccum();
       setSensorTracking(true);
       setSensorMsg("Calibrating sensors. Hold still...");
-      setNeedsHeadingCal(true);
     } catch (err) {
       setSensorMsg((err && err.message) || "Sensor permission denied.");
       setSensorTracking(false);
@@ -533,23 +559,35 @@ export default function UserMap() {
     pendingHeadingRef.current = null;
     rotationStateRef.current = { active: false, lastActiveTs: 0 };
     setNeedsHeadingCal(false);
+    setHeadingSettling(false);
+    headingOffsetRef.current = 0;
+    resetHeadingCalAccum();
   };
 
   const lockHeading = () => {
     if (!sensorTracking) return;
-    const candidate =
-      typeof pendingHeadingRef.current === "number"
-        ? pendingHeadingRef.current
-        : headingReadyRef.current
-        ? headingRef.current
-        : null;
-    if (candidate == null) {
-      setSensorMsg("Still waiting for heading data. Move phone in a figure eight, then try again.");
-      return;
-    }
-    commitHeading(candidate);
+    if (headingSettling) return;
     setNeedsHeadingCal(false);
-    setSensorMsg("Heading locked. Start walking.");
+    setHeadingSettling(true);
+    resetHeadingCalAccum();
+    setSensorMsg("Hold phone facing map north for 3 seconds...");
+    const acc = headingCalAccumRef.current;
+    acc.timer = setTimeout(() => {
+      const samples = acc.samples || 0;
+      const avgRad =
+        samples > 0
+          ? Math.atan2(acc.sin / samples, acc.cos / samples)
+          : 0;
+      const avgDeg = normalizeAngle((avgRad * 180) / Math.PI);
+      headingOffsetRef.current = avgDeg;
+      commitHeading(0);
+      setHeadingSettling(false);
+      setSensorMsg("Heading locked. Start walking.");
+      acc.timer = null;
+      acc.sin = 0;
+      acc.cos = 0;
+      acc.samples = 0;
+    }, 3000);
   };
 
   // -------------------------------------------------------------------
@@ -603,8 +641,12 @@ export default function UserMap() {
     const applyStep = () => {
       const pos = userPosRef.current;
       if (!pos) return;
-      if (needsHeadingCal || !headingReadyRef.current) {
-        setSensorMsg("Face map north and tap 'Set heading' first.");
+      if (needsHeadingCal || headingSettling || !headingReadyRef.current) {
+        setSensorMsg(
+          needsHeadingCal
+            ? "Face map north and tap 'Set heading' first."
+            : "Hold steady while heading locks in..."
+        );
         return;
       }
 
@@ -652,9 +694,20 @@ export default function UserMap() {
     const usingMagnetometer = !!magnetometer;
 
     const pushHeadingReading = (deg) => {
-      pendingHeadingRef.current = deg;
-      if (!rotationStateRef.current.active || !headingReadyRef.current) {
-        commitHeading(deg);
+      const raw = normalizeAngle(deg);
+      if (needsHeadingCal) return;
+      if (headingSettling) {
+        const acc = headingCalAccumRef.current;
+        const rad = (raw * Math.PI) / 180;
+        acc.sin += Math.sin(rad);
+        acc.cos += Math.cos(rad);
+        acc.samples += 1;
+        return;
+      }
+      const adjusted = normalizeAngle(raw - headingOffsetRef.current);
+      pendingHeadingRef.current = adjusted;
+      if (!headingReadyRef.current) {
+        commitHeading(adjusted);
       }
     };
 
@@ -799,6 +852,8 @@ export default function UserMap() {
       headingReadyRef.current = false;
       pendingHeadingRef.current = null;
       rotationStateRef.current = { active: false, lastActiveTs: 0 };
+      setHeadingSettling(false);
+      resetHeadingCalAccum();
       if (magnetometer && typeof magnetometer.stop === "function") {
         try {
           magnetometer.stop();
@@ -807,7 +862,7 @@ export default function UserMap() {
         }
       }
     };
-  }, [sensorTracking, selUrl, snapToWalkable, floor, needsHeadingCal]);
+  }, [sensorTracking, selUrl, snapToWalkable, floor, needsHeadingCal, headingSettling]);
 
   // -------------------------------------------------------------------
   // Routing helpers: walkable mask, BFS, warp plan, and route building
