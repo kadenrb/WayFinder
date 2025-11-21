@@ -91,12 +91,14 @@ export default function UserMap() {
   const calibrationRef = useRef({ baseline: 0, samples: 0, done: false });
   const stepStateRef = useRef({ lastStepTs: 0, active: false });
   const rotationStateRef = useRef({ active: false, lastActiveTs: 0 });
+  const rotationAccumRef = useRef(0);
 
   const STEP_DISTANCE = 0.0014; // ~2 ft per step assuming 1.0 normalized ~= 1,400 ft
   const STEP_REFRACTORY_MS = 300; // ignore spikes for 0.3s after a step
   const TURN_START_THRESHOLD = 15; // deg/sec to consider a turn beginning
   const TURN_STOP_THRESHOLD = 5; // deg/sec to consider a turn done
   const TURN_RELEASE_MS = 150;
+  const MIN_TURN_DELTA = 12; // need at least ~12 degrees total to accept a heading change
 
   // -------------------------------------------------------------------
   // Shared heading helpers (used by route bias + phone sensor movement)
@@ -523,15 +525,16 @@ export default function UserMap() {
         lastStepTs: performance.now ? performance.now() : Date.now(),
         active: false,
       };
-      headingOffsetRef.current = 0;
-      headingRef.current = 0;
-      headingReadyRef.current = true;
-      pendingHeadingRef.current = null;
-      setDisplayHeading(0);
-      setNeedsHeadingCal(true);
-      setHeadingSettling(false);
-      resetHeadingCalAccum();
-      setSensorTracking(true);
+    headingOffsetRef.current = 0;
+    headingRef.current = 0;
+    headingReadyRef.current = true;
+    pendingHeadingRef.current = null;
+    setDisplayHeading(0);
+    setNeedsHeadingCal(true);
+    setHeadingSettling(false);
+    resetHeadingCalAccum();
+    rotationAccumRef.current = 0;
+    setSensorTracking(true);
       setSensorMsg("Calibrating sensors. Hold still...");
     } catch (err) {
       setSensorMsg((err && err.message) || "Sensor permission denied.");
@@ -541,6 +544,7 @@ export default function UserMap() {
     headingReadyRef.current = false;
     pendingHeadingRef.current = null;
     rotationStateRef.current = { active: false, lastActiveTs: 0 };
+    rotationAccumRef.current = 0;
   };
 
   const stopSensorTracking = () => {
@@ -562,6 +566,7 @@ export default function UserMap() {
     setHeadingSettling(false);
     headingOffsetRef.current = 0;
     resetHeadingCalAccum();
+    rotationAccumRef.current = 0;
   };
 
   const lockHeading = () => {
@@ -749,18 +754,29 @@ export default function UserMap() {
           if (!turnState.active) {
             turnState.active = true;
             pendingHeadingRef.current = null;
+            rotationAccumRef.current = 0;
           }
           turnState.lastActiveTs = now;
+          if (dt > 0) {
+            rotationAccumRef.current += yawAbs * dt;
+          }
         } else if (turnState.active) {
           if (yawAbs > TURN_STOP_THRESHOLD) {
             turnState.lastActiveTs = now;
+            if (dt > 0) {
+              rotationAccumRef.current += yawAbs * dt;
+            }
           } else if (now - turnState.lastActiveTs > TURN_RELEASE_MS) {
             turnState.active = false;
             const pending = pendingHeadingRef.current;
-            if (typeof pending === "number") {
+            if (
+              typeof pending === "number" &&
+              rotationAccumRef.current >= MIN_TURN_DELTA
+            ) {
               commitHeading(pending);
             }
             pendingHeadingRef.current = null;
+            rotationAccumRef.current = 0;
           }
         }
 
@@ -770,10 +786,14 @@ export default function UserMap() {
       ) {
         turnState.active = false;
         const pending = pendingHeadingRef.current;
-        if (typeof pending === "number") {
+        if (
+          typeof pending === "number" &&
+          rotationAccumRef.current >= MIN_TURN_DELTA
+        ) {
           commitHeading(pending);
         }
         pendingHeadingRef.current = null;
+        rotationAccumRef.current = 0;
       }
 
       const acc =
@@ -858,6 +878,7 @@ export default function UserMap() {
       headingReadyRef.current = false;
       pendingHeadingRef.current = null;
       rotationStateRef.current = { active: false, lastActiveTs: 0 };
+      rotationAccumRef.current = 0;
       pendingHeadingRef.current = null;
       setHeadingSettling(false);
       resetHeadingCalAccum();
