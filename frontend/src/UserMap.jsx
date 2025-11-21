@@ -704,6 +704,9 @@ export default function UserMap() {
         acc.samples += 1;
         return;
       }
+      if (!rotationStateRef.current.active && headingReadyRef.current) {
+        return; // ignore idle drift
+      }
       const adjusted = normalizeAngle(raw - headingOffsetRef.current);
       pendingHeadingRef.current = adjusted;
       if (!headingReadyRef.current) {
@@ -745,6 +748,7 @@ export default function UserMap() {
         if (yawAbs >= TURN_START_THRESHOLD) {
           if (!turnState.active) {
             turnState.active = true;
+            pendingHeadingRef.current = null;
           }
           turnState.lastActiveTs = now;
         } else if (turnState.active) {
@@ -756,6 +760,7 @@ export default function UserMap() {
             if (typeof pending === "number") {
               commitHeading(pending);
             }
+            pendingHeadingRef.current = null;
           }
         }
 
@@ -768,6 +773,7 @@ export default function UserMap() {
         if (typeof pending === "number") {
           commitHeading(pending);
         }
+        pendingHeadingRef.current = null;
       }
 
       const acc =
@@ -852,6 +858,7 @@ export default function UserMap() {
       headingReadyRef.current = false;
       pendingHeadingRef.current = null;
       rotationStateRef.current = { active: false, lastActiveTs: 0 };
+      pendingHeadingRef.current = null;
       setHeadingSettling(false);
       resetHeadingCalAccum();
       if (magnetometer && typeof magnetometer.stop === "function") {
