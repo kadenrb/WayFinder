@@ -98,7 +98,6 @@ export default function UserMap() {
   const TURN_START_THRESHOLD = 15; // deg/sec to consider a turn beginning
   const TURN_STOP_THRESHOLD = 5; // deg/sec to consider a turn done
   const TURN_RELEASE_MS = 150;
-  const MIN_TURN_DELTA = 12; // need at least ~12 degrees total to accept a heading change
 
   // -------------------------------------------------------------------
   // Shared heading helpers (used by route bias + phone sensor movement)
@@ -130,6 +129,12 @@ export default function UserMap() {
 
   const blendTowards = (current, target, strength = 0.35) =>
     normalizeAngle(current + shortestAngleDiff(target, current) * strength);
+
+  const applyHeadingDelta = (delta) => {
+    headingRef.current = normalizeAngle(
+      (headingRef.current || 0) + (delta || 0)
+    );
+  };
 
   const commitHeading = (value) => {
     headingRef.current = normalizeAngle(value);
@@ -707,16 +712,8 @@ export default function UserMap() {
         acc.sin += Math.sin(rad);
         acc.cos += Math.cos(rad);
         acc.samples += 1;
-        return;
       }
-      if (!rotationStateRef.current.active && headingReadyRef.current) {
-        return; // ignore idle drift
-      }
-      const adjusted = normalizeAngle(raw - headingOffsetRef.current);
-      pendingHeadingRef.current = adjusted;
-      if (!headingReadyRef.current) {
-        commitHeading(adjusted);
-      }
+      // After calibration we ignore compass updates unless we later add drift correction
     };
 
     const updateHeading = (event) => {
@@ -768,31 +765,19 @@ export default function UserMap() {
             }
           } else if (now - turnState.lastActiveTs > TURN_RELEASE_MS) {
             turnState.active = false;
-            const pending = pendingHeadingRef.current;
-            if (
-              typeof pending === "number" &&
-              rotationAccumRef.current >= MIN_TURN_DELTA
-            ) {
-              commitHeading(pending);
-            }
-            pendingHeadingRef.current = null;
             rotationAccumRef.current = 0;
           }
         }
 
+        if (turnState.active && dt > 0 && headingReadyRef.current) {
+          applyHeadingDelta(-yaw * dt);
+          updateDisplayedHeading();
+        }
       } else if (
         turnState.active &&
         now - turnState.lastActiveTs > TURN_RELEASE_MS
       ) {
         turnState.active = false;
-        const pending = pendingHeadingRef.current;
-        if (
-          typeof pending === "number" &&
-          rotationAccumRef.current >= MIN_TURN_DELTA
-        ) {
-          commitHeading(pending);
-        }
-        pendingHeadingRef.current = null;
         rotationAccumRef.current = 0;
       }
 
