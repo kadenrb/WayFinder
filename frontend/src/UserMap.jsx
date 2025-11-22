@@ -104,6 +104,22 @@ export default function UserMap() {
   const quantizeHeading = (value) =>
     normalizeAngle(Math.round(value / 45) * 45);
 
+  const loadHeadingOffset = () => {
+    try {
+      const raw = localStorage.getItem('wf_heading_offset');
+      const val = raw ? parseFloat(raw) : 0;
+      if (Number.isFinite(val)) {
+        headingOffsetRef.current = normalizeAngle(val);
+      }
+    } catch {}
+  };
+  const saveHeadingOffset = (val) => {
+    headingOffsetRef.current = normalizeAngle(val || 0);
+    try { localStorage.setItem('wf_heading_offset', headingOffsetRef.current.toString()); } catch {}
+  };
+  useEffect(() => { loadHeadingOffset(); }, []);
+  const applyHeadingOffset = (val) => normalizeAngle((val || 0) + (headingOffsetRef.current || 0));
+
   const headingUpdateRef = useRef({ ts: 0, value: 0 });
   const limitHeadingRate = (prev, next) => {
     const now = (performance && performance.now) ? performance.now() : Date.now();
@@ -118,6 +134,41 @@ export default function UserMap() {
     const limited = normalizeAngle(value + delta);
     headingUpdateRef.current = { ts: now, value: limited };
     return limited;
+  };
+
+  const angularDiff = (a, b) => {
+    let d = normalizeAngle(a - b);
+    if (d > 180) d -= 360;
+    return Math.abs(d);
+  };
+
+  const geoStableHeading = () => {
+    const buf = geoBufferRef.current || [];
+    const now = Date.now();
+    const recent = buf.filter(
+      (e) => now - e.ts < 5000 && e.speed && e.speed > 0.5 && e.acc && e.acc < 50
+    );
+    if (recent.length < 3) return null;
+    const rad = (deg) => (deg * Math.PI) / 180;
+    let sx = 0,
+      sy = 0;
+    recent.forEach((r) => {
+      sx += Math.cos(rad(r.heading));
+      sy += Math.sin(rad(r.heading));
+    });
+    const mean = normalizeAngle((Math.atan2(sy, sx) * 180) / Math.PI);
+    const maxDiff = Math.max(...recent.map((r) => angularDiff(r.heading, mean)));
+    if (maxDiff > 20) return null;
+    return mean;
+  };
+
+  const gyroCalm = () => {
+    const now = Date.now();
+    const win = (yawWindowRef.current || []).filter((e) => now - e.ts < 2000);
+    yawWindowRef.current = win;
+    if (!win.length) return true;
+    const maxYaw = Math.max(...win.map((e) => Math.abs(e.yaw || 0)));
+    return maxYaw < 60;
   };
 
   const normalizeAccel = (acc = {}) => {
@@ -140,7 +191,7 @@ export default function UserMap() {
 
   const updateDisplayedHeading = () => {
     const heading = normalizeAngle(
-      (headingRef.current || 0) - getScreenOrientationAngle()
+      applyHeadingOffset(headingRef.current || 0) - getScreenOrientationAngle()
     );
     const snapped = quantizeHeading(heading);
     setDisplayHeading(snapped);
@@ -160,6 +211,11 @@ export default function UserMap() {
   const userPosRef = useRef(null);
   const lastMotionTsRef = useRef(null);
   const motionIdleRef = useRef(0);
+  const headingOffsetRef = useRef(0);
+  const geoWatchIdRef = useRef(null);
+  const geoHeadingRef = useRef(null);
+  const geoBufferRef = useRef([]);
+  const yawWindowRef = useRef([]);
   const recordDataRef = useRef([]);
   const recordStopTimerRef = useRef(null);
   const sensorBaselineRef = useRef({
@@ -374,6 +430,25 @@ export default function UserMap() {
       initSensorBaseline();
       headingRef.current = compassHeadingRef.current || headingRef.current || 0;
       updateDisplayedHeading();
+      // start geolocation heading watcher for hints
+      if (navigator.geolocation && !geoWatchIdRef.current) {
+        geoWatchIdRef.current = navigator.geolocation.watchPosition(
+          (pos) => {
+            const h = pos?.coords?.heading;
+            const spd = pos?.coords?.speed;
+            const acc = pos?.coords?.accuracy;
+            if (typeof h === 'number' && Number.isFinite(h) && h >= 0 && h < 360) {
+              const entry = { heading: h, speed: spd, acc, ts: Date.now() };
+              geoHeadingRef.current = entry;
+              const buf = geoBufferRef.current || [];
+              buf.push(entry);
+              geoBufferRef.current = buf.filter((e) => entry.ts - e.ts < 8000).slice(-20);
+            }
+          },
+          () => {},
+          { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 }
+        );
+      }
       setSensorTracking(true);
       setSensorMsg("Calibrating sensors. Hold still...");
       patchDebug({
@@ -392,6 +467,11 @@ export default function UserMap() {
   const stopSensorTracking = () => {
     setSensorTracking(false);
     setSensorMsg("Tracking paused.");
+    if (geoWatchIdRef.current && navigator.geolocation) {
+      navigator.geolocation.clearWatch(geoWatchIdRef.current);
+      geoWatchIdRef.current = null;
+      geoHeadingRef.current = null;
+    }
     calibrationRef.current = { baseline: 0, samples: 0, done: false };
     stepStateRef.current = { lastStepTs: 0, active: false };
     gyroInitializedRef.current = false;
@@ -496,10 +576,17 @@ export default function UserMap() {
       const baseAlpha = motionActive ? 0.18 : 0.08;
       if (typeof event.webkitCompassHeading === 'number') {
         const limited = limitHeadingRate(headingRef.current, event.webkitCompassHeading);
-        headingRef.current = smoothHeading(headingRef.current, limited, baseAlpha);
+        const withOffset = applyHeadingOffset(limited);
+        headingRef.current = smoothHeading(headingRef.current, withOffset, baseAlpha);
       } else if (typeof event.alpha === 'number') {
         const limited = limitHeadingRate(headingRef.current, 360 - event.alpha);
-        headingRef.current = smoothHeading(headingRef.current, limited, baseAlpha);
+        const withOffset = applyHeadingOffset(limited);
+        headingRef.current = smoothHeading(headingRef.current, withOffset, baseAlpha);
+      }
+      const stableGeo = geoStableHeading();
+      if (stableGeo != null && gyroCalm()) {
+        const limitedGeo = limitHeadingRate(headingRef.current, applyHeadingOffset(stableGeo));
+        headingRef.current = smoothHeading(headingRef.current, limitedGeo, motionActive ? 0.25 : 0.15);
       }
       const displayed = updateDisplayedHeading();
       patchDebug({
@@ -537,6 +624,7 @@ export default function UserMap() {
         rot.beta ??
         rot.gamma ??
         0;
+      yawWindowRef.current = [...(yawWindowRef.current || []), { ts: Date.now(), yaw }];
       if (!baseline.ready) {
         baseline.samples += 1;
         baseline.ax += ax;
@@ -573,7 +661,7 @@ export default function UserMap() {
         accelMagnitude: mag,
         yaw,
       });
-      const motionThreshold = 0.12;
+      const motionThreshold = 0.10;
       const stillYaw = Math.abs(yaw) < 2;
       if (netMag < motionThreshold || stillYaw) {
         motionIdleRef.current += dt;
@@ -585,7 +673,7 @@ export default function UserMap() {
       }
       motionIdleRef.current = 0;
       const heading = headingRef.current || 0;
-      const speed = Math.min(0.005, Math.max(0, netMag - motionThreshold) * 0.0002);
+      const speed = Math.min(0.006, Math.max(0, netMag - motionThreshold) * 0.00025);
       if (speed <= 0) return;
       const lastStep = stepStateRef.current.lastStepTs || 0;
       const nowMs = Date.now();
@@ -792,6 +880,20 @@ export default function UserMap() {
           >
             {debugVisible ? "Hide debug" : "Show debug"}
           </button>
+          <button
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => { saveHeadingOffset(0); setSensorMsg("Heading offset reset."); }}
+            title="Clear heading offset"
+          >
+            Reset heading
+          </button>
+          <button
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => { saveHeadingOffset(-(headingRef.current||0)); setSensorMsg("Heading calibrated to north."); updateDisplayedHeading(); }}
+            title="Face north and tap to calibrate"
+          >
+            Calibrate north
+          </button>
           <div className="d-flex align-items-center gap-1" style={{ minWidth: 190 }}>
             <span className="small text-muted">Rec (s)</span>
             <input
@@ -934,6 +1036,9 @@ export default function UserMap() {
           baselineSamples={debugData.baselineSamples}
           baselineReady={debugData.baselineReady}
           sensorMsg={debugData.sensorMsg}
+          headingOffset={headingOffsetRef.current || 0}
+          recording={recording}
+          recordMsg={recordMsg}
         />
       </div>
     </div>

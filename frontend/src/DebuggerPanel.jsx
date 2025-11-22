@@ -10,6 +10,7 @@ export default function DebuggerPanel({
   baselineSamples,
   baselineReady,
   sensorMsg,
+  headingOffset,
   recording,
   recordMsg,
 }) {
@@ -23,6 +24,7 @@ export default function DebuggerPanel({
     "Accel magnitude: total acceleration incl. gravity (g).",
     "Baseline samples: calibration count; ready when stable.",
     "Recording: live capture status/message.",
+    "Offset: manual or auto geolocation-based heading offset (deg).",
   ];
 
   const rows = [
@@ -42,6 +44,7 @@ export default function DebuggerPanel({
         : `${baselineSamples} (calibrating)`,
     ],
     ["Recording", recording ? (recordMsg || "Recording...") : (recordMsg || "Idle")],
+    ["Offset", headingOffset != null ? headingOffset.toFixed(1) + " deg" : "-"],
   ];
 
   return (
