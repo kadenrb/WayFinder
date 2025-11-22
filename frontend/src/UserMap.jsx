@@ -79,6 +79,37 @@ export default function UserMap() {
   useEffect(() => {
     patchDebug({ sensorMsg });
   }, [sensorMsg]);
+  const getScreenOrientationAngle = () => {
+    if (typeof window === "undefined") return 0;
+    const orientation = window.screen && window.screen.orientation;
+    if (orientation && typeof orientation.angle === "number") {
+      return orientation.angle;
+    }
+    if (typeof window.orientation === "number") {
+      return window.orientation;
+    }
+    return 0;
+  };
+
+  const normalizeAngle = (deg) => {
+    let heading = deg % 360;
+    if (heading < 0) heading += 360;
+    if (heading >= 360) heading -= 360;
+    return heading;
+  };
+
+  const quantizeHeading = (value) =>
+    normalizeAngle(Math.round(value / 45) * 45);
+
+  const updateDisplayedHeading = () => {
+    const heading = normalizeAngle(
+      (headingRef.current || 0) - getScreenOrientationAngle()
+    );
+    const snapped = quantizeHeading(heading);
+    setDisplayHeading(snapped);
+    patchDebug({ heading, displayHeading: snapped });
+    return heading;
+  };
   const gridRef = useRef(null); // cached walkable grid for current floor
   const scrollRef = useRef(null);
   const spacerRef = useRef(null);
@@ -761,3 +792,4 @@ export default function UserMap() {
     </div>
   );
 }
+
