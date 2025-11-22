@@ -928,7 +928,14 @@ export default function UserMap() {
                 onClick={(e)=>{ if(!placing) return; const raw = toNorm(e.clientX, e.clientY); const p = snapToWalkable(raw.x, raw.y); setUserPos(p); saveUserPos(selUrl, p); setPlacing(false); }}
               >
                 <style>{`@keyframes routeDash { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }`}</style>
-                <img ref={imgRef} src={floor.url} alt={floor.name||'floor'} onLoad={onImgLoad} style={{ width: '100%', height: '100%', display:'block', userSelect:'none', pointerEvents:'none' }} />
+                <img
+                  ref={imgRef}
+                  src={floor.url}
+                  alt={floor.name||'floor'}
+                  crossOrigin="anonymous"
+                  onLoad={onImgLoad}
+                  style={{ width: '100%', height: '100%', display:'block', userSelect:'none', pointerEvents:'none' }}
+                />
 
                 {userPos && (()=>{ const pos = toPx(userPos.x, userPos.y); const size=22; const angle = displayHeading || 0; return (
                   <div
