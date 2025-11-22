@@ -15,6 +15,16 @@ export default function DebuggerPanel({
 }) {
   if (!visible) return null;
 
+  const help = [
+    "Heading: raw compass degrees (smoothed).",
+    "Display heading: snapped to 45° for the UI marker.",
+    "Compass: latest compass reading pre-snap.",
+    "Yaw: rotation rate deg/s (from gyro).",
+    "Accel magnitude: total acceleration incl. gravity (g).",
+    "Baseline samples: calibration count; ready when stable.",
+    "Recording: live capture status/message.",
+  ];
+
   const rows = [
     ["Sensor msg", sensorMsg || "-"],
     ["Heading", heading != null ? heading.toFixed(1) + " deg" : "-"],

@@ -534,15 +534,15 @@ export default function UserMap() {
         accelMagnitude: magnitude,
         yaw,
       });
-      const motionThreshold = 0.25;
-      const stillYaw = Math.abs(yaw) < 1;
+      const motionThreshold = 0.30;
+      const stillYaw = Math.abs(yaw) < 2;
       if (magnitude < motionThreshold || stillYaw) {
         motionIdleRef.current += dt;
         return;
       }
       motionIdleRef.current = 0;
       const heading = headingRef.current || 0;
-      const speed = Math.min(0.006, Math.max(0, magnitude - motionThreshold) * 0.00025);
+      const speed = Math.min(0.005, Math.max(0, magnitude - motionThreshold) * 0.0002);
       if (speed <= 0) return;
       const rad = (heading * Math.PI) / 180;
       const dx = Math.sin(rad) * speed;
