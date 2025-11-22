@@ -719,7 +719,7 @@ export default function UserMap() {
       <div className="card-body">
         <div className="d-flex align-items-center justify-content-between mb-2">
           <h5 className="card-title text-dark m-0">Public Map</h5>
-        <div className="d-flex align-items-center gap-2">
+        <div className="d-flex flex-wrap align-items-center gap-2">
           <select className="form-select form-select-sm" value={selUrl} onChange={(e)=> setSelUrl(e.target.value)}>
             {floors.map(f => <option key={f.url} value={f.url}>{f.name || 'floor'}</option>)}
           </select>
@@ -740,6 +740,26 @@ export default function UserMap() {
           >
             {debugVisible ? "Hide debug" : "Show debug"}
           </button>
+          <div className="d-flex align-items-center gap-1" style={{ minWidth: 190 }}>
+            <span className="small text-muted">Rec (s)</span>
+            <input
+              type="number"
+              min="1"
+              max="120"
+              className="form-control form-control-sm"
+              style={{ width: 70 }}
+              value={recordDuration}
+              onChange={(e)=> setRecordDuration(Number(e.target.value) || 10)}
+              title="Recording duration (seconds)"
+            />
+            <button
+              className={`btn btn-sm ${recording ? 'btn-danger' : 'btn-outline-danger'}`}
+              onClick={()=> recording ? stopRecording(true) : startRecording()}
+              title="Capture sensor samples and download JSON"
+            >
+              {recording ? "Stop & download" : "Record"}
+            </button>
+          </div>
           <input className="form-control form-control-sm" placeholder="Search room (e.g., B500)" value={searchText} onChange={(e)=> setSearchText(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') searchRoom(); }} style={{ maxWidth: 180 }} />
           <button className="btn btn-sm btn-outline-primary" onClick={searchRoom}>Search</button>
         </div>
