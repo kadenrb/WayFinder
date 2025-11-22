@@ -62,6 +62,9 @@ export default function UserMap() {
   const [sensorTracking, setSensorTracking] = useState(false);
   const [sensorMsg, setSensorMsg] = useState("");
   const [debugVisible, setDebugVisible] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordDuration, setRecordDuration] = useState(10);
+  const [recordMsg, setRecordMsg] = useState("");
   const [debugData, setDebugData] = useState({
     heading: 0,
     compassHeading: 0,
@@ -101,6 +104,15 @@ export default function UserMap() {
   const quantizeHeading = (value) =>
     normalizeAngle(Math.round(value / 45) * 45);
 
+  const smoothHeading = (prev, next, alpha = 0.2) => {
+    if (typeof prev !== 'number' || !Number.isFinite(prev)) return normalizeAngle(next || 0);
+    if (typeof next !== 'number' || !Number.isFinite(next)) return normalizeAngle(prev || 0);
+    let delta = normalizeAngle(next - prev);
+    if (delta > 180) delta -= 360;
+    const blended = prev + alpha * delta;
+    return normalizeAngle(blended);
+  };
+
   const updateDisplayedHeading = () => {
     const heading = normalizeAngle(
       (headingRef.current || 0) - getScreenOrientationAngle()
@@ -123,6 +135,8 @@ export default function UserMap() {
   const userPosRef = useRef(null);
   const lastMotionTsRef = useRef(null);
   const motionIdleRef = useRef(0);
+  const recordDataRef = useRef([]);
+  const recordStopTimerRef = useRef(null);
   const sensorBaselineRef = useRef({
     start: 0,
     samples: 0,
@@ -374,6 +388,50 @@ export default function UserMap() {
     });
   };
 
+  const stopRecording = (download = true) => {
+    if (recordStopTimerRef.current) {
+      clearTimeout(recordStopTimerRef.current);
+      recordStopTimerRef.current = null;
+    }
+    if (!recording) return;
+    setRecording(false);
+    const samples = recordDataRef.current || [];
+    if (download && samples.length) {
+      const blob = new Blob([JSON.stringify(samples, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wf-sensors-${Date.now()}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      setRecordMsg(`Downloaded ${samples.length} samples.`);
+    } else {
+      setRecordMsg(`Recording stopped (${samples.length} samples).`);
+    }
+  };
+
+  const startRecording = () => {
+    const secs = Math.max(1, Math.min(120, Number(recordDuration) || 10));
+    setRecordDuration(secs);
+    recordDataRef.current = [];
+    setRecordMsg(`Recording for ${secs}s...`);
+    setRecording(true);
+    if (recordStopTimerRef.current) clearTimeout(recordStopTimerRef.current);
+    recordStopTimerRef.current = setTimeout(() => stopRecording(true), secs * 1000);
+  };
+
+  const logSample = (sample) => {
+    if (!recording) return;
+    recordDataRef.current.push({
+      t: Date.now(),
+      url: selUrl,
+      userPos: userPosRef.current,
+      ...sample,
+    });
+  };
+
+  useEffect(() => () => stopRecording(false), []);
+
   // ---------------------------------------------------------------------------
   // DESKTOP SPOOFED MOVEMENT
   // Arrow keys move the marker for testing without a phone.
@@ -410,13 +468,21 @@ export default function UserMap() {
     }
     const updateHeading = (event) => {
       if (typeof event.webkitCompassHeading === 'number') {
-        headingRef.current = event.webkitCompassHeading;
+        headingRef.current = smoothHeading(headingRef.current, event.webkitCompassHeading);
       } else if (typeof event.alpha === 'number') {
-        headingRef.current = 360 - event.alpha;
+        headingRef.current = smoothHeading(headingRef.current, 360 - event.alpha);
       }
+      const displayed = updateDisplayedHeading();
       patchDebug({
         compassHeading: headingRef.current || 0,
+        heading: displayed || headingRef.current || 0,
+      });
+      logSample({
+        kind: 'orientation',
         heading: headingRef.current || 0,
+        displayHeading,
+        compass: headingRef.current || 0,
+        yaw: 0,
       });
     };
     const handleMotion = (event) => {
@@ -446,7 +512,7 @@ export default function UserMap() {
           accelMagnitude: Math.sqrt(ax * ax + ay * ay + az * az),
           yaw,
         });
-        if (baseline.samples >= 40 || elapsed >= 1.5) {
+        if (baseline.samples >= 60 || elapsed >= 1.5) {
           baseline.ax /= baseline.samples;
           baseline.ay /= baseline.samples;
           baseline.az /= baseline.samples;
@@ -468,14 +534,14 @@ export default function UserMap() {
         accelMagnitude: magnitude,
         yaw,
       });
-      const motionThreshold = 0.08;
+      const motionThreshold = 0.18;
       if (magnitude < motionThreshold) {
         motionIdleRef.current += dt;
         return;
       }
       motionIdleRef.current = 0;
       const heading = headingRef.current || 0;
-      const speed = Math.min(0.01, magnitude * 0.0006);
+      const speed = Math.min(0.008, Math.max(0, magnitude - motionThreshold) * 0.0004);
       if (speed <= 0) return;
       const rad = (heading * Math.PI) / 180;
       const dx = Math.sin(rad) * speed;
@@ -492,11 +558,20 @@ export default function UserMap() {
         stepDelta: speed,
         lastStepTs: Date.now(),
       });
+      logSample({
+        kind: 'motion',
+        heading,
+        yaw,
+        accelMagnitude: magnitude,
+        stepDelta: speed,
+        dt,
+        position: { x: pos.x, y: pos.y },
+      });
     };
     window.addEventListener('deviceorientationabsolute', updateHeading);
     window.addEventListener('deviceorientation', updateHeading);
     window.addEventListener('devicemotion', handleMotion);
-    setSensorMsg("Tracking phone motion…");
+    setSensorMsg("Tracking phone motion...");
     return () => {
       window.removeEventListener('deviceorientationabsolute', updateHeading);
       window.removeEventListener('deviceorientation', updateHeading);

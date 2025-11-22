@@ -10,6 +10,8 @@ export default function DebuggerPanel({
   baselineSamples,
   baselineReady,
   sensorMsg,
+  recording,
+  recordMsg,
 }) {
   if (!visible) return null;
 
@@ -29,6 +31,7 @@ export default function DebuggerPanel({
         ? `${baselineSamples} (ready)`
         : `${baselineSamples} (calibrating)`,
     ],
+    ["Recording", recording ? (recordMsg || "Recording...") : (recordMsg || "Idle")],
   ];
 
   return (
