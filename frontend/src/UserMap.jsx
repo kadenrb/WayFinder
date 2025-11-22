@@ -18,6 +18,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import DebuggerPanel from "./DebuggerPanel";
 
+// ---------------------------------------------------------------------------
+// STATE AND REFS
+// Everything that drives floors, routing, sensors, and debugging lives here.
+// ---------------------------------------------------------------------------
+
 function markerClass(kind) {
   switch (kind) {
     case 'door': return 'bg-secondary';
@@ -35,6 +40,10 @@ export default function UserMap() {
   const [dest, setDest] = useState(null); // { url, id }
   const [routePts, setRoutePts] = useState([]);
   const routePtsRef = useRef([]);
+  // ---------------------------------------------------------------------------
+  // SENSOR LOOP
+  // Listens for magnetometer/orientation/motion events and moves the marker.
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     routePtsRef.current = Array.isArray(routePts) ? routePts : [];
   }, [routePts]);
@@ -114,7 +123,10 @@ export default function UserMap() {
     process.env.REACT_APP_MANIFEST_URL ||
     "https://wayfinder-floors.s3.us-east-2.amazonaws.com/floors/manifest.json";
 
-  // Load published floors from S3 manifest
+  // ---------------------------------------------------------------------------
+  // FLOOR LOADING
+  // Pulls published floors from the manifest/API and stores them locally.
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     let aborted = false;
     const normalizeFloors = (arr = []) =>
@@ -157,7 +169,9 @@ export default function UserMap() {
     };
   }, [MANIFEST_URL]);
 
-  // Load per-floor user position
+  // ---------------------------------------------------------------------------
+  // USER POSITION PERSISTENCE
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     try {
       if (!selUrl) { setUserPos(null); return; }
@@ -186,6 +200,10 @@ export default function UserMap() {
         : 0;
   }, [floor]);
 
+  // ---------------------------------------------------------------------------
+  // COORDINATE / GRID HELPERS
+  // Translate between pixel and normalized space and snap to walkable cells.
+  // ---------------------------------------------------------------------------
   const toNorm = (clientX, clientY) => {
     const el = spacerRef.current;
     const rect = el?.getBoundingClientRect();
@@ -271,6 +289,7 @@ export default function UserMap() {
     }
   };
 
+  // Start the sensor loop: request permissions, reset calibration, seed heading
   const startSensorTracking = async () => {
     if (!userPos) { setSensorMsg("Place yourself on the map first."); return; }
     if (typeof window === 'undefined' || typeof DeviceMotionEvent === 'undefined') {
@@ -299,6 +318,7 @@ export default function UserMap() {
     }
   };
 
+  // Stop sensors and wipe calibration so future sessions start clean
   const stopSensorTracking = () => {
     setSensorTracking(false);
     setSensorMsg("Tracking paused.");
@@ -323,7 +343,10 @@ export default function UserMap() {
     });
   };
 
-  // Arrow key movement to spoof walking on desktop
+  // ---------------------------------------------------------------------------
+  // DESKTOP SPOOFED MOVEMENT
+  // Arrow keys move the marker for testing without a phone.
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     const onKey = (e) => {
       if (!userPos) return; // require an existing position
@@ -581,6 +604,10 @@ export default function UserMap() {
     })();
   }, [selUrl, plan, userPos, gapCells]);
 
+  // ---------------------------------------------------------------------------
+  // RENDER
+  // Everything below handles layout, map interactions, and debug UI.
+  // ---------------------------------------------------------------------------
   return (
     <div className="card shadow-sm">
       <div className="card-body">
@@ -623,8 +650,61 @@ export default function UserMap() {
                 <style>{`@keyframes routeDash { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }`}</style>
                 <img ref={imgRef} src={floor.url} alt={floor.name||'floor'} onLoad={onImgLoad} style={{ width: '100%', height: '100%', display:'block', userSelect:'none', pointerEvents:'none' }} />
 
-                {userPos && (()=>{ const pos = toPx(userPos.x, userPos.y); const size=18; return (
-                  <div key="user" className="position-absolute rounded-circle" style={{ left: pos.x-size/2, top: pos.y-size/2, width:size, height:size, background:'#ff3366', border:'3px solid #fff', boxShadow:'0 0 0 4px rgba(255,51,102,0.35)', zIndex: 5 }} title="You" />
+                {userPos && (()=>{ const pos = toPx(userPos.x, userPos.y); const size=22; const angle = displayHeading || 0; return (
+                  <div
+                    key="user"
+                    className="position-absolute"
+                    style={{ left: pos.x-size/2, top: pos.y-size/2, width:size, height:size, pointerEvents:'none', zIndex:5 }}
+                    title="You"
+                  >
+                    <div
+                      style={{
+                        position:'absolute',
+                        inset:0,
+                        borderRadius:'50%',
+                        background:'#ff3366',
+                        border:'3px solid #fff',
+                        boxShadow:'0 0 0 4px rgba(255,51,102,0.35)',
+                      }}
+                    />
+                    <div
+                      style={{
+                        position:'absolute',
+                        left:'50%',
+                        top:'50%',
+                        width:size,
+                        height:size,
+                        transform:`translate(-50%,-50%) rotate(${angle}deg)`,
+                        transformOrigin:'50% 50%',
+                      }}
+                    >
+                      <div
+                        style={{
+                          position:'absolute',
+                          left:'50%',
+                          top:2,
+                          width:0,
+                          height:0,
+                          borderLeft:'6px solid transparent',
+                          borderRight:'6px solid transparent',
+                          borderBottom:'12px solid #fff',
+                          transform:'translateX(-50%)',
+                        }}
+                      />
+                      <div
+                        style={{
+                          position:'absolute',
+                          left:'50%',
+                          top:'12px',
+                          width:2,
+                          height:size/2.4,
+                          background:'#fff',
+                          borderRadius:2,
+                          transform:'translateX(-50%)',
+                        }}
+                      />
+                    </div>
+                  </div>
                 );})()}
 
                 {(Array.isArray(floor.points)?floor.points:[]).map(p=>{ const pos=toPx(p.x,p.y); const size=8; const isDest = dest && dest.id===p.id; return (
