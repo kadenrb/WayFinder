@@ -104,6 +104,31 @@ export default function UserMap() {
   const quantizeHeading = (value) =>
     normalizeAngle(Math.round(value / 45) * 45);
 
+  const headingUpdateRef = useRef({ ts: 0, value: 0 });
+  const limitHeadingRate = (prev, next) => {
+    const now = (performance && performance.now) ? performance.now() : Date.now();
+    const { ts = now, value = prev || 0 } = headingUpdateRef.current;
+    const dtSec = Math.max(0.016, Math.min(0.5, (now - ts) / 1000));
+    const maxRate = 90; // deg/s cap
+    let delta = normalizeAngle(next - value);
+    if (delta > 180) delta -= 360;
+    const maxDelta = maxRate * dtSec;
+    if (delta > maxDelta) delta = maxDelta;
+    else if (delta < -maxDelta) delta = -maxDelta;
+    const limited = normalizeAngle(value + delta);
+    headingUpdateRef.current = { ts: now, value: limited };
+    return limited;
+  };
+
+  const normalizeAccel = (acc = {}) => {
+    const ax = acc.x || 0;
+    const ay = acc.y || 0;
+    const az = acc.z || 0;
+    let mag = Math.sqrt(ax * ax + ay * ay + az * az);
+    if (mag > 3.5) mag = mag / 9.81; // likely m/s^2; convert to g
+    return { ax, ay, az, mag };
+  };
+
   const smoothHeading = (prev, next, alpha = 0.2) => {
     if (typeof prev !== 'number' || !Number.isFinite(prev)) return normalizeAngle(next || 0);
     if (typeof next !== 'number' || !Number.isFinite(next)) return normalizeAngle(prev || 0);
@@ -467,10 +492,14 @@ export default function UserMap() {
       initSensorBaseline();
     }
     const updateHeading = (event) => {
+      const motionActive = motionIdleRef.current < 0.5; // motion-gated: prefer heading changes when moving
+      const baseAlpha = motionActive ? 0.18 : 0.08;
       if (typeof event.webkitCompassHeading === 'number') {
-        headingRef.current = smoothHeading(headingRef.current, event.webkitCompassHeading);
+        const limited = limitHeadingRate(headingRef.current, event.webkitCompassHeading);
+        headingRef.current = smoothHeading(headingRef.current, limited, baseAlpha);
       } else if (typeof event.alpha === 'number') {
-        headingRef.current = smoothHeading(headingRef.current, 360 - event.alpha);
+        const limited = limitHeadingRate(headingRef.current, 360 - event.alpha);
+        headingRef.current = smoothHeading(headingRef.current, limited, baseAlpha);
       }
       const displayed = updateDisplayedHeading();
       patchDebug({
@@ -488,12 +517,20 @@ export default function UserMap() {
     const handleMotion = (event) => {
       const pos = userPosRef.current;
       if (!pos) return;
-      const acc = event.accelerationIncludingGravity || event.acceleration;
+      const hasLinear =
+        event.acceleration &&
+        (typeof event.acceleration.x === 'number' ||
+          typeof event.acceleration.y === 'number' ||
+          typeof event.acceleration.z === 'number');
+      const acc = hasLinear
+        ? event.acceleration
+        : event.accelerationIncludingGravity || event.acceleration;
       if (!acc) return;
+      const { ax: rawAx, ay: rawAy, az: rawAz, mag: rawMag } = normalizeAccel(acc);
       const baseline = sensorBaselineRef.current;
-      let ax = acc.x || 0;
-      let ay = acc.y || 0;
-      let az = acc.z || 0;
+      let ax = rawAx;
+      let ay = rawAy;
+      let az = rawAz;
       const rot = event.rotationRate || {};
       const yaw =
         rot.alpha ??
@@ -523,27 +560,38 @@ export default function UserMap() {
       ax -= baseline.ax;
       ay -= baseline.ay;
       az -= baseline.az;
+      let mag = Math.sqrt(ax * ax + ay * ay + az * az);
+      if (mag > 3.5) mag = mag / 9.81;
+      const netMag = hasLinear ? mag : Math.max(0, mag - 1); // strip gravity when using includingGravity
       const now = event.timeStamp || performance.now();
       const lastTs = lastMotionTsRef.current || now;
       const dt = Math.min(0.3, Math.max(0.016, (now - lastTs) / 1000));
       lastMotionTsRef.current = now;
-      const magnitude = Math.sqrt(ax * ax + ay * ay + az * az);
       patchDebug({
         baselineSamples: baseline.samples,
         baselineReady: true,
-        accelMagnitude: magnitude,
+        accelMagnitude: mag,
         yaw,
       });
-      const motionThreshold = 0.30;
+      const motionThreshold = 0.12;
       const stillYaw = Math.abs(yaw) < 2;
-      if (magnitude < motionThreshold || stillYaw) {
+      if (netMag < motionThreshold || stillYaw) {
         motionIdleRef.current += dt;
+        if (!hasLinear && netMag < 0.05 && Math.abs(yaw) < 1 && motionIdleRef.current > 1) {
+          initSensorBaseline();
+          patchDebug({ baselineSamples: 0, baselineReady: false });
+        }
         return;
       }
       motionIdleRef.current = 0;
       const heading = headingRef.current || 0;
-      const speed = Math.min(0.005, Math.max(0, magnitude - motionThreshold) * 0.0002);
+      const speed = Math.min(0.005, Math.max(0, netMag - motionThreshold) * 0.0002);
       if (speed <= 0) return;
+      const lastStep = stepStateRef.current.lastStepTs || 0;
+      const nowMs = Date.now();
+      if (nowMs - lastStep < 300) {
+        return; // refractory period: ignore rapid successive "steps"
+      }
       const rad = (heading * Math.PI) / 180;
       const dx = Math.sin(rad) * speed;
       const dy = -Math.cos(rad) * speed;
@@ -559,11 +607,14 @@ export default function UserMap() {
         stepDelta: speed,
         lastStepTs: Date.now(),
       });
+      stepStateRef.current.lastStepTs = nowMs;
       logSample({
         kind: 'motion',
         heading,
         yaw,
-        accelMagnitude: magnitude,
+        accelMagnitude: mag,
+        netMag,
+        usingLinear: hasLinear,
         stepDelta: speed,
         dt,
         position: { x: pos.x, y: pos.y },
