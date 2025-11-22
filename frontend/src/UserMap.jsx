@@ -680,15 +680,18 @@ export default function UserMap() {
       if (nowMs - lastStep < 300) {
         return; // refractory period: ignore rapid successive "steps"
       }
-      const rad = (heading * Math.PI) / 180;
-      let dx = Math.sin(rad) * speed;
-      let dy = -Math.cos(rad) * speed;
       const bias = routeDirection();
+      let dx;
+      let dy;
       if (bias) {
-        const bx = bias.x * speed;
-        const by = bias.y * speed;
-        dx = (dx * 0.5) + (bx * 0.5);
-        dy = (dy * 0.5) + (by * 0.5);
+        // Route-locked movement: follow the path direction and ignore sensor heading
+        dx = bias.x * speed;
+        dy = bias.y * speed;
+      } else {
+        // Fallback to sensor heading if no route is active
+        const rad = (heading * Math.PI) / 180;
+        dx = Math.sin(rad) * speed;
+        dy = -Math.cos(rad) * speed;
       }
       const nx = Math.min(1, Math.max(0, pos.x + dx));
       const ny = Math.min(1, Math.max(0, pos.y + dy));
