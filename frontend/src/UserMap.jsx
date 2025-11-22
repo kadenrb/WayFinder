@@ -681,8 +681,15 @@ export default function UserMap() {
         return; // refractory period: ignore rapid successive "steps"
       }
       const rad = (heading * Math.PI) / 180;
-      const dx = Math.sin(rad) * speed;
-      const dy = -Math.cos(rad) * speed;
+      let dx = Math.sin(rad) * speed;
+      let dy = -Math.cos(rad) * speed;
+      const bias = routeDirection();
+      if (bias) {
+        const bx = bias.x * speed;
+        const by = bias.y * speed;
+        dx = (dx * 0.5) + (bx * 0.5);
+        dy = (dy * 0.5) + (by * 0.5);
+      }
       const nx = Math.min(1, Math.max(0, pos.x + dx));
       const ny = Math.min(1, Math.max(0, pos.y + dy));
       const snapped = snapToWalkable(nx, ny);
@@ -752,6 +759,35 @@ export default function UserMap() {
     const prev=new Int32Array(gw*gh).fill(-1); const seen=new Uint8Array(gw*gh); const q=[]; const sIdx=s[1]*gw+s[0], tIdx=t[1]*gw+t[0]; q.push(sIdx); seen[sIdx]=1;
     while(q.length){ const cur=q.shift(); if(cur===tIdx) break; const cx=cur%gw, cy=(cur/gw)|0; for(const [dx,dy] of dirs){ let nx=cx+dx, ny=cy+dy; if(!inb(nx,ny)) continue; let tgt=-1; const nIdx=ny*gw+nx; if(grid[nIdx]) tgt=nIdx; else if(gap>0){ for(let k=2;k<=gap+1;k++){const nx2=cx+dx*k, ny2=cy+dy*k; if(!inb(nx2,ny2)) break; const idx2=ny2*gw+nx2; if(grid[idx2]){ tgt=idx2; break; } } } if(tgt===-1) continue; if(seen[tgt]) continue; seen[tgt]=1; prev[tgt]=cur; q.push(tgt);} }
     if (prev[tIdx]===-1 && sIdx!==tIdx) return null; const out=[]; for(let cur=tIdx;cur!==-1;cur=prev[cur]){ const x=cur%gw, y=(cur/gw)|0; out.push([x,y]); if(cur===sIdx) break; } out.reverse(); return out;
+  };
+
+  const routeDirection = () => {
+    if (!routePts || routePts.length < 2 || !userPosRef.current) return null;
+    const p = userPosRef.current;
+    let best = null;
+    let bestDist = Infinity;
+    for (let i = 0; i < routePts.length - 1; i++) {
+      const a = routePts[i];
+      const b = routePts[i + 1];
+      const abx = b.x - a.x;
+      const aby = b.y - a.y;
+      const apx = p.x - a.x;
+      const apy = p.y - a.y;
+      const denom = abx * abx + aby * aby;
+      const t = denom ? Math.max(0, Math.min(1, (apx * abx + apy * aby) / denom)) : 0;
+      const projx = a.x + abx * t;
+      const projy = a.y + aby * t;
+      const d = Math.hypot(p.x - projx, p.y - projy);
+      if (d < bestDist) {
+        bestDist = d;
+        const dirx = abx;
+        const diry = aby;
+        best = { x: dirx, y: diry };
+      }
+    }
+    if (!best) return null;
+    const len = Math.hypot(best.x, best.y) || 1;
+    return { x: best.x / len, y: best.y / len };
   };
 
   // Build a cross-floor plan from current floor to destination floor using shared warp keys
