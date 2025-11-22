@@ -661,7 +661,7 @@ export default function UserMap() {
         accelMagnitude: mag,
         yaw,
       });
-      const motionThreshold = 0.10;
+      const motionThreshold = 0.05;
       const stillYaw = Math.abs(yaw) < 2;
       if (netMag < motionThreshold || stillYaw) {
         motionIdleRef.current += dt;
@@ -673,7 +673,7 @@ export default function UserMap() {
       }
       motionIdleRef.current = 0;
       const heading = headingRef.current || 0;
-      const speed = Math.min(0.006, Math.max(0, netMag - motionThreshold) * 0.00025);
+      const speed = Math.min(0.007, Math.max(0, netMag - motionThreshold) * 0.00035);
       if (speed <= 0) return;
       const lastStep = stepStateRef.current.lastStepTs || 0;
       const nowMs = Date.now();
