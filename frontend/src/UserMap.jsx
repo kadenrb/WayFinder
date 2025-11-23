@@ -103,16 +103,6 @@ export default function UserMap() {
     if (heading >= 360) heading -= 360;
     return heading;
   };
-  const stepWaypoint = () => {
-    const pts = routePtsRef.current && routePtsRef.current.length ? routePtsRef.current : (routePts || []);
-    if (!pts || !pts.length) { setSensorMsg("No route available; build a route first."); return; }
-    const nextIdx = Math.min((waypointIdxRef.current || 0) + 1, pts.length - 1);
-    waypointIdxRef.current = nextIdx;
-    const target = pts[nextIdx];
-    setUserPos(target);
-    saveUserPos(selUrl, target);
-    setSensorMsg(`Moved to waypoint ${nextIdx + 1}/${pts.length}`);
-  };
 
   const quantizeHeading = (value) =>
     normalizeAngle(Math.round(value / 45) * 45);
