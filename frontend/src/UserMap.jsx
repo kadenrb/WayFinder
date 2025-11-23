@@ -50,6 +50,9 @@ export default function UserMap() {
   useEffect(() => {
     routePtsRef.current = Array.isArray(routePts) ? routePts : [];
   }, [routePts]);
+  useEffect(() => {
+    userPosRef.current = userPos;
+  }, [userPos]);
   const [displayHeading, setDisplayHeading] = useState(0);
   useEffect(() => {
     routePtsRef.current = Array.isArray(routePts) ? routePts : [];
@@ -643,6 +646,7 @@ export default function UserMap() {
     setUserPos(target);
     saveUserPos(selUrl, target);
     userPosRef.current = target;
+    console.log("Step route", { currentIdx, nextIdx, target, waypoints: pts.length });
     setSensorMsg(`Moved to waypoint ${nextIdx + 1}/${pts.length}`);
     if (dest) {
       await computeRouteForStep({ kind: 'dest' }, target);
