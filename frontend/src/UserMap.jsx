@@ -231,7 +231,7 @@ export default function UserMap() {
   const gyroInitializedRef = useRef(false);
   const simulateStep = (mag = 1.0, yaw = 0) => {
     const pos = userPosRef.current;
-    if (!pos) return;
+    if (!pos) { setSensorMsg("Set your position first."); return; }
     const motionThreshold = 0.07;
     const netMag = mag;
     const baseStep = 0.001;
@@ -241,7 +241,7 @@ export default function UserMap() {
     const nowMs = Date.now();
     if (nowMs - lastStep < 300) return;
     const bias = routeDirection();
-    if (!bias) return;
+    if (!bias) { setSensorMsg("No route direction found (build a route first)."); return; }
     const dx = bias.x * speed;
     const dy = bias.y * speed;
     const biasHeading = normalizeAngle((Math.atan2(bias.x, -bias.y) * 180) / Math.PI);
@@ -728,7 +728,10 @@ export default function UserMap() {
         return; // refractory period: ignore rapid successive "steps"
       }
       const bias = routeDirection();
-      if (!bias) return; // no active route: ignore movement
+      if (!bias) {
+        setSensorMsg("No route direction available; build a route first.");
+        return; // no active route: ignore movement
+      }
       const dx = bias.x * speed;
       const dy = bias.y * speed;
       const biasHeading = normalizeAngle((Math.atan2(bias.x, -bias.y) * 180) / Math.PI);
@@ -807,6 +810,7 @@ export default function UserMap() {
 
   const routeDirection = () => {
     if (!userPosRef.current) return null;
+    // Preferred: follow computed polyline
     if (routePts && routePts.length >= 2) {
       const p = userPosRef.current;
       let best = null;
@@ -831,10 +835,19 @@ export default function UserMap() {
       }
       }
       if (!best) return null;
-      const len = Math.hypot(best.x, best.y) || 1;
+        const len = Math.hypot(best.x, best.y) || 1;
       return { x: best.x / len, y: best.y / len };
     }
-    // Fallback: use destination direction if on same floor and no route polyline yet
+    // Fallback 1: current plan step target (warp target)
+    if (plan && plan.steps && plan.steps[plan.index] && plan.steps[plan.index].target) {
+      const tgt = plan.steps[plan.index].target;
+      const p = userPosRef.current;
+      const vx = (tgt.x || 0) - p.x;
+      const vy = (tgt.y || 0) - p.y;
+      const len = Math.hypot(vx, vy) || 1;
+      return { x: vx / len, y: vy / len };
+    }
+    // Fallback 2: direction to dest on same floor
     const p = userPosRef.current;
     if (dest && floor && dest.url === selUrl) {
       const pt = (floor.points || []).find((pt) => pt.id === dest.id);
@@ -876,8 +889,16 @@ export default function UserMap() {
 
   const computeRouteForStep = async (step) => {
     const curFloor = floors.find(f=>f.url===selUrl); if (!curFloor) return;
-    const img = imgRef.current; if (!img || !img.naturalWidth) return;
-    const gridObj = await buildGrid(img, curFloor.walkable?.color, curFloor.walkable?.tolerance, 4);
+    const img = imgRef.current; if (!img || !img.naturalWidth) { setSensorMsg("Image not ready for routing."); return; }
+    let gridObj;
+    try {
+      gridObj = await buildGrid(img, curFloor.walkable?.color, curFloor.walkable?.tolerance, 4);
+    } catch (err) {
+      console.error("Failed to build walkable grid", err);
+      setSensorMsg("Routing failed (image/CORS).");
+      setRoutePts([]);
+      return;
+    }
     const {grid,gw,gh,step:stp,w,h}=gridObj;
     const ux = Math.max(0, Math.min(gw-1, Math.round((userPos.x*w)/stp)));
     const uy = Math.max(0, Math.min(gh-1, Math.round((userPos.y*h)/stp)));
