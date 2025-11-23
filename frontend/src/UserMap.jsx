@@ -217,6 +217,7 @@ export default function UserMap() {
   const geoBufferRef = useRef([]);
   const yawWindowRef = useRef([]);
   const startPosRef = useRef(null);
+  const routeProgressRef = useRef(0);
   const recordDataRef = useRef([]);
   const recordStopTimerRef = useRef(null);
   const sensorBaselineRef = useRef({
@@ -274,6 +275,8 @@ export default function UserMap() {
       startPos: startPosRef.current || pos,
       endPos: snapped,
       destPoint: dest ? { id: dest.id, url: dest.url } : null,
+      biasVec: bias,
+      snappedPos: snapped,
       simulated: true,
     }, true);
   };
@@ -770,6 +773,7 @@ export default function UserMap() {
         endPos: snapped,
         destPoint: destPoint ? { id: destPoint.id, x: destPoint.x, y: destPoint.y, name: destPoint.name, roomNumber: destPoint.roomNumber } : null,
         biasVec: bias,
+        snappedPos: snapped,
       }, false);
     };
     window.addEventListener('deviceorientationabsolute', updateHeading);
@@ -820,40 +824,25 @@ export default function UserMap() {
 
   const routeDirection = () => {
     if (!userPosRef.current) return null;
-    // Preferred: follow computed polyline using nearest projection on a segment
+    // Preferred: follow computed polyline using forward progress (no backward segments)
     if (routePts && routePts.length >= 2) {
       const p = userPosRef.current;
-      let best = null;
+      const startIdx = Math.max(0, Math.min(routePts.length - 2, routeProgressRef.current || 0));
+      let bestIdx = startIdx;
       let bestDist = Infinity;
-      let bestT = 0;
-      let bestIdx = 0;
-      for (let i = 0; i < routePts.length - 1; i++) {
-        const a = routePts[i];
-        const b = routePts[i + 1];
-        const abx = b.x - a.x;
-        const aby = b.y - a.y;
-        const apx = p.x - a.x;
-        const apy = p.y - a.y;
-        const denom = abx * abx + aby * aby;
-        const t = denom ? Math.max(0, Math.min(1, (apx * abx + apy * aby) / denom)) : 0;
-        const projx = a.x + abx * t;
-        const projy = a.y + aby * t;
-        const d = Math.hypot(p.x - projx, p.y - projy);
+      for (let i = startIdx; i < routePts.length; i++) {
+        const d = Math.hypot(p.x - routePts[i].x, p.y - routePts[i].y);
         if (d < bestDist) {
           bestDist = d;
-          best = { vx: abx, vy: aby };
-          bestT = t;
           bestIdx = i;
         }
       }
-      if (!best) return null;
-      // If we're near the end of a segment, look ahead to the next segment to keep moving forward
-      let vx = best.vx;
-      let vy = best.vy;
-      if (bestT > 0.9 && bestIdx < routePts.length - 2) {
-        vx = routePts[bestIdx + 2].x - routePts[bestIdx + 1].x;
-        vy = routePts[bestIdx + 2].y - routePts[bestIdx + 1].y;
-      }
+      const segIdx = Math.min(bestIdx, routePts.length - 2);
+      routeProgressRef.current = segIdx;
+      const a = routePts[segIdx];
+      const b = routePts[segIdx + 1];
+      const vx = b.x - a.x;
+      const vy = b.y - a.y;
       const len = Math.hypot(vx, vy) || 1;
       return { x: vx / len, y: vy / len };
     }
@@ -947,6 +936,7 @@ export default function UserMap() {
     const path = bfs(grid,gw,gh,sCell,tCell, Math.max(0,Math.floor(gapCells)));
     if (!path || path.length<2) { setRoutePts([]); return; }
     const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
+    routeProgressRef.current = 0;
     setRoutePts(out);
   };
 
