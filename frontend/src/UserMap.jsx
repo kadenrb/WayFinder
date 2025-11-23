@@ -635,7 +635,8 @@ export default function UserMap() {
   const stepWaypoint = () => {
     const pts = waypointPtsRef.current && waypointPtsRef.current.length ? waypointPtsRef.current : waypoints;
     if (!pts || !pts.length) { setSensorMsg("No route available; build a route first."); return; }
-    const currentIdx = typeof waypointIdxRef.current === 'number' ? waypointIdxRef.current : pts.length - 1;
+    let currentIdx = typeof waypointIdxRef.current === 'number' ? waypointIdxRef.current : pts.length - 1;
+    if (currentIdx < 0 || currentIdx >= pts.length) currentIdx = pts.length - 1;
     const nextIdx = Math.max(currentIdx - 1, 0);
     waypointIdxRef.current = nextIdx;
     const target = pts[nextIdx];
