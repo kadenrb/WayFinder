@@ -271,6 +271,9 @@ export default function UserMap() {
       stepDelta: speed,
       dt: 0.016,
       position: { x: pos.x, y: pos.y },
+      startPos: startPosRef.current || pos,
+      endPos: snapped,
+      destPoint: dest ? { id: dest.id, url: dest.url } : null,
       simulated: true,
     }, true);
   };
@@ -816,25 +819,31 @@ export default function UserMap() {
 
   const routeDirection = () => {
     if (!userPosRef.current) return null;
-    // Preferred: follow computed polyline
+    // Preferred: follow computed polyline using nearest projection on a segment
     if (routePts && routePts.length >= 2) {
       const p = userPosRef.current;
-      // Find nearest polyline point, then aim to the next point to move forward along the route
-      let bestIdx = 0;
+      let best = null;
       let bestDist = Infinity;
-      for (let i = 0; i < routePts.length; i++) {
-        const d = Math.hypot(p.x - routePts[i].x, p.y - routePts[i].y);
+      for (let i = 0; i < routePts.length - 1; i++) {
+        const a = routePts[i];
+        const b = routePts[i + 1];
+        const abx = b.x - a.x;
+        const aby = b.y - a.y;
+        const apx = p.x - a.x;
+        const apy = p.y - a.y;
+        const denom = abx * abx + aby * aby;
+        const t = denom ? Math.max(0, Math.min(1, (apx * abx + apy * aby) / denom)) : 0;
+        const projx = a.x + abx * t;
+        const projy = a.y + aby * t;
+        const d = Math.hypot(p.x - projx, p.y - projy);
         if (d < bestDist) {
           bestDist = d;
-          bestIdx = i;
+          best = { vx: abx, vy: aby };
         }
       }
-      const nextIdx = Math.min(bestIdx + 1, routePts.length - 1);
-      if (nextIdx === bestIdx) return null;
-      const vx = routePts[nextIdx].x - routePts[bestIdx].x;
-      const vy = routePts[nextIdx].y - routePts[bestIdx].y;
-      const len = Math.hypot(vx, vy) || 1;
-      return { x: vx / len, y: vy / len };
+      if (!best) return null;
+      const len = Math.hypot(best.vx, best.vy) || 1;
+      return { x: best.vx / len, y: best.vy / len };
     }
     // Fallback 1: current plan step target (warp target)
     if (plan && plan.steps && plan.steps[plan.index] && plan.steps[plan.index].target) {
