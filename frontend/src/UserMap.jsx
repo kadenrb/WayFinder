@@ -640,17 +640,15 @@ export default function UserMap() {
     if (!pts || !pts.length) { setSensorMsg("No route available; build a route first."); return; }
     let currentIdx = typeof waypointIdxRef.current === 'number' ? waypointIdxRef.current : 0;
     if (currentIdx < 0 || currentIdx >= pts.length) currentIdx = 0;
-    const nextIdx = Math.min(currentIdx + 1, pts.length - 1);
-    waypointIdxRef.current = nextIdx;
-    const target = pts[nextIdx];
+    // advance one waypoint forward each click
+    currentIdx = Math.min(currentIdx + 1, pts.length - 1);
+    waypointIdxRef.current = currentIdx;
+    const target = pts[currentIdx];
     setUserPos(target);
     saveUserPos(selUrl, target);
     userPosRef.current = target;
-    console.log("Step route", { currentIdx, nextIdx, target, waypoints: pts.length });
-    setSensorMsg(`Moved to waypoint ${nextIdx + 1}/${pts.length}`);
-    if (dest) {
-      await computeRouteForStep({ kind: 'dest' }, target);
-    }
+    console.log("Step route", { currentIdx, target, waypoints: pts.length });
+    setSensorMsg(`Moved to waypoint ${currentIdx + 1}/${pts.length}`);
   };
 
   // Build a cross-floor plan from current floor to destination floor using shared warp keys
