@@ -893,6 +893,7 @@ export default function UserMap() {
     routeProgressRef.current = 0;
     routePtsRef.current = out;
     setRoutePts(out);
+    setSensorMsg(`Route ready: ${out.length} points`);
   };
 
   const startRoute = async () => {
