@@ -661,7 +661,7 @@ export default function UserMap() {
         accelMagnitude: mag,
         yaw,
       });
-      const motionThreshold = 0.05;
+      const motionThreshold = 0.07;
       const stillYaw = Math.abs(yaw) < 2;
       if (netMag < motionThreshold || stillYaw) {
         motionIdleRef.current += dt;
@@ -673,8 +673,8 @@ export default function UserMap() {
       }
       motionIdleRef.current = 0;
       const heading = headingRef.current || 0;
-      const baseStep = 0.0015; // always move at least a small amount once threshold is crossed
-      const speed = Math.min(0.008, baseStep + Math.max(0, netMag - motionThreshold) * 0.0004);
+      const baseStep = 0.001; // always move at least a small amount once threshold is crossed
+      const speed = Math.min(0.007, baseStep + Math.max(0, netMag - motionThreshold) * 0.0003);
       if (speed <= 0) return;
       const lastStep = stepStateRef.current.lastStepTs || 0;
       const nowMs = Date.now();
@@ -682,18 +682,9 @@ export default function UserMap() {
         return; // refractory period: ignore rapid successive "steps"
       }
       const bias = routeDirection();
-      let dx;
-      let dy;
-      if (bias) {
-        // Route-locked movement: follow the path direction and ignore sensor heading
-        dx = bias.x * speed;
-        dy = bias.y * speed;
-      } else {
-        // Fallback to sensor heading if no route is active
-        const rad = (heading * Math.PI) / 180;
-        dx = Math.sin(rad) * speed;
-        dy = -Math.cos(rad) * speed;
-      }
+      if (!bias) return; // no active route: ignore movement
+      const dx = bias.x * speed;
+      const dy = bias.y * speed;
       const nx = Math.min(1, Math.max(0, pos.x + dx));
       const ny = Math.min(1, Math.max(0, pos.y + dy));
       const snapped = snapToWalkable(nx, ny);
