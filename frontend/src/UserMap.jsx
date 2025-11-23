@@ -673,7 +673,8 @@ export default function UserMap() {
       }
       motionIdleRef.current = 0;
       const heading = headingRef.current || 0;
-      const speed = Math.min(0.007, Math.max(0, netMag - motionThreshold) * 0.00035);
+      const baseStep = 0.0015; // always move at least a small amount once threshold is crossed
+      const speed = Math.min(0.008, baseStep + Math.max(0, netMag - motionThreshold) * 0.0004);
       if (speed <= 0) return;
       const lastStep = stepStateRef.current.lastStepTs || 0;
       const nowMs = Date.now();
