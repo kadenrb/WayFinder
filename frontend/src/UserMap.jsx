@@ -736,22 +736,21 @@ export default function UserMap() {
         return; // refractory period: ignore rapid successive "steps"
       }
       const bias = routeDirection();
-      if (!bias) {
-        setSensorMsg("No route direction available; build a route first.");
-        return; // no active route: ignore movement
+      const pts = routePtsRef.current || routePts || [];
+      if (!pts.length) {
+        setSensorMsg("No route available; build a route first.");
+        return;
       }
-      const dx = bias.x * speed;
-      const dy = bias.y * speed;
-      const biasHeading = normalizeAngle((Math.atan2(bias.x, -bias.y) * 180) / Math.PI);
+      // Advance along waypoints; clamp to last
+      const nextIdx = Math.min(routeProgressRef.current + 1, pts.length - 1);
+      const target = pts[nextIdx];
+      routeProgressRef.current = nextIdx;
+      const snapped = snapToWalkable(target.x, target.y);
+      const biasHeading = normalizeAngle((Math.atan2(target.x - pos.x, -(target.y - pos.y)) * 180) / Math.PI);
       headingRef.current = biasHeading;
       setDisplayHeading(quantizeHeading(biasHeading));
-      const nx = Math.min(1, Math.max(0, pos.x + dx));
-      const ny = Math.min(1, Math.max(0, pos.y + dy));
-      const snapped = snapToWalkable(nx, ny);
-      if (snapped.x !== pos.x || snapped.y !== pos.y) {
-        setUserPos(snapped);
-        saveUserPos(selUrl, snapped);
-      }
+      setUserPos(snapped);
+      saveUserPos(selUrl, snapped);
       const destPoint = (floor?.points || []).find((pt) => pt.id === dest?.id);
       patchDebug({
         heading: biasHeading,
@@ -761,21 +760,22 @@ export default function UserMap() {
       stepStateRef.current.lastStepTs = nowMs;
       logSample({
         kind: 'motion',
-        heading: biasHeading,
-        yaw,
-        accelMagnitude: mag,
-        netMag,
-        usingLinear: hasLinear,
-        stepDelta: speed,
-        dt,
-        position: { x: pos.x, y: pos.y },
-        startPos: startPosRef.current || pos,
-        endPos: snapped,
-        destPoint: destPoint ? { id: destPoint.id, x: destPoint.x, y: destPoint.y, name: destPoint.name, roomNumber: destPoint.roomNumber } : null,
-        biasVec: bias,
-        snappedPos: snapped,
-      }, false);
-    };
+      heading: biasHeading,
+      yaw,
+      accelMagnitude: mag,
+      netMag,
+      usingLinear: hasLinear,
+      stepDelta: speed,
+      dt,
+      position: { x: pos.x, y: pos.y },
+      startPos: startPosRef.current || pos,
+      endPos: snapped,
+      destPoint: destPoint ? { id: destPoint.id, x: destPoint.x, y: destPoint.y, name: destPoint.name, roomNumber: destPoint.roomNumber } : null,
+      biasVec: target ? { x: target.x - pos.x, y: target.y - pos.y } : null,
+      snappedPos: snapped,
+      waypointIndex: nextIdx,
+    }, false);
+  };
     window.addEventListener('deviceorientationabsolute', updateHeading);
     window.addEventListener('deviceorientation', updateHeading);
     window.addEventListener('devicemotion', handleMotion);
@@ -823,58 +823,12 @@ export default function UserMap() {
   };
 
   const routeDirection = () => {
-    if (!userPosRef.current) return null;
-    // Preferred: follow computed polyline using forward progress (no backward segments)
-    if (routePts && routePts.length >= 2) {
-      const p = userPosRef.current;
-      const startIdx = Math.max(0, Math.min(routePts.length - 2, routeProgressRef.current || 0));
-      let bestIdx = startIdx;
-      let bestDist = Infinity;
-      for (let i = startIdx; i < routePts.length; i++) {
-        const d = Math.hypot(p.x - routePts[i].x, p.y - routePts[i].y);
-        if (d < bestDist) {
-          bestDist = d;
-          bestIdx = i;
-        }
-      }
-      const segIdx = Math.min(bestIdx, routePts.length - 2);
-      routeProgressRef.current = segIdx;
-      const a = routePts[segIdx];
-      const b = routePts[segIdx + 1];
-      const vx = b.x - a.x;
-      const vy = b.y - a.y;
-      const len = Math.hypot(vx, vy) || 1;
-      return { x: vx / len, y: vy / len };
-    }
-    // Fallback 1: current plan step target (warp target)
-    if (plan && plan.steps && plan.steps[plan.index] && plan.steps[plan.index].target) {
-      const tgt = plan.steps[plan.index].target;
-      const p = userPosRef.current;
-      const vx = (tgt.x || 0) - p.x;
-      const vy = (tgt.y || 0) - p.y;
-      const len = Math.hypot(vx, vy) || 1;
-      return { x: vx / len, y: vy / len };
-    }
-    // Fallback 2: direction to dest on same floor
-    const p = userPosRef.current;
-    if (dest && floor && dest.url === selUrl) {
-      const pt = (floor.points || []).find((pt) => pt.id === dest.id);
-      if (pt) {
-        const vx = pt.x - p.x;
-        const vy = pt.y - p.y;
-        const len = Math.hypot(vx, vy) || 1;
-        return { x: vx / len, y: vy / len };
-      }
-    }
     return null;
   };
 
   const routeHeadingDeg = () => {
-    const dir = routeDirection();
-    if (!dir) return null;
-    // Convert normalized direction vector (x right, y down) to heading degrees (0=north)
-    const rad = Math.atan2(dir.x, -dir.y);
-    return normalizeAngle((rad * 180) / Math.PI);
+    // Route-locked mode uses waypoint progression; heading is updated when stepping.
+    return headingRef.current || 0;
   };
 
   // Build a cross-floor plan from current floor to destination floor using shared warp keys
@@ -937,6 +891,7 @@ export default function UserMap() {
     if (!path || path.length<2) { setRoutePts([]); return; }
     const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
     routeProgressRef.current = 0;
+    routePtsRef.current = out;
     setRoutePts(out);
   };
 
