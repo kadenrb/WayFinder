@@ -16,25 +16,14 @@ export default function DebuggerPanel({
 }) {
   if (!visible) return null;
 
-  const help = [
-    "Heading: raw compass degrees (smoothed).",
-    "Display heading: snapped to 45° for the UI marker.",
-    "Compass: latest compass reading pre-snap.",
-    "Yaw: rotation rate deg/s (from gyro).",
-    "Accel magnitude: total acceleration incl. gravity (g).",
-    "Baseline samples: calibration count; ready when stable.",
-    "Recording: live capture status/message.",
-    "Offset: manual or auto geolocation-based heading offset (deg).",
-  ];
-
   const rows = [
     ["Sensor msg", sensorMsg || "-"],
-    ["Heading", heading != null ? heading.toFixed(1) + " deg" : "-"],
-    ["Display heading", displayHeading != null ? displayHeading.toFixed(1) + " deg" : "-"],
-    ["Compass", compassHeading != null ? compassHeading.toFixed(1) + " deg" : "-"],
-    ["Yaw", yaw != null ? yaw.toFixed(2) + " deg/s" : "-"],
+    ["DeviceOrientation heading", heading != null ? heading.toFixed(1) + " deg" : "-"],
+    ["Display heading (snapped)", displayHeading != null ? displayHeading.toFixed(1) + " deg" : "-"],
+    ["Compass (raw)", compassHeading != null ? compassHeading.toFixed(1) + " deg" : "-"],
+    ["rotationRate yaw", yaw != null ? yaw.toFixed(2) + " deg/s" : "-"],
     [
-      "Accel magnitude",
+      "accelerationIncludingGravity | acceleration (mag)",
       accelMagnitude != null ? accelMagnitude.toFixed(3) + " g" : "-",
     ],
     [
@@ -44,7 +33,7 @@ export default function DebuggerPanel({
         : `${baselineSamples} (calibrating)`,
     ],
     ["Recording", recording ? (recordMsg || "Recording...") : (recordMsg || "Idle")],
-    ["Offset", headingOffset != null ? headingOffset.toFixed(1) + " deg" : "-"],
+    ["Heading offset", headingOffset != null ? headingOffset.toFixed(1) + " deg" : "-"],
   ];
 
   return (
@@ -66,6 +55,15 @@ export default function DebuggerPanel({
             <span>{value}</span>
           </div>
         ))}
+        <div className="mt-2" style={{ fontSize: "0.72rem", color: "#94a3b8", lineHeight: 1.2 }}>
+          <div>DeviceOrientation: heading from deviceorientation/deviceorientationabsolute.</div>
+          <div>Display heading: snapped for the UI marker.</div>
+          <div>Compass (raw): latest compass heading before snap.</div>
+          <div>rotationRate yaw: deg/s from devicemotion.rotationRate.</div>
+          <div>Acceleration: magnitude of accelerationIncludingGravity or acceleration (g).</div>
+          <div>Baseline: accelerometer calibration samples.</div>
+          <div>Heading offset: manual/GPS offset applied to heading.</div>
+        </div>
       </div>
     </div>
   );
