@@ -16,6 +16,7 @@
   website.
 */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { StepDetector } from "./stepDetector";
 import DebuggerPanel from "./DebuggerPanel";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +44,7 @@ export default function UserMap() {
   const waypointPtsRef = useRef([]);
   const [waypoints, setWaypoints] = useState([]);
   const waypointIdxRef = useRef(0);
+  const stepDetectorRef = useRef(null);
   // ---------------------------------------------------------------------------
   // SENSOR LOOP
   // Listens for magnetometer/orientation/motion events and moves the marker.
@@ -314,7 +316,7 @@ export default function UserMap() {
       if (p && typeof p.x === 'number' && typeof p.y === 'number') setUserPos({ x: p.x, y: p.y }); else setUserPos(null);
     } catch { setUserPos(null); }
   }, [selUrl]);
-  useEffect(() => { userPosRef.current = userPos; if (!userPos && sensorTracking) { setSensorTracking(false); setSensorMsg("Tap 'I'm here' before enabling sensors."); } }, [userPos, sensorTracking]);
+  useEffect(() => { userPosRef.current = userPos; }, [userPos]);
   useEffect(() => {
     setDebugData((prev) => ({ ...prev, sensorMsg }));
   }, [sensorMsg]);
@@ -569,7 +571,24 @@ export default function UserMap() {
     return () => window.removeEventListener('keydown', onKey);
   }, [userPos, moveStep, selUrl]);
 
-  useEffect(() => {}, [sensorTracking, selUrl, snapToWalkable]);
+  // Wire devicemotion to the step detector and waypoint stepper
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof DeviceMotionEvent === 'undefined') return;
+    stepDetectorRef.current = new StepDetector({ sampleIntervalMs: 50, windowMs: 2000 });
+    const handler = (event) => {
+      const acc = event.accelerationIncludingGravity || event.acceleration;
+      if (!acc) return;
+      const ax = acc.x || 0;
+      const ay = acc.y || 0;
+      const az = acc.z || 0;
+      const stepDetected = stepDetectorRef.current.update(ax, ay, az);
+      if (stepDetected) {
+        stepWaypoint();
+      }
+    };
+    window.addEventListener('devicemotion', handler);
+    return () => window.removeEventListener('devicemotion', handler);
+  }, [stepWaypoint]);
 
   // Helpers similar to editor for routing
   const normHex = (s) => {
