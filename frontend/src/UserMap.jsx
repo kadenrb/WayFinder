@@ -45,6 +45,8 @@ export default function UserMap() {
   const [waypoints, setWaypoints] = useState([]);
   const waypointIdxRef = useRef(0);
   const stepDetectorRef = useRef(null);
+  const stepSampleIntervalRef = useRef(50);
+  const lastStepTsRef = useRef(0);
   // ---------------------------------------------------------------------------
   // SENSOR LOOP
   // Listens for magnetometer/orientation/motion events and moves the marker.
@@ -574,16 +576,28 @@ export default function UserMap() {
   // Wire devicemotion to the step detector and waypoint stepper
   useEffect(() => {
     if (typeof window === 'undefined' || typeof DeviceMotionEvent === 'undefined') return;
-    stepDetectorRef.current = new StepDetector({ sampleIntervalMs: 50, windowMs: 2000 });
+    stepDetectorRef.current = new StepDetector({ sampleIntervalMs: stepSampleIntervalRef.current, windowMs: 2000 });
     const handler = (event) => {
       const acc = event.accelerationIncludingGravity || event.acceleration;
       if (!acc) return;
+      if (event.interval && !stepSampleIntervalRef.currentInitialized) {
+        const ms = Math.max(10, Math.round(event.interval));
+        stepSampleIntervalRef.current = ms;
+        if (stepDetectorRef.current?.setSampleInterval) {
+          stepDetectorRef.current.setSampleInterval(ms);
+        }
+        stepSampleIntervalRef.currentInitialized = true;
+      }
       const ax = acc.x || 0;
       const ay = acc.y || 0;
       const az = acc.z || 0;
       const stepDetected = stepDetectorRef.current.update(ax, ay, az);
       if (stepDetected) {
-        stepWaypoint();
+        const now = Date.now();
+        if (now - (lastStepTsRef.current || 0) >= 400) {
+          lastStepTsRef.current = now;
+          stepWaypoint();
+        }
       }
     };
     window.addEventListener('devicemotion', handler);
