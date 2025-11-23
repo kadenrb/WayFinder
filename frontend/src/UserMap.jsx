@@ -216,6 +216,7 @@ export default function UserMap() {
   const geoHeadingRef = useRef(null);
   const geoBufferRef = useRef([]);
   const yawWindowRef = useRef([]);
+  const startPosRef = useRef(null);
   const recordDataRef = useRef([]);
   const recordStopTimerRef = useRef(null);
   const sensorBaselineRef = useRef({
@@ -271,7 +272,7 @@ export default function UserMap() {
       dt: 0.016,
       position: { x: pos.x, y: pos.y },
       simulated: true,
-    });
+    }, true);
   };
 
   const initSensorBaseline = () => {
@@ -563,14 +564,15 @@ export default function UserMap() {
     const secs = Math.max(1, Math.min(120, Number(recordDuration) || 10));
     setRecordDuration(secs);
     recordDataRef.current = [];
+    startPosRef.current = userPosRef.current || null;
     setRecordMsg(`Recording for ${secs}s...`);
     setRecording(true);
     if (recordStopTimerRef.current) clearTimeout(recordStopTimerRef.current);
     recordStopTimerRef.current = setTimeout(() => stopRecording(true), secs * 1000);
   };
 
-  const logSample = (sample) => {
-    if (!recording) return;
+  const logSample = (sample, force = false) => {
+    if (!recording && !force) return;
     recordDataRef.current.push({
       t: Date.now(),
       url: selUrl,
@@ -764,7 +766,7 @@ export default function UserMap() {
         startPos: startPosRef.current || pos,
         endPos: snapped,
         destPoint: destPoint ? { id: destPoint.id, x: destPoint.x, y: destPoint.y, name: destPoint.name, roomNumber: destPoint.roomNumber } : null,
-      });
+      }, false);
     };
     window.addEventListener('deviceorientationabsolute', updateHeading);
     window.addEventListener('deviceorientation', updateHeading);
