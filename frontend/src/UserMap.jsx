@@ -654,7 +654,7 @@ export default function UserMap() {
     return headingRef.current || 0;
   };
 
-  const stepWaypoint = async () => {
+  async function stepWaypoint() {
     const pts = waypointPtsRef.current && waypointPtsRef.current.length ? waypointPtsRef.current : waypoints;
     if (!pts || !pts.length) { setSensorMsg("No route available; build a route first."); return; }
     let currentIdx = typeof waypointIdxRef.current === 'number' ? waypointIdxRef.current : 0;
