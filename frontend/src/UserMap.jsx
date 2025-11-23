@@ -769,6 +769,7 @@ export default function UserMap() {
         startPos: startPosRef.current || pos,
         endPos: snapped,
         destPoint: destPoint ? { id: destPoint.id, x: destPoint.x, y: destPoint.y, name: destPoint.name, roomNumber: destPoint.roomNumber } : null,
+        biasVec: bias,
       }, false);
     };
     window.addEventListener('deviceorientationabsolute', updateHeading);
@@ -824,6 +825,8 @@ export default function UserMap() {
       const p = userPosRef.current;
       let best = null;
       let bestDist = Infinity;
+      let bestT = 0;
+      let bestIdx = 0;
       for (let i = 0; i < routePts.length - 1; i++) {
         const a = routePts[i];
         const b = routePts[i + 1];
@@ -839,11 +842,20 @@ export default function UserMap() {
         if (d < bestDist) {
           bestDist = d;
           best = { vx: abx, vy: aby };
+          bestT = t;
+          bestIdx = i;
         }
       }
       if (!best) return null;
-      const len = Math.hypot(best.vx, best.vy) || 1;
-      return { x: best.vx / len, y: best.vy / len };
+      // If we're near the end of a segment, look ahead to the next segment to keep moving forward
+      let vx = best.vx;
+      let vy = best.vy;
+      if (bestT > 0.9 && bestIdx < routePts.length - 2) {
+        vx = routePts[bestIdx + 2].x - routePts[bestIdx + 1].x;
+        vy = routePts[bestIdx + 2].y - routePts[bestIdx + 1].y;
+      }
+      const len = Math.hypot(vx, vy) || 1;
+      return { x: vx / len, y: vy / len };
     }
     // Fallback 1: current plan step target (warp target)
     if (plan && plan.steps && plan.steps[plan.index] && plan.steps[plan.index].target) {
