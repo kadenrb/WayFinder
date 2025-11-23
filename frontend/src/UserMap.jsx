@@ -635,9 +635,9 @@ export default function UserMap() {
   const stepWaypoint = () => {
     const pts = waypointPtsRef.current && waypointPtsRef.current.length ? waypointPtsRef.current : waypoints;
     if (!pts || !pts.length) { setSensorMsg("No route available; build a route first."); return; }
-    let currentIdx = typeof waypointIdxRef.current === 'number' ? waypointIdxRef.current : pts.length - 1;
-    if (currentIdx < 0 || currentIdx >= pts.length) currentIdx = pts.length - 1;
-    const nextIdx = Math.max(currentIdx - 1, 0);
+    let currentIdx = typeof waypointIdxRef.current === 'number' ? waypointIdxRef.current : 0;
+    if (currentIdx < 0 || currentIdx >= pts.length) currentIdx = 0;
+    const nextIdx = Math.min(currentIdx + 1, pts.length - 1);
     waypointIdxRef.current = nextIdx;
     const target = pts[nextIdx];
     setUserPos(target);
@@ -706,7 +706,7 @@ export default function UserMap() {
     const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
     routePtsRef.current = out;
     const wp = buildWaypoints(out);
-    waypointIdxRef.current = wp.length ? wp.length - 1 : 0; // start at user end of the path
+    waypointIdxRef.current = 0; // start at beginning of path (user side)
     waypointPtsRef.current = wp;
     setWaypoints(wp);
     setRoutePts(out);
