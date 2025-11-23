@@ -744,15 +744,16 @@ export default function UserMap() {
         setUserPos(snapped);
         saveUserPos(selUrl, snapped);
       }
+      const destPoint = (floor?.points || []).find((pt) => pt.id === dest?.id);
       patchDebug({
-        heading,
+        heading: biasHeading,
         stepDelta: speed,
-        lastStepTs: Date.now(),
+        lastStepTs: nowMs,
       });
       stepStateRef.current.lastStepTs = nowMs;
       logSample({
         kind: 'motion',
-        heading,
+        heading: biasHeading,
         yaw,
         accelMagnitude: mag,
         netMag,
@@ -760,6 +761,9 @@ export default function UserMap() {
         stepDelta: speed,
         dt,
         position: { x: pos.x, y: pos.y },
+        startPos: startPosRef.current || pos,
+        endPos: snapped,
+        destPoint: destPoint ? { id: destPoint.id, x: destPoint.x, y: destPoint.y, name: destPoint.name, roomNumber: destPoint.roomNumber } : null,
       });
     };
     window.addEventListener('deviceorientationabsolute', updateHeading);
@@ -813,30 +817,22 @@ export default function UserMap() {
     // Preferred: follow computed polyline
     if (routePts && routePts.length >= 2) {
       const p = userPosRef.current;
-      let best = null;
+      // Find nearest polyline point, then aim to the next point to move forward along the route
+      let bestIdx = 0;
       let bestDist = Infinity;
-      for (let i = 0; i < routePts.length - 1; i++) {
-        const a = routePts[i];
-        const b = routePts[i + 1];
-      const abx = b.x - a.x;
-      const aby = b.y - a.y;
-      const apx = p.x - a.x;
-      const apy = p.y - a.y;
-      const denom = abx * abx + aby * aby;
-      const t = denom ? Math.max(0, Math.min(1, (apx * abx + apy * aby) / denom)) : 0;
-      const projx = a.x + abx * t;
-      const projy = a.y + aby * t;
-      const d = Math.hypot(p.x - projx, p.y - projy);
-      if (d < bestDist) {
-        bestDist = d;
-        const dirx = abx;
-        const diry = aby;
-        best = { x: dirx, y: diry };
+      for (let i = 0; i < routePts.length; i++) {
+        const d = Math.hypot(p.x - routePts[i].x, p.y - routePts[i].y);
+        if (d < bestDist) {
+          bestDist = d;
+          bestIdx = i;
+        }
       }
-      }
-      if (!best) return null;
-        const len = Math.hypot(best.x, best.y) || 1;
-      return { x: best.x / len, y: best.y / len };
+      const nextIdx = Math.min(bestIdx + 1, routePts.length - 1);
+      if (nextIdx === bestIdx) return null;
+      const vx = routePts[nextIdx].x - routePts[bestIdx].x;
+      const vy = routePts[nextIdx].y - routePts[bestIdx].y;
+      const len = Math.hypot(vx, vy) || 1;
+      return { x: vx / len, y: vy / len };
     }
     // Fallback 1: current plan step target (warp target)
     if (plan && plan.steps && plan.steps[plan.index] && plan.steps[plan.index].target) {
