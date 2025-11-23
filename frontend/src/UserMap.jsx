@@ -218,6 +218,7 @@ export default function UserMap() {
   const yawWindowRef = useRef([]);
   const startPosRef = useRef(null);
   const routeProgressRef = useRef(0);
+  const routeIdxRef = useRef(0);
   const recordDataRef = useRef([]);
   const recordStopTimerRef = useRef(null);
   const sensorBaselineRef = useRef({
@@ -891,7 +892,7 @@ export default function UserMap() {
     await computeRouteForStep(planObj.steps[0]);
   };
 
-  const clearRoute = () => { setRoutePts([]); setPlan(null); };
+  const clearRoute = () => { setRoutePts([]); setPlan(null); routePtsRef.current = []; routeProgressRef.current = 0; routeIdxRef.current = 0; };
 
   // Auto-warp when near target warp
   useEffect(() => {
