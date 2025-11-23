@@ -231,52 +231,36 @@ export default function UserMap() {
   const calibrationRef = useRef({ baseline: 0, samples: 0, done: false });
   const stepStateRef = useRef({ lastStepTs: 0, active: false });
   const gyroInitializedRef = useRef(false);
-  const simulateStep = (mag = 1.0, yaw = 0) => {
-    const pos = userPosRef.current;
-    if (!pos) { setSensorMsg("Set your position first."); return; }
-    const motionThreshold = 0.07;
-    const netMag = mag;
-    const baseStep = 0.001;
-    const speed = Math.min(0.007, baseStep + Math.max(0, netMag - motionThreshold) * 0.0003);
-    if (speed <= 0) return;
-    const lastStep = stepStateRef.current.lastStepTs || 0;
-    const nowMs = Date.now();
-    if (nowMs - lastStep < 300) return;
-    const bias = routeDirection();
-    if (!bias) { setSensorMsg("No route direction found (build a route first)."); return; }
-    const dx = bias.x * speed;
-    const dy = bias.y * speed;
-    const biasHeading = normalizeAngle((Math.atan2(bias.x, -bias.y) * 180) / Math.PI);
+  const simulateStep = () => {
+    const pts = routePtsRef.current && routePtsRef.current.length ? routePtsRef.current : (routePts || []);
+    if (!pts || !pts.length) { setSensorMsg("No route available; build a route first."); return; }
+    const nextIdx = Math.min(routeIdxRef.current + 1, pts.length - 1);
+    routeIdxRef.current = nextIdx;
+    const target = pts[nextIdx];
+    const prev = userPosRef.current || target;
+    const snapped = snapToWalkable(target.x, target.y);
+    setUserPos(snapped);
+    saveUserPos(selUrl, snapped);
+    const biasHeading = normalizeAngle((Math.atan2(target.x - prev.x, -(target.y - prev.y)) * 180) / Math.PI);
     headingRef.current = biasHeading;
     setDisplayHeading(quantizeHeading(biasHeading));
-    const nx = Math.min(1, Math.max(0, pos.x + dx));
-    const ny = Math.min(1, Math.max(0, pos.y + dy));
-    const snapped = snapToWalkable(nx, ny);
-    if (snapped.x !== pos.x || snapped.y !== pos.y) {
-      setUserPos(snapped);
-      saveUserPos(selUrl, snapped);
-    }
-    stepStateRef.current.lastStepTs = nowMs;
-    patchDebug({
-      heading: biasHeading,
-      stepDelta: speed,
-      lastStepTs: nowMs,
-    });
     logSample({
       kind: 'motion',
       heading: biasHeading,
-      yaw,
-      accelMagnitude: mag,
-      netMag,
-      usingLinear: true,
-      stepDelta: speed,
-      dt: 0.016,
-      position: { x: pos.x, y: pos.y },
-      startPos: startPosRef.current || pos,
+      yaw: 0,
+      accelMagnitude: 0,
+      netMag: 0,
+      usingLinear: false,
+      stepDelta: 0,
+      dt: 0,
+      position: prev,
+      startPos: startPosRef.current || prev,
       endPos: snapped,
       destPoint: dest ? { id: dest.id, url: dest.url } : null,
-      biasVec: bias,
+      biasVec: { x: target.x - prev.x, y: target.y - prev.y },
       snappedPos: snapped,
+      waypointIndex: nextIdx,
+      waypointTarget: target,
       simulated: true,
     }, true);
   };
@@ -892,6 +876,7 @@ export default function UserMap() {
     if (!path || path.length<2) { setRoutePts([]); return; }
     const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
     routeProgressRef.current = 0;
+    routeIdxRef.current = 0;
     routePtsRef.current = out;
     setRoutePts(out);
     setSensorMsg(`Route ready: ${out.length} points`);
