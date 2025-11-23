@@ -217,8 +217,6 @@ export default function UserMap() {
   const geoBufferRef = useRef([]);
   const yawWindowRef = useRef([]);
   const startPosRef = useRef(null);
-  const routeProgressRef = useRef(0);
-  const routeIdxRef = useRef(0);
   const recordDataRef = useRef([]);
   const recordStopTimerRef = useRef(null);
   const sensorBaselineRef = useRef({
@@ -232,39 +230,6 @@ export default function UserMap() {
   const calibrationRef = useRef({ baseline: 0, samples: 0, done: false });
   const stepStateRef = useRef({ lastStepTs: 0, active: false });
   const gyroInitializedRef = useRef(false);
-  const simulateStep = () => {
-    const pts = routePtsRef.current && routePtsRef.current.length ? routePtsRef.current : (routePts || []);
-    if (!pts || !pts.length) { setSensorMsg("No route available; build a route first."); return; }
-    const nextIdx = Math.min(routeIdxRef.current + 1, pts.length - 1);
-    routeIdxRef.current = nextIdx;
-    const target = pts[nextIdx];
-    const prev = userPosRef.current || target;
-    const snapped = snapToWalkable(target.x, target.y);
-    setUserPos(snapped);
-    saveUserPos(selUrl, snapped);
-    const biasHeading = normalizeAngle((Math.atan2(target.x - prev.x, -(target.y - prev.y)) * 180) / Math.PI);
-    headingRef.current = biasHeading;
-    setDisplayHeading(quantizeHeading(biasHeading));
-    logSample({
-      kind: 'motion',
-      heading: biasHeading,
-      yaw: 0,
-      accelMagnitude: 0,
-      netMag: 0,
-      usingLinear: false,
-      stepDelta: 0,
-      dt: 0,
-      position: prev,
-      startPos: startPosRef.current || prev,
-      endPos: snapped,
-      destPoint: dest ? { id: dest.id, url: dest.url } : null,
-      biasVec: { x: target.x - prev.x, y: target.y - prev.y },
-      snappedPos: snapped,
-      waypointIndex: nextIdx,
-      waypointTarget: target,
-      simulated: true,
-    }, true);
-  };
 
   const initSensorBaseline = () => {
     const now =
@@ -598,181 +563,7 @@ export default function UserMap() {
     return () => window.removeEventListener('keydown', onKey);
   }, [userPos, moveStep, selUrl]);
 
-  useEffect(() => {
-    if (!sensorTracking) return;
-    if (!userPosRef.current) {
-      setSensorTracking(false);
-      setSensorMsg("Place yourself on the map first.");
-      return;
-    }
-    if (!sensorBaselineRef.current.ready && sensorBaselineRef.current.samples === 0) {
-      initSensorBaseline();
-    }
-    const updateHeading = (event) => {
-      const motionActive = motionIdleRef.current < 0.5; // motion-gated: prefer heading changes when moving
-      const baseAlpha = motionActive ? 0.18 : 0.08;
-      const routeHeading = routeHeadingDeg();
-      if (routeHeading != null) {
-        headingRef.current = routeHeading;
-      } else if (typeof event.webkitCompassHeading === 'number') {
-        const limited = limitHeadingRate(headingRef.current, event.webkitCompassHeading);
-        const withOffset = applyHeadingOffset(limited);
-        headingRef.current = smoothHeading(headingRef.current, withOffset, baseAlpha);
-      } else if (typeof event.alpha === 'number') {
-        const limited = limitHeadingRate(headingRef.current, 360 - event.alpha);
-        const withOffset = applyHeadingOffset(limited);
-        headingRef.current = smoothHeading(headingRef.current, withOffset, baseAlpha);
-      }
-      const stableGeo = geoStableHeading();
-      if (stableGeo != null && gyroCalm()) {
-        const limitedGeo = limitHeadingRate(headingRef.current, applyHeadingOffset(stableGeo));
-        headingRef.current = smoothHeading(headingRef.current, limitedGeo, motionActive ? 0.25 : 0.15);
-      }
-      const displayed = updateDisplayedHeading();
-      patchDebug({
-        compassHeading: headingRef.current || 0,
-        heading: displayed || headingRef.current || 0,
-      });
-      logSample({
-        kind: 'orientation',
-        heading: headingRef.current || 0,
-        displayHeading,
-        compass: headingRef.current || 0,
-        yaw: 0,
-      });
-    };
-    const handleMotion = (event) => {
-      const pos = userPosRef.current;
-      if (!pos) return;
-      const hasLinear =
-        event.acceleration &&
-        (typeof event.acceleration.x === 'number' ||
-          typeof event.acceleration.y === 'number' ||
-          typeof event.acceleration.z === 'number');
-      const acc = hasLinear
-        ? event.acceleration
-        : event.accelerationIncludingGravity || event.acceleration;
-      if (!acc) return;
-      const { ax: rawAx, ay: rawAy, az: rawAz, mag: rawMag } = normalizeAccel(acc);
-      const baseline = sensorBaselineRef.current;
-      let ax = rawAx;
-      let ay = rawAy;
-      let az = rawAz;
-      const rot = event.rotationRate || {};
-      const yaw =
-        rot.alpha ??
-        rot.beta ??
-        rot.gamma ??
-        0;
-      yawWindowRef.current = [...(yawWindowRef.current || []), { ts: Date.now(), yaw }];
-      if (!baseline.ready) {
-        baseline.samples += 1;
-        baseline.ax += ax;
-        baseline.ay += ay;
-        baseline.az += az;
-        const elapsed = (performance.now() - baseline.start) / 1000;
-        patchDebug({
-          baselineSamples: baseline.samples,
-          baselineReady: false,
-          accelMagnitude: Math.sqrt(ax * ax + ay * ay + az * az),
-          yaw,
-        });
-        if (baseline.samples >= 60 || elapsed >= 1.5) {
-          baseline.ax /= baseline.samples;
-          baseline.ay /= baseline.samples;
-          baseline.az /= baseline.samples;
-          baseline.ready = true;
-        }
-        return;
-      }
-      ax -= baseline.ax;
-      ay -= baseline.ay;
-      az -= baseline.az;
-      let mag = Math.sqrt(ax * ax + ay * ay + az * az);
-      if (mag > 3.5) mag = mag / 9.81;
-      const netMag = hasLinear ? mag : Math.max(0, mag - 1); // strip gravity when using includingGravity
-      const now = event.timeStamp || performance.now();
-      const lastTs = lastMotionTsRef.current || now;
-      const dt = Math.min(0.3, Math.max(0.016, (now - lastTs) / 1000));
-      lastMotionTsRef.current = now;
-      patchDebug({
-        baselineSamples: baseline.samples,
-        baselineReady: true,
-        accelMagnitude: mag,
-        yaw,
-      });
-      const motionThreshold = 0.07;
-      const stillYaw = Math.abs(yaw) < 2;
-      if (netMag < motionThreshold || stillYaw) {
-        motionIdleRef.current += dt;
-        if (!hasLinear && netMag < 0.05 && Math.abs(yaw) < 1 && motionIdleRef.current > 1) {
-          initSensorBaseline();
-          patchDebug({ baselineSamples: 0, baselineReady: false });
-        }
-        return;
-      }
-      motionIdleRef.current = 0;
-      const baseStep = 0.001; // always move at least a small amount once threshold is crossed
-      const speed = Math.min(0.007, baseStep + Math.max(0, netMag - motionThreshold) * 0.0003);
-      if (speed <= 0) return;
-      const lastStep = stepStateRef.current.lastStepTs || 0;
-      const nowMs = Date.now();
-      if (nowMs - lastStep < 300) {
-        return; // refractory period: ignore rapid successive "steps"
-      }
-      const bias = routeDirection();
-      const pts = routePtsRef.current && routePtsRef.current.length ? routePtsRef.current : (routePts || []);
-      if (!pts || !pts.length) {
-        setSensorMsg("No route available; build a route first.");
-        console.warn("Route unavailable at step time", { routePts, routePtsRef: routePtsRef.current });
-        return;
-      }
-      // Advance along waypoints; clamp to last
-      const nextIdx = Math.min(routeProgressRef.current + 1, pts.length - 1);
-      const target = pts[nextIdx];
-      routeProgressRef.current = nextIdx;
-      const snapped = snapToWalkable(target.x, target.y);
-      const biasHeading = normalizeAngle((Math.atan2(target.x - pos.x, -(target.y - pos.y)) * 180) / Math.PI);
-      headingRef.current = biasHeading;
-      setDisplayHeading(quantizeHeading(biasHeading));
-      setUserPos(snapped);
-      saveUserPos(selUrl, snapped);
-      const destPoint = (floor?.points || []).find((pt) => pt.id === dest?.id);
-      patchDebug({
-        heading: biasHeading,
-        stepDelta: speed,
-        lastStepTs: nowMs,
-      });
-      stepStateRef.current.lastStepTs = nowMs;
-      logSample({
-        kind: 'motion',
-      heading: biasHeading,
-      yaw,
-      accelMagnitude: mag,
-      netMag,
-      usingLinear: hasLinear,
-      stepDelta: speed,
-      dt,
-      position: { x: pos.x, y: pos.y },
-      startPos: startPosRef.current || pos,
-      endPos: snapped,
-      destPoint: destPoint ? { id: destPoint.id, x: destPoint.x, y: destPoint.y, name: destPoint.name, roomNumber: destPoint.roomNumber } : null,
-      biasVec: target ? { x: target.x - pos.x, y: target.y - pos.y } : null,
-      snappedPos: snapped,
-      waypointIndex: nextIdx,
-    }, false);
-  };
-    window.addEventListener('deviceorientationabsolute', updateHeading);
-    window.addEventListener('deviceorientation', updateHeading);
-    window.addEventListener('devicemotion', handleMotion);
-    setSensorMsg("Tracking phone motion...");
-    return () => {
-      window.removeEventListener('deviceorientationabsolute', updateHeading);
-      window.removeEventListener('deviceorientation', updateHeading);
-      window.removeEventListener('devicemotion', handleMotion);
-      lastMotionTsRef.current = null;
-    };
-  }, [sensorTracking, selUrl, snapToWalkable]);
+  useEffect(() => {}, [sensorTracking, selUrl, snapToWalkable]);
 
   // Helpers similar to editor for routing
   const normHex = (s) => {
@@ -876,8 +667,6 @@ export default function UserMap() {
     const path = bfs(grid,gw,gh,sCell,tCell, Math.max(0,Math.floor(gapCells)));
     if (!path || path.length<2) { setRoutePts([]); return; }
     const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
-    routeProgressRef.current = 0;
-    routeIdxRef.current = 0;
     routePtsRef.current = out;
     setRoutePts(out);
     setSensorMsg(`Route ready: ${out.length} points`);
@@ -892,7 +681,7 @@ export default function UserMap() {
     await computeRouteForStep(planObj.steps[0]);
   };
 
-  const clearRoute = () => { setRoutePts([]); setPlan(null); routePtsRef.current = []; routeProgressRef.current = 0; routeIdxRef.current = 0; };
+  const clearRoute = () => { setRoutePts([]); setPlan(null); routePtsRef.current = []; };
 
   // Auto-warp when near target warp
   useEffect(() => {
@@ -954,13 +743,6 @@ export default function UserMap() {
             title="Toggle sensor debugger"
           >
             {debugVisible ? "Hide debug" : "Show debug"}
-          </button>
-          <button
-            className="btn btn-sm btn-outline-primary"
-            onClick={() => simulateStep(1.2, 0)}
-            title="Simulate a step (desktop debugging)"
-          >
-            Simulated step
           </button>
           <button
             className="btn btn-sm btn-outline-secondary"
