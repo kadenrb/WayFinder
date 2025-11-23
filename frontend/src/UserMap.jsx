@@ -632,7 +632,7 @@ export default function UserMap() {
     return headingRef.current || 0;
   };
 
-  const stepWaypoint = () => {
+  const stepWaypoint = async () => {
     const pts = waypointPtsRef.current && waypointPtsRef.current.length ? waypointPtsRef.current : waypoints;
     if (!pts || !pts.length) { setSensorMsg("No route available; build a route first."); return; }
     let currentIdx = typeof waypointIdxRef.current === 'number' ? waypointIdxRef.current : 0;
@@ -642,7 +642,11 @@ export default function UserMap() {
     const target = pts[nextIdx];
     setUserPos(target);
     saveUserPos(selUrl, target);
+    userPosRef.current = target;
     setSensorMsg(`Moved to waypoint ${nextIdx + 1}/${pts.length}`);
+    if (dest) {
+      await computeRouteForStep({ kind: 'dest' }, target);
+    }
   };
 
   // Build a cross-floor plan from current floor to destination floor using shared warp keys
@@ -663,7 +667,7 @@ export default function UserMap() {
     return chain.map((u,i)=>({ url:u, kind: i===chain.length-1? 'dest':'warp' }));
   };
 
-  const computeRouteForStep = async (step) => {
+  const computeRouteForStep = async (step, startPosOverride = null) => {
     const curFloor = floors.find(f=>f.url===selUrl); if (!curFloor) return;
     const img = imgRef.current; if (!img || !img.naturalWidth) { setSensorMsg("Image not ready for routing."); return; }
     let gridObj;
@@ -676,8 +680,10 @@ export default function UserMap() {
       return;
     }
     const {grid,gw,gh,step:stp,w,h}=gridObj;
-    const ux = Math.max(0, Math.min(gw-1, Math.round((userPos.x*w)/stp)));
-    const uy = Math.max(0, Math.min(gh-1, Math.round((userPos.y*h)/stp)));
+    const startPos = startPosOverride || userPos;
+    if (!startPos) { setRoutePts([]); return; }
+    const ux = Math.max(0, Math.min(gw-1, Math.round((startPos.x*w)/stp)));
+    const uy = Math.max(0, Math.min(gh-1, Math.round((startPos.y*h)/stp)));
     const sCell = nearestWalkable(grid,gw,gh,ux,uy); if (!sCell) { setRoutePts([]); return; }
     let target = null;
     if (step.kind==='dest') {
@@ -719,7 +725,7 @@ export default function UserMap() {
     const steps = makePlan(selUrl, destFloor.url);
     const planObj = { steps, index: 0 };
     setPlan(planObj);
-    await computeRouteForStep(planObj.steps[0]);
+    await computeRouteForStep(planObj.steps[0], userPos);
   };
 
   const clearRoute = () => { setRoutePts([]); setPlan(null); routePtsRef.current = []; waypointPtsRef.current = []; setWaypoints([]); waypointIdxRef.current = 0; };
