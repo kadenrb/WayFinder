@@ -40,6 +40,10 @@ export default function UserMap() {
   const [dest, setDest] = useState(null); // { url, id }
   const [routePts, setRoutePts] = useState([]);
   const routePtsRef = useRef([]);
+  const waypointPtsRef = useRef([]);
+  const waypointIdxRef = useRef(0);
+  const [waypoints, setWaypoints] = useState([]);
+  const waypointIdxRef = useRef(0);
   // ---------------------------------------------------------------------------
   // SENSOR LOOP
   // Listens for magnetometer/orientation/motion events and moves the marker.
@@ -99,6 +103,16 @@ export default function UserMap() {
     if (heading < 0) heading += 360;
     if (heading >= 360) heading -= 360;
     return heading;
+  };
+  const stepWaypoint = () => {
+    const pts = routePtsRef.current && routePtsRef.current.length ? routePtsRef.current : (routePts || []);
+    if (!pts || !pts.length) { setSensorMsg("No route available; build a route first."); return; }
+    const nextIdx = Math.min((waypointIdxRef.current || 0) + 1, pts.length - 1);
+    waypointIdxRef.current = nextIdx;
+    const target = pts[nextIdx];
+    setUserPos(target);
+    saveUserPos(selUrl, target);
+    setSensorMsg(`Moved to waypoint ${nextIdx + 1}/${pts.length}`);
   };
 
   const quantizeHeading = (value) =>
@@ -599,6 +613,27 @@ export default function UserMap() {
     if (prev[tIdx]===-1 && sIdx!==tIdx) return null; const out=[]; for(let cur=tIdx;cur!==-1;cur=prev[cur]){ const x=cur%gw, y=(cur/gw)|0; out.push([x,y]); if(cur===sIdx) break; } out.reverse(); return out;
   };
 
+  // Build evenly spaced waypoints along a route polyline (normalized coords)
+  const buildWaypoints = (pts, spacingNorm = 1/700) => {
+    if (!pts || pts.length < 2) return [];
+    const out = [pts[0]];
+    let acc = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+      let t = spacingNorm - acc;
+      while (t <= segLen) {
+        const ratio = t / segLen;
+        out.push({ x: a.x + (b.x - a.x) * ratio, y: a.y + (b.y - a.y) * ratio });
+        t += spacingNorm;
+      }
+      acc = segLen + acc - Math.floor((segLen + acc) / spacingNorm) * spacingNorm;
+    }
+    if (out[out.length - 1] !== pts[pts.length - 1]) out.push(pts[pts.length - 1]);
+    return out;
+  };
+
   const routeDirection = () => {
     return null;
   };
@@ -606,6 +641,18 @@ export default function UserMap() {
   const routeHeadingDeg = () => {
     // Route-locked mode uses waypoint progression; heading is updated when stepping.
     return headingRef.current || 0;
+  };
+
+  const stepWaypoint = () => {
+    const pts = waypointPtsRef.current && waypointPtsRef.current.length ? waypointPtsRef.current : waypoints;
+    if (!pts || !pts.length) { setSensorMsg("No route available; build a route first."); return; }
+    const currentIdx = typeof waypointIdxRef.current === 'number' ? waypointIdxRef.current : pts.length - 1;
+    const nextIdx = Math.max(currentIdx - 1, 0);
+    waypointIdxRef.current = nextIdx;
+    const target = pts[nextIdx];
+    setUserPos(target);
+    saveUserPos(selUrl, target);
+    setSensorMsg(`Moved to waypoint ${nextIdx + 1}/${pts.length}`);
   };
 
   // Build a cross-floor plan from current floor to destination floor using shared warp keys
@@ -668,6 +715,10 @@ export default function UserMap() {
     if (!path || path.length<2) { setRoutePts([]); return; }
     const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
     routePtsRef.current = out;
+    const wp = buildWaypoints(out);
+    waypointIdxRef.current = wp.length ? wp.length - 1 : 0; // start at user end of the path
+    waypointPtsRef.current = wp;
+    setWaypoints(wp);
     setRoutePts(out);
     setSensorMsg(`Route ready: ${out.length} points`);
   };
@@ -681,7 +732,7 @@ export default function UserMap() {
     await computeRouteForStep(planObj.steps[0]);
   };
 
-  const clearRoute = () => { setRoutePts([]); setPlan(null); routePtsRef.current = []; };
+  const clearRoute = () => { setRoutePts([]); setPlan(null); routePtsRef.current = []; waypointPtsRef.current = []; setWaypoints([]); waypointIdxRef.current = 0; };
 
   // Auto-warp when near target warp
   useEffect(() => {
@@ -729,6 +780,9 @@ export default function UserMap() {
           </select>
           <button className={`btn btn-sm ${placing? 'btn-warning':'btn-outline-warning'}`} onClick={()=> setPlacing(p=>!p)}>
             {placing ? "Click map: I'm here" : "I'm here"}
+          </button>
+          <button className="btn btn-sm btn-outline-primary" onClick={stepWaypoint} title="Advance to next route waypoint">
+            Step route
           </button>
           <button
             className={`btn btn-sm ${sensorTracking ? 'btn-success' : 'btn-outline-success'}`}
@@ -858,20 +912,36 @@ export default function UserMap() {
                   </div>
                 );})()}
 
-                {(Array.isArray(floor.points)?floor.points:[]).map(p=>{ const pos=toPx(p.x,p.y); const size=8; const isDest = dest && dest.id===p.id; return (
-                  <div key={p.id}
-                    className={`position-absolute rounded-circle ${markerClass(p.kind)} ${isDest?'border border-light':''}`}
-                    style={{ left: pos.x-size/2, top: pos.y-size/2, width:size, height:size, cursor:'pointer' }}
-                    title={(p.roomNumber?`#${p.roomNumber} `:'') + (p.name||p.poiType||p.kind)}
-                    onClick={()=> setDest({ url: selUrl, id: p.id })}
-                  />
-                );})}
+        {(Array.isArray(floor.points)?floor.points:[]).map(p=>{ const pos=toPx(p.x,p.y); const size=8; const isDest = dest && dest.id===p.id; return (
+          <div key={p.id}
+            className={`position-absolute rounded-circle ${markerClass(p.kind)} ${isDest?'border border-light':''}`}
+            style={{ left: pos.x-size/2, top: pos.y-size/2, width:size, height:size, cursor:'pointer' }}
+            title={(p.roomNumber?`#${p.roomNumber} `:'') + (p.name||p.poiType||p.kind)}
+            onClick={()=> setDest({ url: selUrl, id: p.id })}
+          />
+        );})}
 
-                {routePts && routePts.length>1 && (
-                  <svg className="position-absolute" width={natSize.w} height={natSize.h} style={{ left:0, top:0, pointerEvents:'none' }}>
-                    <polyline points={routePts.map(p=>`${p.x*natSize.w},${p.y*natSize.h}`).join(' ')} fill="none" stroke="#00D1FF" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="8 10" style={{ animation:'routeDash 1.5s linear infinite' }} />
-                    <polyline points={routePts.map(p=>`${p.x*natSize.w},${p.y*natSize.h}`).join(' ')} fill="none" stroke="rgba(0,209,255,0.35)" strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="12 14" style={{ filter:'blur(1px)', animation:'routeDash 1.5s linear infinite' }} />
-                  </svg>
+        {waypoints && waypoints.length>0 && (
+          <div className="position-absolute" style={{ left:0, top:0, width: natSize.w, height: natSize.h, pointerEvents:'none' }}>
+            {waypoints.map((pt, idx)=>{ const pos=toPx(pt.x, pt.y); const size=4; return (
+              <div key={`wp-${idx}`} style={{
+                position:'absolute',
+                left: pos.x-size/2,
+                top: pos.y-size/2,
+                width:size,
+                height:size,
+                borderRadius:'50%',
+                background:'rgba(0,123,255,0.15)',
+              }} />
+            );})}
+          </div>
+        )}
+
+        {routePts && routePts.length>1 && (
+          <svg className="position-absolute" width={natSize.w} height={natSize.h} style={{ left:0, top:0, pointerEvents:'none' }}>
+            <polyline points={routePts.map(p=>`${p.x*natSize.w},${p.y*natSize.h}`).join(' ')} fill="none" stroke="#00D1FF" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="8 10" style={{ animation:'routeDash 1.5s linear infinite' }} />
+            <polyline points={routePts.map(p=>`${p.x*natSize.w},${p.y*natSize.h}`).join(' ')} fill="none" stroke="rgba(0,209,255,0.35)" strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="12 14" style={{ filter:'blur(1px)', animation:'routeDash 1.5s linear infinite' }} />
+          </svg>
                 )}
               </div>
             </div>
