@@ -715,7 +715,13 @@ export default function UserMap() {
     if (!path || path.length<2) { setRoutePts([]); return; }
     const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
     routePtsRef.current = out;
-    const wp = buildWaypoints(out);
+    let wp = buildWaypoints(out);
+    const startPt = wp[0];
+    const endPt = wp[wp.length - 1];
+    const userPt = userPos || startPt;
+    const dStart = Math.hypot((startPt?.x || 0) - (userPt?.x || 0), (startPt?.y || 0) - (userPt?.y || 0));
+    const dEnd = Math.hypot((endPt?.x || 0) - (userPt?.x || 0), (endPt?.y || 0) - (userPt?.y || 0));
+    if (dEnd < dStart) wp = [...wp].reverse();
     waypointIdxRef.current = 0; // start at beginning of path (user side)
     waypointPtsRef.current = wp;
     setWaypoints(wp);
