@@ -41,7 +41,6 @@ export default function UserMap() {
   const [routePts, setRoutePts] = useState([]);
   const routePtsRef = useRef([]);
   const waypointPtsRef = useRef([]);
-  const waypointIdxRef = useRef(0);
   const [waypoints, setWaypoints] = useState([]);
   const waypointIdxRef = useRef(0);
   // ---------------------------------------------------------------------------
