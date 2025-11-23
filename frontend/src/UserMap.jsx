@@ -736,9 +736,10 @@ export default function UserMap() {
         return; // refractory period: ignore rapid successive "steps"
       }
       const bias = routeDirection();
-      const pts = routePtsRef.current || routePts || [];
-      if (!pts.length) {
+      const pts = routePtsRef.current && routePtsRef.current.length ? routePtsRef.current : (routePts || []);
+      if (!pts || !pts.length) {
         setSensorMsg("No route available; build a route first.");
+        console.warn("Route unavailable at step time", { routePts, routePtsRef: routePtsRef.current });
         return;
       }
       // Advance along waypoints; clamp to last
