@@ -45,6 +45,7 @@ export class StepDetector {
   constructor(options = {}) {
     this.sampleIntervalMs = options.sampleIntervalMs || 50; // expected interval between samples
     this.windowMs = options.windowMs || 2000; // window for statistics
+    this.minRangeG = options.minRangeG || 0.25; // minimum accel range (g) to consider a step
     this.g = 9.80665;
     this.windowSize = Math.max(4, Math.round(this.windowMs / this.sampleIntervalMs));
     this.accWindow = [];
@@ -109,6 +110,7 @@ export class StepDetector {
     const last = this.accWindow[this.accWindow.length - 1];
     const prev = this.accWindow[this.accWindow.length - 2];
     const diff = max - min;
+    if (diff < this.minRangeG) return false; // reject very small motion (desk/idle)
     const isSensibility = Math.abs(diff) >= this.sensibility;
     const isOverThreshold = (last >= this.threshold) && (prev < this.threshold);
     const isValidStep = this.stepWindow[this.stepWindow.length - 1] === 0;
