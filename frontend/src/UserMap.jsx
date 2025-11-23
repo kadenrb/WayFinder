@@ -710,7 +710,7 @@ export default function UserMap() {
     waypointPtsRef.current = wp;
     setWaypoints(wp);
     setRoutePts(out);
-    setSensorMsg(`Route ready: ${out.length} points`);
+    setSensorMsg(`Route ready: ${out.length} points, waypoints: ${wp.length}`);
   };
 
   const startRoute = async () => {
