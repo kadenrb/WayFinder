@@ -229,6 +229,50 @@ export default function UserMap() {
   const calibrationRef = useRef({ baseline: 0, samples: 0, done: false });
   const stepStateRef = useRef({ lastStepTs: 0, active: false });
   const gyroInitializedRef = useRef(false);
+  const simulateStep = (mag = 1.0, yaw = 0) => {
+    const pos = userPosRef.current;
+    if (!pos) return;
+    const motionThreshold = 0.07;
+    const netMag = mag;
+    const baseStep = 0.001;
+    const speed = Math.min(0.007, baseStep + Math.max(0, netMag - motionThreshold) * 0.0003);
+    if (speed <= 0) return;
+    const lastStep = stepStateRef.current.lastStepTs || 0;
+    const nowMs = Date.now();
+    if (nowMs - lastStep < 300) return;
+    const bias = routeDirection();
+    if (!bias) return;
+    const dx = bias.x * speed;
+    const dy = bias.y * speed;
+    const biasHeading = normalizeAngle((Math.atan2(bias.x, -bias.y) * 180) / Math.PI);
+    headingRef.current = biasHeading;
+    setDisplayHeading(quantizeHeading(biasHeading));
+    const nx = Math.min(1, Math.max(0, pos.x + dx));
+    const ny = Math.min(1, Math.max(0, pos.y + dy));
+    const snapped = snapToWalkable(nx, ny);
+    if (snapped.x !== pos.x || snapped.y !== pos.y) {
+      setUserPos(snapped);
+      saveUserPos(selUrl, snapped);
+    }
+    stepStateRef.current.lastStepTs = nowMs;
+    patchDebug({
+      heading: biasHeading,
+      stepDelta: speed,
+      lastStepTs: nowMs,
+    });
+    logSample({
+      kind: 'motion',
+      heading: biasHeading,
+      yaw,
+      accelMagnitude: mag,
+      netMag,
+      usingLinear: true,
+      stepDelta: speed,
+      dt: 0.016,
+      position: { x: pos.x, y: pos.y },
+      simulated: true,
+    });
+  };
 
   const initSensorBaseline = () => {
     const now =
@@ -574,7 +618,10 @@ export default function UserMap() {
     const updateHeading = (event) => {
       const motionActive = motionIdleRef.current < 0.5; // motion-gated: prefer heading changes when moving
       const baseAlpha = motionActive ? 0.18 : 0.08;
-      if (typeof event.webkitCompassHeading === 'number') {
+      const routeHeading = routeHeadingDeg();
+      if (routeHeading != null) {
+        headingRef.current = routeHeading;
+      } else if (typeof event.webkitCompassHeading === 'number') {
         const limited = limitHeadingRate(headingRef.current, event.webkitCompassHeading);
         const withOffset = applyHeadingOffset(limited);
         headingRef.current = smoothHeading(headingRef.current, withOffset, baseAlpha);
@@ -672,7 +719,6 @@ export default function UserMap() {
         return;
       }
       motionIdleRef.current = 0;
-      const heading = headingRef.current || 0;
       const baseStep = 0.001; // always move at least a small amount once threshold is crossed
       const speed = Math.min(0.007, baseStep + Math.max(0, netMag - motionThreshold) * 0.0003);
       if (speed <= 0) return;
@@ -685,6 +731,9 @@ export default function UserMap() {
       if (!bias) return; // no active route: ignore movement
       const dx = bias.x * speed;
       const dy = bias.y * speed;
+      const biasHeading = normalizeAngle((Math.atan2(bias.x, -bias.y) * 180) / Math.PI);
+      headingRef.current = biasHeading;
+      setDisplayHeading(quantizeHeading(biasHeading));
       const nx = Math.min(1, Math.max(0, pos.x + dx));
       const ny = Math.min(1, Math.max(0, pos.y + dy));
       const snapped = snapToWalkable(nx, ny);
@@ -757,13 +806,14 @@ export default function UserMap() {
   };
 
   const routeDirection = () => {
-    if (!routePts || routePts.length < 2 || !userPosRef.current) return null;
-    const p = userPosRef.current;
-    let best = null;
-    let bestDist = Infinity;
-    for (let i = 0; i < routePts.length - 1; i++) {
-      const a = routePts[i];
-      const b = routePts[i + 1];
+    if (!userPosRef.current) return null;
+    if (routePts && routePts.length >= 2) {
+      const p = userPosRef.current;
+      let best = null;
+      let bestDist = Infinity;
+      for (let i = 0; i < routePts.length - 1; i++) {
+        const a = routePts[i];
+        const b = routePts[i + 1];
       const abx = b.x - a.x;
       const aby = b.y - a.y;
       const apx = p.x - a.x;
@@ -779,10 +829,31 @@ export default function UserMap() {
         const diry = aby;
         best = { x: dirx, y: diry };
       }
+      }
+      if (!best) return null;
+      const len = Math.hypot(best.x, best.y) || 1;
+      return { x: best.x / len, y: best.y / len };
     }
-    if (!best) return null;
-    const len = Math.hypot(best.x, best.y) || 1;
-    return { x: best.x / len, y: best.y / len };
+    // Fallback: use destination direction if on same floor and no route polyline yet
+    const p = userPosRef.current;
+    if (dest && floor && dest.url === selUrl) {
+      const pt = (floor.points || []).find((pt) => pt.id === dest.id);
+      if (pt) {
+        const vx = pt.x - p.x;
+        const vy = pt.y - p.y;
+        const len = Math.hypot(vx, vy) || 1;
+        return { x: vx / len, y: vy / len };
+      }
+    }
+    return null;
+  };
+
+  const routeHeadingDeg = () => {
+    const dir = routeDirection();
+    if (!dir) return null;
+    // Convert normalized direction vector (x right, y down) to heading degrees (0=north)
+    const rad = Math.atan2(dir.x, -dir.y);
+    return normalizeAngle((rad * 180) / Math.PI);
   };
 
   // Build a cross-floor plan from current floor to destination floor using shared warp keys
@@ -910,6 +981,13 @@ export default function UserMap() {
             title="Toggle sensor debugger"
           >
             {debugVisible ? "Hide debug" : "Show debug"}
+          </button>
+          <button
+            className="btn btn-sm btn-outline-primary"
+            onClick={() => simulateStep(1.2, 0)}
+            title="Simulate a step (desktop debugging)"
+          >
+            Simulated step
           </button>
           <button
             className="btn btn-sm btn-outline-secondary"
