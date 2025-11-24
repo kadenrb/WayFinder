@@ -825,57 +825,13 @@ export default function UserMap() {
           <button className={`btn btn-sm ${placing? 'btn-warning':'btn-outline-warning'}`} onClick={()=> setPlacing(p=>!p)}>
             {placing ? "Click map: I'm here" : "I'm here"}
           </button>
-          <button className="btn btn-sm btn-outline-primary" onClick={stepWaypoint} title="Advance to next route waypoint">
-            Step route
-          </button>
           <button
             className={`btn btn-sm ${sensorTracking ? 'btn-success' : 'btn-outline-success'}`}
             onClick={() => sensorTracking ? stopSensorTracking() : startSensorTracking()}
-            title="Use phone sensors (motion + compass) to move the marker"
+            title="Start/finish sensor tracking"
           >
-            {sensorTracking ? "Stop tracking" : "Use phone sensors"}
+            {sensorTracking ? "Finish" : "Start"}
           </button>
-          <button
-            className={`btn btn-sm ${debugVisible ? 'btn-dark' : 'btn-outline-dark'}`}
-            onClick={() => setDebugVisible((v) => !v)}
-            title="Toggle sensor debugger"
-          >
-            {debugVisible ? "Hide debug" : "Show debug"}
-          </button>
-          <button
-            className="btn btn-sm btn-outline-secondary"
-            onClick={() => { saveHeadingOffset(0); setSensorMsg("Heading offset reset."); }}
-            title="Clear heading offset"
-          >
-            Reset heading
-          </button>
-          <button
-            className="btn btn-sm btn-outline-secondary"
-            onClick={() => { saveHeadingOffset(-(headingRef.current||0)); setSensorMsg("Heading calibrated to north."); updateDisplayedHeading(); }}
-            title="Face north and tap to calibrate"
-          >
-            Calibrate north
-          </button>
-          <div className="d-flex align-items-center gap-1" style={{ minWidth: 190 }}>
-            <span className="small text-muted">Rec (s)</span>
-            <input
-              type="number"
-              min="1"
-              max="120"
-              className="form-control form-control-sm"
-              style={{ width: 70 }}
-              value={recordDuration}
-              onChange={(e)=> setRecordDuration(Number(e.target.value) || 10)}
-              title="Recording duration (seconds)"
-            />
-            <button
-              className={`btn btn-sm ${recording ? 'btn-danger' : 'btn-outline-danger'}`}
-              onClick={()=> recording ? stopRecording(true) : startRecording()}
-              title="Capture sensor samples and download JSON"
-            >
-              {recording ? "Stop & download" : "Record"}
-            </button>
-          </div>
           <input className="form-control form-control-sm" placeholder="Search room (e.g., B500)" value={searchText} onChange={(e)=> setSearchText(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') searchRoom(); }} style={{ maxWidth: 180 }} />
           <button className="btn btn-sm btn-outline-primary" onClick={searchRoom}>Search</button>
         </div>
@@ -997,17 +953,6 @@ export default function UserMap() {
         <div className="d-flex align-items-center gap-2 mt-2">
           <button className="btn btn-primary btn-sm" onClick={startRoute} disabled={!userPos || !dest}>Route</button>
           <button className="btn btn-outline-secondary btn-sm" onClick={clearRoute} disabled={!routePts.length}>Clear</button>
-          <div className="d-flex align-items-center small text-muted" style={{ gap: 8 }}>
-            <span>Gap</span>
-            <input type="range" min="0" max="5" step="1" value={gapCells} onChange={(e)=> setGapCells(parseInt(e.target.value)||0)} style={{ width: 80 }} />
-            <span>{gapCells}</span>
-          </div>
-          <button className={`btn btn-${autoWarp?'info':'outline-info'} btn-sm`} onClick={()=> setAutoWarp(v=>!v)}>Auto warp: {autoWarp?'On':'Off'}</button>
-          <div className="d-flex align-items-center small text-muted" style={{ gap: 8 }}>
-            <span>Step</span>
-            <input type="range" min="0.002" max="0.03" step="0.001" value={moveStep} onChange={(e)=> setMoveStep(parseFloat(e.target.value)||0.01)} style={{ width: 120 }} />
-            <span>{moveStep.toFixed(3)}</span>
-          </div>
           {searchMsg && <span className="small text-muted">{searchMsg}</span>}
         </div>
         {sensorMsg && <div className="small text-muted mt-2">{sensorMsg}</div>}
