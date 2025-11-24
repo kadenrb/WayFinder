@@ -7,13 +7,29 @@ import logo from "./images/logo.png";
 import MapPreview from "./MapPreview";
 import UserMap from "./UserMap";
 import { Link, useNavigate } from "react-router-dom";
+import Select from "react-select";
+
 function App() {
   const [promptEmail, setPromptEmail] = useState(false); // Controls display of email signup modal
   const [deleteEmail, setDeleteEmail] = useState(false); // Controls display of email delete modal
   const [userEmail, setUserEmail] = useState(""); // Stores user email input
-  const [location, setLocation] = useState(""); // Stores user location selection
+  const [location, setLocation] = useState([]); // Stores user location selection
   const [showToast, setShowToast] = useState(false); // Controls display of notification toast
   const [toastMessage, setToastMessage] = useState(""); // Stores notification message
+  const options = [
+    // Location options for multi-select
+    { value: "RDP", label: "Red Deer Polytechnic" },
+    { value: "GaryWHarris", label: "Gary W. Harris Canada Games Centre" },
+    { value: "CollicuttCentre", label: "Collicutt Centre" },
+    { value: "MichenerAquatic", label: "Michener Aquatic Centre" },
+    { value: "ServusArena", label: "Servus Arena" },
+    { value: "Centrium", label: "Marchant Crane Centrium" },
+    { value: "RedDeerMAG", label: "Red Deer Museum & Art Gallery" },
+    { value: "KerryWood", label: "Kerry Wood Nature Centre" },
+    { value: "FortNormandeau", label: "Fort Normandeau Interpretation Site" },
+    { value: "ÉcoleNotreDame", label: "École Notre Dame High School" },
+    { value: "RossBusinessPark", label: "Ross Business Park" },
+  ];
 
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -120,7 +136,7 @@ function App() {
             className="display-3 fw-bold text-shadow mb-3 d-flex align-items-center 
                 justify-content-center justify-content-start"
           >
-            <img src={logo} alt="WayFinder Logo" className="me-2" />
+            <img src={logo} alt="WayFinder Logo" className="me-2 logo-img" />
             <span className="text-blue">Way</span>
             <span className="text-orange">Finder</span>
           </div>
@@ -142,50 +158,101 @@ function App() {
         </header>
       </div>
       {/* Signup bootstrap modal */}
+      {/* NOTIFY MODAL */}
       {promptEmail && (
         <div
-          className="modal fade show d-block"
-          tabIndex="-1"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          aria-modal="true"
+          role="dialog"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1050,
+            backgroundColor: "rgba(0,0,0,0.45)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: "1rem",
+            overflowY: "auto",
+          }}
         >
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header bg-head">
-                <h5 className="modal-title text-white">
-                  Enter Your Email & Location to Get Notified
-                </h5>
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              background: "var(--bs-body-bg, #fff)",
+              borderRadius: 12,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {/* Header */}
+            <div
+              className="modal-header bg-head"
+              style={{ padding: "0.75rem 1rem" }}
+            >
+              <h5 className="modal-title text-white" style={{ margin: 0 }}>
+                Enter Your Email & Location to Get Notified
+              </h5>
+              <button
+                type="button"
+                className="btn-close"
+                onClick={() => setPromptEmail(false)}
+              />
+            </div>
+
+            {/* Body */}
+            <div className="modal-body py-4 bg-head">
+              <input
+                type="text"
+                className="form-control mb-2 bg-card-inner"
+                placeholder="Enter a valid email..."
+                value={userEmail}
+                onChange={(e) => setUserEmail(e.target.value)}
+              />
+
+              <Select
+                options={options}
+                value={options.filter((o) => location.includes(o.value))}
+                onChange={(vals) => setLocation(vals.map((v) => v.value))}
+                isMulti
+                placeholder="Select location(s)..."
+                styles={{
+                  menuList: (base) => ({
+                    ...base,
+                    maxHeight: "200px",
+                    overflowY: "auto",
+                    paddingBottom: "0.75rem",
+                  }),
+                }}
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="modal-footer bg-content d-flex flex-column gap-3">
+              {/* Primary column */}
+              <div className="d-flex flex-column gap-2 w-75 mt-3 mx-3">
                 <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setPromptEmail(false)}
-                ></button>
-              </div>
-              <div className="modal-body d-flex gap-2">
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Enter a valid email..."
-                  value={userEmail}
-                  onChange={(e) => setUserEmail(e.target.value)}
-                  style={{ flex: 3 }}
-                />
-                <select
-                  className="form-select"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  style={{ flex: 1 }}
+                  className="btn btn-primary btn-lg w-100"
+                  disabled={!validateEmail(userEmail) || !location.length}
+                  onClick={handleSubmit}
                 >
-                  <option value="">
-                    Location - Chose where you want updates
-                  </option>
-                  <option value="RDP">RDP - Red Deer Polytechnic</option>
-                  <option value="Grand Canyon">Grand Canyon</option>
-                  <option value="Rocky Mountains">Rocky Mountains</option>
-                </select>
-              </div>
-              <div className="modal-footer bg-content">
+                  Submit
+                </button>
+
                 <button
-                  className="btn btn-outline-danger me-auto"
+                  className="btn btn-outline-primary w-100"
+                  onClick={() => setPromptEmail(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+
+              {/* Isolated danger action */}
+              <div className="d-flex justify-content-center w-100 mb-2">
+                <button
+                  className="btn btn-sm btn-outline-danger w-25"
                   onClick={() => {
                     setPromptEmail(false);
                     setDeleteEmail(true);
@@ -193,80 +260,99 @@ function App() {
                 >
                   Unsubscribe
                 </button>
-                <button
-                  className="btn btn-outline-primary"
-                  onClick={() => setPromptEmail(false)}
-                >
-                  Cancel
-                </button>
-                {validateEmail(userEmail) && location ? (
-                  <button className="btn btn-primary" onClick={handleSubmit}>
-                    Submit
-                  </button>
-                ) : (
-                  <button className="btn btn-primary" disabled>
-                    Submit
-                  </button>
-                )}
               </div>
             </div>
           </div>
         </div>
       )}
-      {/* Public multi-floor viewer (uses published floors). */}
+
+      {/* MAP VIEW */}
       <div className="mt-4">
         <UserMap />
       </div>
+
+      {/* DELETE / UNSUBSCRIBE MODAL */}
       {deleteEmail && (
         <div
-          className="modal fade show d-block"
-          tabIndex="-1"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          aria-modal="true"
+          role="dialog"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1050,
+            backgroundColor: "rgba(0,0,0,0.45)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: "1rem",
+            overflowY: "auto",
+          }}
         >
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header bg-head">
-                <h5 className="modal-title text-white">
-                  Enter Your Email to Unsubscribe
-                </h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setDeleteEmail(false)}
-                ></button>
-              </div>
-              <div className="modal-body d-flex gap-2">
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Enter your email"
-                  value={userEmail}
-                  onChange={(e) => setUserEmail(e.target.value)}
-                  style={{ flex: 3 }}
-                />
-              </div>
-              <div className="modal-footer bg-content">
-                <button
-                  className="btn btn-outline-primary"
-                  onClick={() => setDeleteEmail(false)}
-                >
-                  Cancel
-                </button>
-                {validateEmail(userEmail) ? (
-                  <button className="btn btn-danger" onClick={deleteUser}>
-                    Unsubscribe
-                  </button>
-                ) : (
-                  <button className="btn btn-danger" disabled>
-                    Unsubscribe
-                  </button>
-                )}
-              </div>
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              background: "var(--bs-body-bg, #fff)",
+              borderRadius: 12,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {/* Header */}
+            <div
+              className="modal-header bg-head"
+              style={{ padding: "0.75rem 1rem" }}
+            >
+              <h5 className="modal-title text-white" style={{ margin: 0 }}>
+                Enter Your Email to Unsubscribe
+              </h5>
+              <button
+                type="button"
+                className="btn-close-white ms-4 px-2"
+                onClick={() => setDeleteEmail(false)}
+              />
+            </div>
+
+            {/* Body */}
+            <div className="modal-body bg-head">
+              <input
+                type="text"
+                className="form-control bg-card-inner"
+                placeholder="Enter your email"
+                value={userEmail}
+                onChange={(e) => setUserEmail(e.target.value)}
+              />
+            </div>
+
+            {/* Footer */}
+            <div
+              className="modal-footer bg-content"
+              style={{ padding: "0.75rem", display: "flex", gap: 8 }}
+            >
+              <button
+                className="btn btn-outline-primary"
+                onClick={() => setDeleteEmail(false)}
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </button>
+
+              <button
+                className="btn btn-danger"
+                onClick={validateEmail(userEmail) ? deleteUser : undefined}
+                disabled={!validateEmail(userEmail)}
+                style={{ flex: 1 }}
+              >
+                Unsubscribe
+              </button>
             </div>
           </div>
         </div>
       )}
-      <MapPreview /> {/* Have to pass the correct map eventually */}
+
+      <MapPreview />
     </>
   );
 }

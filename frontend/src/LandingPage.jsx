@@ -1,38 +1,12 @@
 // LANDING PAGE — concise overview
 // Hosts the Map Editor and a small sidebar. Left: upload and edit. Right: account info and a public map URL.
-import React, { useEffect} from "react";
+import React, { useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./index.css";
 import MapEditor from "./MapEditor";
 import logo from "./images/logo.png";
-
-
-
-
-function Stat({ label, value }) {
-  return (
-    <div className="card stat">
-      <div className="stat__value">{value}</div>
-      <div className="stat__label">{label}</div>
-    </div>
-  );
-}
-
-function QuickAction({ label, onClick, kind = "primary" }) {
-  const variantMap = {
-    primary: "btn btn-primary",
-    secondary: "btn btn-secondary",
-    ghost: "btn btn-outline-secondary",
-    danger: "btn btn-danger",
-  };
-  const className = variantMap[kind] || variantMap.primary;
-  return (
-    <button className={className} onClick={onClick}>
-      {label}
-    </button>
-  );
-}
 
 // Simple, client-side landing page for authenticated users
 // Expects a user object if available; falls back to generic copy
@@ -41,17 +15,25 @@ export default function LandingPage({ user }) {
   // Multi-image working set kept in memory for this session (multi-floor editing)
   const [images, setImages] = React.useState([]); // [{id,name,url,size}]
   const [selectedImageId, setSelectedImageId] = React.useState(null);
-  // Removed: legacy public map URL card (public viewer now uses published floors)
 
-  // Simple id generator local to this module
+  // Set up admin state
+  const [admin, setAdmin] = useState(null);
+
   // Simple id generator local to this module
   const uid = () => Math.random().toString(36).slice(2, 10);
 
   // Add images chosen by the admin (supports multiple files)
   const addImages = (fileList) => {
-    const files = Array.from(fileList || []).filter((f) => f && f.type && f.type.startsWith("image/"));
+    const files = Array.from(fileList || []).filter(
+      (f) => f && f.type && f.type.startsWith("image/")
+    );
     if (!files.length) return;
-    const created = files.map((f) => ({ id: uid(), name: f.name || "map.png", url: URL.createObjectURL(f), size: f.size || 0 }));
+    const created = files.map((f) => ({
+      id: uid(),
+      name: f.name || "map.png",
+      url: URL.createObjectURL(f),
+      size: f.size || 0,
+    }));
     setImages((prev) => {
       const next = [...prev, ...created];
       if (!selectedImageId && next.length > 0) setSelectedImageId(next[0].id);
@@ -64,7 +46,9 @@ export default function LandingPage({ user }) {
     setImages((prev) => {
       const idx = prev.findIndex((i) => i.id === id);
       if (idx === -1) return prev;
-      try { URL.revokeObjectURL(prev[idx].url); } catch {}
+      try {
+        URL.revokeObjectURL(prev[idx].url);
+      } catch {}
       const next = prev.slice(0, idx).concat(prev.slice(idx + 1));
       // Adjust selection
       if (selectedImageId === id) {
@@ -77,7 +61,14 @@ export default function LandingPage({ user }) {
 
   // Clear all images in this working session
   const clearAllImages = () => {
-    setImages((prev) => { prev.forEach((i) => { try { URL.revokeObjectURL(i.url); } catch {} }); return []; });
+    setImages((prev) => {
+      prev.forEach((i) => {
+        try {
+          URL.revokeObjectURL(i.url);
+        } catch {}
+      });
+      return [];
+    });
     setSelectedImageId(null);
   };
 
@@ -89,14 +80,35 @@ export default function LandingPage({ user }) {
       ""
   );
 
-  //kris:
   useEffect(() => {
     const token = localStorage.getItem("token");
+    console.log("Token in LandingPage:", token); // Debug log
     if (!token) {
-      navigate("/"); // Redirect to SignIn if no token
+      navigate("/"); // redirect if no token
+      return;
     }
+
+    async function fetchAdmin() {
+      try {
+        const res = await fetch("http://localhost:5000/admin/me", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) throw new Error("Failed to fetch admin");
+
+        const data = await res.json();
+        setAdmin(data); // update state, now component can render
+      } catch (err) {
+        console.error("Fetch admin failed:", err);
+        localStorage.removeItem("token");
+        navigate("/"); // redirect if fetch fails
+      }
+    }
+
+    fetchAdmin();
   }, [navigate]);
-  //kris ^
 
   const savePublicMapUrl = () => {
     try {
@@ -122,11 +134,23 @@ export default function LandingPage({ user }) {
   function sharedWarpKeys(aState, bState) {
     const a = new Set();
     const b = new Set();
-    (Array.isArray(aState?.points) ? aState.points : []).forEach(p => {
-      if (p?.kind === 'poi' && (p.poiType === 'stairs' || p.poiType === 'elevator') && typeof p.warpKey === 'string' && p.warpKey.trim()) a.add(p.warpKey.trim());
+    (Array.isArray(aState?.points) ? aState.points : []).forEach((p) => {
+      if (
+        p?.kind === "poi" &&
+        (p.poiType === "stairs" || p.poiType === "elevator") &&
+        typeof p.warpKey === "string" &&
+        p.warpKey.trim()
+      )
+        a.add(p.warpKey.trim());
     });
-    (Array.isArray(bState?.points) ? bState.points : []).forEach(p => {
-      if (p?.kind === 'poi' && (p.poiType === 'stairs' || p.poiType === 'elevator') && typeof p.warpKey === 'string' && p.warpKey.trim()) b.add(p.warpKey.trim());
+    (Array.isArray(bState?.points) ? bState.points : []).forEach((p) => {
+      if (
+        p?.kind === "poi" &&
+        (p.poiType === "stairs" || p.poiType === "elevator") &&
+        typeof p.warpKey === "string" &&
+        p.warpKey.trim()
+      )
+        b.add(p.warpKey.trim());
     });
     const out = [];
     for (const k of a) if (b.has(k)) out.push(k);
@@ -135,7 +159,7 @@ export default function LandingPage({ user }) {
 
   function writeUserPosFor(url, pos) {
     try {
-      const key = `wf_map_editor_state:${url || ''}`;
+      const key = `wf_map_editor_state:${url || ""}`;
       const raw = localStorage.getItem(key);
       const data = raw ? JSON.parse(raw) : {};
       data.userPos = { x: pos.x, y: pos.y };
@@ -151,20 +175,22 @@ export default function LandingPage({ user }) {
   function publishPublicFloors() {
     try {
       const floors = images.map((img) => {
-        const raw = localStorage.getItem(`wf_map_editor_state:${img.url || ''}`);
+        const raw = localStorage.getItem(
+          `wf_map_editor_state:${img.url || ""}`
+        );
         const state = raw ? JSON.parse(raw) : {};
         return {
           id: img.id,
-          name: img.name || 'floor',
+          name: img.name || "floor",
           url: img.url,
           points: Array.isArray(state?.points) ? state.points : [],
-          walkable: state?.walkable || { color: '#9F9383', tolerance: 12 },
+          walkable: state?.walkable || { color: "#9F9383", tolerance: 12 },
         };
       });
-      localStorage.setItem('wf_public_floors', JSON.stringify({ floors }));
+      localStorage.setItem("wf_public_floors", JSON.stringify({ floors }));
       alert(`Published ${floors.length} floor(s) to public viewer`);
     } catch (e) {
-      alert('Failed to publish floors');
+      alert("Failed to publish floors");
     }
   }
 
@@ -177,16 +203,16 @@ export default function LandingPage({ user }) {
 
   return (
     <div className="landing">
-      <div className="bg-head p-3 rounded mb-5 border-bottom">
+      <div className="bg-head p-3 rounded mb-3 border-bottom">
         <header
           className="d-flex flex-column flex-md-row justify-content-between 
           align-items-center mb-3 text-center text-md-start"
         >
           <div
-            className="display-3 fw-bold text-shadow mb-3 mb-md-0 d-flex align-items-center 
+            className="display-3 fw-bold text-shadow d-flex align-items-center 
             justify-content-center justify-content-md-start"
           >
-            <img src={logo} alt="WayFinder Logo" className="me-2" />
+            <img src={logo} alt="WayFinder Logo" className="me-2 logo-img" />
             <span className="text-blue">Way</span>
             <span className="text-orange">Finder</span>
           </div>
@@ -202,119 +228,141 @@ export default function LandingPage({ user }) {
         </header>
       </div>
 
-      <main className="landing__main container">
-        <section className="main-grid">
-          <div className="grid-left">
-            <div className="card shadow-sm">
-              <h2 className="card__title">Multi-Floor Images</h2>
-              <p className="card__desc">Upload multiple floor images and switch between them while editing.</p>
-              <div className="d-flex align-items-center gap-2 flex-wrap">
-                <label className="btn btn-secondary">
-                  Add Images
-                  <input type="file" accept="image/*" multiple hidden onChange={(e) => { addImages(e.target.files); e.target.value = ""; }} />
-                </label>
-                <button className="btn btn-outline-secondary" onClick={() => selectNext(-1)} disabled={!images.length}>Prev</button>
-                <button className="btn btn-outline-secondary" onClick={() => selectNext(+1)} disabled={!images.length}>Next</button>
-                <button className="btn btn-outline-danger" onClick={clearAllImages} disabled={!images.length}>Clear All</button>
-                {/* Removed: Plan Cross-floor Route (dev aid) */}
-                <button className="btn btn-primary" onClick={publishPublicFloors} disabled={!images.length}>Publish Floors</button>
-              </div>
-              {images.length === 0 && (
-                <p className="muted mt-2">No images yet. Click "Add Images" and choose multiple files.</p>
-              )}
-              {images.length > 0 && (
-                <ul className="list mt-3">
-                  {images.map((img, i) => (
-                    <li key={img.id} className="d-flex justify-content-between align-items-center">
-                      <span style={{ cursor: 'pointer' }} onClick={() => setSelectedImageId(img.id)}>
-                        {selectedImageId === img.id ? <strong>{i+1}. {img.name}</strong> : <>{i+1}. {img.name}</>}
-                      </span>
-                      <span className="d-flex align-items-center gap-2">
-                        <button className="btn btn-sm btn-outline-primary" onClick={() => setSelectedImageId(img.id)}>Select</button>
-                        <button className="btn btn-sm btn-outline-danger" onClick={() => removeImage(img.id)}>Remove</button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+      <div className="d-flex justify-content-center">
+        <div className="text-center mb-5 mt-4 card shadow-sm bg-card text-card h3 border-4 d-inline-block py-3 rounded-pill px-5">
+          {admin ? (
+            <>
+              Welcome,{" "}
+              <span className="text-orange fw-bold">{admin.email}</span>. You
+              are currently managing maps for{" "}
+              <span className="text-orange fw-bold">{admin.tags}</span>.
+            </>
+          ) : (
+            "Loading..."
+          )}
+        </div>
+      </div>
+
+      <main className="container-fluid">
+        <section className="justify-content-center d-grid">
+          <div className="card shadow-sm bg-card text-card px-4 py-3 mb-5 border-4 text-center rounded-5">
+            <h2 className="fw-bold border-bottom border-2 border-blue rounded-3 pb-3 mb-0 text-shadow-sm">
+              Multi-Floor Images
+            </h2>
+            <p className="border-top border-2 border-blue rounded-3 pt-3 mt-0">
+              Upload multiple floor images and switch between them while
+              editing.
+            </p>
+            <div className="d-flex justify-content-center gap-4 align-items-center mt-3 mb-4 flex-wrap">
+              <label className="btn btn-success">
+                Add Images
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    addImages(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+
+              <button
+                className="btn btn-primary"
+                onClick={publishPublicFloors}
+                disabled={!images.length}
+              >
+                Publish Floors
+              </button>
+
+              <button
+                className="btn btn-danger"
+                onClick={clearAllImages}
+                disabled={!images.length}
+              >
+                Clear All
+              </button>
+            </div>
+            <div className="gap-2 d-flex justify-content-center mb-3 justify-content-center gap-4 flex-wrap">
+              <button
+                className="btn btn-secondary"
+                onClick={() => selectNext(-1)}
+                disabled={!images.length}
+              >
+                Prev img
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => selectNext(+1)}
+                disabled={!images.length}
+              >
+                Next img
+              </button>
             </div>
 
-            <div className="card shadow-sm">
-              <h2 className="">
-                My opinions on each button will be shown on click (Kaden)
-              </h2>
-              <div className="actions">
-                <QuickAction
-                  label="View Uploads"
-                  kind="secondary"
-                  onClick={() =>
-                    alert("Are we just gonna open a file explorer?")
-                  }
-                />
-                <QuickAction
-                  label="Preferences"
-                  kind="secondary"
-                  onClick={() => alert("What is this")}
-                />
-                <QuickAction
-                  label="Help & Docs"
-                  kind="ghost"
-                  onClick={() => alert("Are we writing docs?")}
-                />
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <MapEditor imageSrc={(selectedImage && selectedImage.url) || ""} />
-            </div>
+            {images.length === 0 && (
+              <p className="text-card mt-5">
+                No images yet. Click "Add Images" and choose multiple files.
+              </p>
+            )}
+            {images.length > 0 && (
+              <ul className="list mt-3">
+                {images.map((img, i) => (
+                  <li
+                    key={img.id}
+                    className="d-flex justify-content-between align-items-center flex-wrap"
+                  >
+                    <span
+                      style={{ cursor: "pointer", minWidth: 0, flexShrink: 1 }}
+                      onClick={() => setSelectedImageId(img.id)}
+                    >
+                      {selectedImageId === img.id ? (
+                        <strong>
+                          {i + 1}. {img.name}
+                        </strong>
+                      ) : (
+                        <>
+                          {i + 1}. {img.name}
+                        </>
+                      )}
+                    </span>
+                    <span className="d-flex align-items-center gap-2">
+                      <button
+                        className="btn btn-sm btn-success"
+                        onClick={() => setSelectedImageId(img.id)}
+                      >
+                        Select
+                      </button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => removeImage(img.id)}
+                      >
+                        Remove
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
-          <aside className="grid-right">
-            <div className="card shadow-sm bg-card text-card px-4 py-3 border-4 mb-4 mt-4">
-              <h3 className="card__title">Account Information</h3>
-              <div className="">
-                <Stat
-                  label="Maps Saved - How we do this if its stored locally? Save old paths?"
-                  value="—"
-                />
-                <Stat label="Last Upload - Same here" value="—" />
-                <Stat label="Tag" value={user?.tags || "RDP"} />
-              </div>
-              <p className="muted">
-                These values are placeholders until backend wiring is added.
-              </p>
-            </div>
+          <div className="map-editor-container mb-5">
+            <MapEditor imageSrc={selectedImage?.url || ""} />
+          </div>
 
-            <div className="card shadow-sm bg-card text-card px-4 py-3 border-4 mb-4">
-              <h3 className="card__title">Account</h3>
-              <ul className="list">
-                <li>
-                  <span className="list__label">Email</span>
-                  <span className="list__value">{user?.email || "—"}</span>
-                </li>
-                <li>
-                  <span className="list__label">Role</span>
-                  <span className="list__value">User</span>
-                </li>
-              </ul>
-              <div className="actions">
-                <QuickAction
-                  label="Sign out"
-                  kind="danger"
-                  onClick={handleSignOut}
-                />
-              </div>
-            </div>
-
-            <div className="card shadow-sm bg-card text-card px-4 py-3 border-4 mb-4">
-              <h3 className="">Public Map (Homepage)</h3>
-              <p className="c">
+          <aside>
+            <div className="card shadow-sm bg-card text-card px-4 py-3 border-4 mb-4 justify-content-center text-center rounded-5">
+              <h3 className="border-bottom border-2 border-blue rounded-3 pb-3 mb-0 fw-bold text-shadow-sm">
+                Public Map (Homepage)
+              </h3>
+              <p className="border-top border-2 border-blue rounded-3 pt-3 mt-0">
                 Set the URL of the map image to display on the public homepage.
               </p>
               <div className="field">
                 <span className="form-label text-card">Image URL</span>
                 <input
-                  className="form-control bg-card-inner text-card mt-2"
+                  className="form-control bg-card-inner text-card mt-2 text-center"
                   type="url"
                   placeholder="https://example.com/map.png"
                   value={publicMapUrl}
@@ -332,5 +380,4 @@ export default function LandingPage({ user }) {
       </main>
     </div>
   );
-};
-
+}

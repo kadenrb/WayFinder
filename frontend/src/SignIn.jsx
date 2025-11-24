@@ -44,7 +44,7 @@ export default function SignIn() {
             className="display-3 fw-bold text-shadow mb-3 mb-md-0 d-flex align-items-center 
           justify-content-center justify-content-md-start"
           >
-            <img src={logo} alt="WayFinder Logo" className="me-2" />
+            <img src={logo} alt="WayFinder Logo" className="me-2 logo-img" />
             <span className="text-blue">Way</span>
             <span className="text-orange">Finder</span>
           </div>

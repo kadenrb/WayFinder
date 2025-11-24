@@ -79,6 +79,21 @@
   margin-top: 10px;
 }
 
+/* attempt to make the POI Card responsive font sizes, works ish but they just need to use laptop */
+.poi-card .form-label {
+  font-size: clamp(0.7rem, 2vw, 1rem);
+}
+
+.poi-card {
+  font-size: clamp(0.75rem, 2vw, 1rem);
+}
+.poi-card select.form-select {
+  font-size: clamp(0.7rem, 2vw, 1rem);
+  width: auto; /* shrink to fit content */
+  max-width: 100%; /* never overflow parent */
+  display: inline-block;
+}
+
 .map-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -90,7 +105,21 @@
 }
 
 .bg-card {
-  background-color: #5a6b70; /* blue-gray for card bg*/
+  background-color: #5a6b70;
+  background-image: repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.02),
+      rgba(255, 255, 255, 0.02) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.02),
+      rgba(255, 255, 255, 0.02) 1px,
+      transparent 1px,
+      transparent 4px
+    );
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
@@ -134,18 +163,38 @@
   color: #fff !important;
 }
 
-.bg-head {
-  background: linear-gradient(
-    100deg,
-    rgba(40, 70, 85, 1) 0%,
-    rgba(70, 85, 95, 1) 50%,
-    rgba(110, 95, 75, 1) 100%
-  );
+.border-orange {
+  border-color: #a26218a0 !important;
 }
 
-img {
+.border-blue {
+  border-color: #439bd98e !important;
+}
+
+.bg-head {
+  background: linear-gradient(120deg, #1a4a5a 0%, #37525f 30%, #453e33 90%);
+  /*Allows rounded corners to apply to background*/
+  -webkit-background-clip: padding-box;
+  background-clip: padding-box;
+}
+
+.logo-img {
   width: 10vw;
   height: auto;
+}
+
+/* MapEditor responsive for mobile */
+@media (max-width: 768px) {
+  .map-editor-container {
+    max-width: 100%;
+    padding: 0 0.5rem;
+  }
+}
+
+.map-editor-container {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -160,12 +209,17 @@ body {
 }
 
 .bg-content {
+  overflow: hidden;
   background: linear-gradient(
     120deg,
     rgba(25, 70, 90, 1) 0%,
-    rgba(45, 65, 75, 1) 50%,
+    rgba(45, 65, 75, 1) 49%,
     rgba(90, 75, 60, 1) 100%
   );
+
+  /*Allows rounded corners to apply to background*/
+  -webkit-background-clip: padding-box;
+  background-clip: padding-box;
 }
 
 .text-bg-primary {
@@ -234,6 +288,10 @@ body {
 .title,
 .text-shadow {
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 12);
+}
+
+.text-shadow-sm {
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
 }
 
 .btn {
