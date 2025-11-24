@@ -668,13 +668,15 @@ export default function UserMap() {
     return headingRef.current || 0;
   };
 
+  const waypointStride = 2; // advance this many waypoints per detected step/click
+
   async function stepWaypoint() {
     const pts = waypointPtsRef.current && waypointPtsRef.current.length ? waypointPtsRef.current : waypoints;
     if (!pts || !pts.length) { setSensorMsg("No route available; build a route first."); return; }
     let currentIdx = typeof waypointIdxRef.current === 'number' ? waypointIdxRef.current : 0;
     if (currentIdx < 0 || currentIdx >= pts.length) currentIdx = 0;
-    // advance one waypoint forward each click
-    currentIdx = Math.min(currentIdx + 1, pts.length - 1);
+    // advance forward by stride
+    currentIdx = Math.min(currentIdx + waypointStride, pts.length - 1);
     waypointIdxRef.current = currentIdx;
     const target = pts[currentIdx];
     setUserPos(target);
