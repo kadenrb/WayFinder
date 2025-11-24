@@ -680,6 +680,10 @@ export default function UserMap() {
     setUserPos(target);
     saveUserPos(selUrl, target);
     userPosRef.current = target;
+    const dx = target.x - (userPos?.x ?? target.x);
+    const dy = target.y - (userPos?.y ?? target.y);
+    const headingDeg = normalizeAngle((Math.atan2(dx, -dy) * 180) / Math.PI);
+    setDisplayHeading(quantizeHeading(headingDeg));
     console.log("Step route", { currentIdx, target, waypoints: pts.length });
     setSensorMsg(`Moved to waypoint ${currentIdx + 1}/${pts.length}`);
   };
