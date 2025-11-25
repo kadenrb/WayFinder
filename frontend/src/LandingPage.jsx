@@ -12,15 +12,43 @@ import logo from "./images/logo.png";
 // Expects a user object if available; falls back to generic copy
 export default function LandingPage({ user }) {
   const navigate = useNavigate();
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   // Multi-image working set kept in memory for this session (multi-floor editing)
-  const [images, setImages] = React.useState([]); // [{id,name,url,size}]
+  const [images, setImages] = React.useState([]); // [{id,name,url,size,file?,remoteUrl?}]
   const [selectedImageId, setSelectedImageId] = React.useState(null);
+  const [publishedFloors, setPublishedFloors] = React.useState([]);
+  const [publishing, setPublishing] = React.useState(false);
+  const [publishMsg, setPublishMsg] = React.useState("");
+  const [loadingPublished, setLoadingPublished] = React.useState(false);
+  // Removed: legacy public map URL card (public viewer now uses published floors)
 
   // Set up admin state
   const [admin, setAdmin] = useState(null);
 
   // Simple id generator local to this module
   const uid = () => Math.random().toString(36).slice(2, 10);
+
+  const fetchPublishedFloors = React.useCallback(async () => {
+    setLoadingPublished(true);
+    try {
+      const manifestUrl = process.env.REACT_APP_MANIFEST_URL;
+      if (!manifestUrl) throw new Error("Missing manifest URL");
+      const res = await fetch(manifestUrl, { cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to fetch floors");
+      const data = await res.json();
+      setPublishedFloors(Array.isArray(data?.floors) ? data.floors : []);
+      setPublishMsg("");
+    } catch (err) {
+      console.error("Failed to load published floors", err);
+      setPublishMsg("Unable to load published floors.");
+    } finally {
+      setLoadingPublished(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPublishedFloors();
+  }, [fetchPublishedFloors]);
 
   // Add images chosen by the admin (supports multiple files)
   const addImages = (fileList) => {
@@ -33,6 +61,8 @@ export default function LandingPage({ user }) {
       name: f.name || "map.png",
       url: URL.createObjectURL(f),
       size: f.size || 0,
+      file: f,
+      remoteUrl: null,
     }));
     setImages((prev) => {
       const next = [...prev, ...created];
@@ -64,7 +94,7 @@ export default function LandingPage({ user }) {
     setImages((prev) => {
       prev.forEach((i) => {
         try {
-          URL.revokeObjectURL(i.url);
+          if (i.url) URL.revokeObjectURL(i.url);
         } catch {}
       });
       return [];
@@ -115,6 +145,47 @@ export default function LandingPage({ user }) {
       localStorage.setItem("wf_public_map_url", publicMapUrl);
     } catch {}
     alert("Public map URL saved for homepage preview");
+  };
+
+  const deletePublishedFloor = async (id) => {
+    if (!window.confirm("Remove this published floor?")) return;
+    try {
+      const res = await fetch(`${API_URL}/floors/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete");
+      const data = await res.json();
+      if (Array.isArray(data?.floors)) {
+        setPublishedFloors(data.floors);
+      } else {
+        setPublishedFloors((prev) => prev.filter((f) => `${f.id}` !== `${id}`));
+      }
+      setPublishMsg("Floor removed.");
+    } catch (err) {
+      console.error(err);
+      setPublishMsg("Failed to remove floor.");
+    } finally {
+      setTimeout(() => setPublishMsg(""), 4000);
+    }
+  };
+
+  const uploadFloorImage = async (img) => {
+    if (img.remoteUrl) return img.remoteUrl;
+    if (!img.file) throw new Error("Missing original image file. Re-upload the floor.");
+    const formData = new FormData();
+    formData.append("image", img.file, img.name || "floor.png");
+    const res = await fetch(`${API_URL}/storage/floors`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || "Failed to upload image.");
+    }
+    setImages((prev) =>
+      prev.map((item) =>
+        item.id === img.id ? { ...item, remoteUrl: data.url } : item
+      )
+    );
+    return data.url;
   };
 
   // Cycle selection forward/backward
@@ -172,25 +243,48 @@ export default function LandingPage({ user }) {
   // Removed: planCrossFloorRoute dev helper
 
   // Publish current floors + points/walkable to public viewer
-  function publishPublicFloors() {
+  async function publishPublicFloors() {
+    if (!images.length) return;
+    setPublishing(true);
+    setPublishMsg("Publishing floors...");
     try {
-      const floors = images.map((img) => {
-        const raw = localStorage.getItem(
-          `wf_map_editor_state:${img.url || ""}`
-        );
+      const floors = [];
+      for (let index = 0; index < images.length; index++) {
+        const img = images[index];
+        const hostedUrl = await uploadFloorImage(img);
+        const raw = localStorage.getItem(`wf_map_editor_state:${img.url || ""}`);
         const state = raw ? JSON.parse(raw) : {};
-        return {
+        floors.push({
           id: img.id,
-          name: img.name || "floor",
-          url: img.url,
+          name: img.name || `Floor ${index + 1}`,
+          url: hostedUrl,
           points: Array.isArray(state?.points) ? state.points : [],
           walkable: state?.walkable || { color: "#9F9383", tolerance: 12 },
-        };
-      });
+          sortOrder: index,
+          northOffset:
+            typeof state?.northOffset === "number" && Number.isFinite(state.northOffset)
+              ? state.northOffset
+              : 0,
+        });
+      }
       localStorage.setItem("wf_public_floors", JSON.stringify({ floors }));
+      const res = await fetch(`${API_URL}/storage/floors/manifest`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ floors }),
+      });
+      if (!res.ok) throw new Error("Server rejected floors manifest");
+      const data = await res.json();
+      setPublishedFloors(floors);
+      setPublishMsg(`Published ${floors.length} floor(s).`);
       alert(`Published ${floors.length} floor(s) to public viewer`);
     } catch (e) {
+      console.error(e);
+      setPublishMsg("Failed to publish floors.");
       alert("Failed to publish floors");
+    } finally {
+      setPublishing(false);
+      setTimeout(() => setPublishMsg(""), 4000);
     }
   }
 
@@ -242,6 +336,93 @@ export default function LandingPage({ user }) {
           )}
         </div>
       </div>
+      <main className="landing__main container">
+        <section className="main-grid">
+          <div className="grid-left">
+            <div className="card shadow-sm">
+              <h2 className="card__title">Multi-Floor Images</h2>
+              <p className="card__desc">Upload multiple floor images and switch between them while editing.</p>
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                <label className="btn btn-secondary">
+                  Add Images
+                  <input type="file" accept="image/*" multiple hidden onChange={(e) => { addImages(e.target.files); e.target.value = ""; }} />
+                </label>
+                <button className="btn btn-outline-secondary" onClick={() => selectNext(-1)} disabled={!images.length}>Prev</button>
+                <button className="btn btn-outline-secondary" onClick={() => selectNext(+1)} disabled={!images.length}>Next</button>
+                <button className="btn btn-outline-danger" onClick={clearAllImages} disabled={!images.length}>Clear All</button>
+                {/* Removed: Plan Cross-floor Route (dev aid) */}
+                <button className="btn btn-primary" onClick={publishPublicFloors} disabled={!images.length || publishing}>
+                  {publishing ? "Publishing..." : "Publish Floors"}
+                </button>
+              </div>
+              {images.length === 0 && (
+                <p className="muted mt-2">No images yet. Click "Add Images" and choose multiple files.</p>
+              )}
+              {images.length > 0 && (
+                <ul className="list mt-3">
+                  {images.map((img, i) => (
+                    <li key={img.id} className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                      <span style={{ cursor: 'pointer' }} onClick={() => setSelectedImageId(img.id)}>
+                        {selectedImageId === img.id ? <strong>{i+1}. {img.name}</strong> : <>{i+1}. {img.name}</>}
+                      </span>
+                      <div className="d-flex align-items-center gap-2 flex-wrap">
+                        <small className="text-muted">
+                          Set north in the editor (default 0°).
+                        </small>
+                        <button className="btn btn-sm btn-outline-primary" onClick={() => setSelectedImageId(img.id)}>Select</button>
+                        <button className="btn btn-sm btn-outline-danger" onClick={() => removeImage(img.id)}>Remove</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="card shadow-sm mt-4">
+              <div className="d-flex justify-content-between align-items-center">
+                <h2 className="card__title mb-0">Published Floors</h2>
+                <button
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={fetchPublishedFloors}
+                  disabled={loadingPublished}
+                >
+                  {loadingPublished ? "Refreshing..." : "Refresh"}
+                </button>
+              </div>
+              {publishMsg && (
+                <p className="text-muted small mt-2 mb-0">{publishMsg}</p>
+              )}
+              {loadingPublished && <p className="muted mt-2">Loading...</p>}
+              {!loadingPublished && publishedFloors.length === 0 && (
+                <p className="muted mt-2">No floors published yet.</p>
+              )}
+              {!loadingPublished && publishedFloors.length > 0 && (
+                <ul className="list mt-3">
+                  {publishedFloors.map((floor) => (
+                    <li
+                      key={floor.id || floor.name}
+                      className="d-flex justify-content-between align-items-center"
+                    >
+                      <span className="d-flex flex-column">
+                        <strong>{floor.name}</strong>
+                        <small className="text-muted">
+                          URL: {floor.url ? floor.url.slice(0, 40) : ""}
+                        </small>
+                        <small className="text-muted">
+                          North offset: {Number.isFinite(Number(floor.northOffset)) ? Number(floor.northOffset) : 0}&deg;
+                        </small>
+                      </span>
+                      <button
+                        className="btn btn-sm btn-outline-danger"
+                        onClick={() => deletePublishedFloor(floor.id)}
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
       <main className="container-fluid">
         <section className="justify-content-center d-grid">

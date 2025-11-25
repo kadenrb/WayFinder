@@ -1,6 +1,6 @@
 // APP SHELL — concise overview
 // Top-level app wrapper. Wires routes to SignIn/Register/LandingPage.
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./index.css";
 import logo from "./images/logo.png";
@@ -8,6 +8,10 @@ import MapPreview from "./MapPreview";
 import UserMap from "./UserMap";
 import { Link, useNavigate } from "react-router-dom";
 import Select from "react-select";
+
+const MANIFEST_URL =
+  process.env.REACT_APP_MANIFEST_URL ||
+  "https://wayfinder-floors.s3.us-east-2.amazonaws.com/floors/manifest.json";
 
 function App() {
   const [promptEmail, setPromptEmail] = useState(false); // Controls display of email signup modal
@@ -30,6 +34,10 @@ function App() {
     { value: "ÉcoleNotreDame", label: "École Notre Dame High School" },
     { value: "RossBusinessPark", label: "Ross Business Park" },
   ];
+  const [floors, setFloors] = useState([]);
+  const [selectedFloorId, setSelectedFloorId] = useState(null);
+  const [manifestStatus, setManifestStatus] = useState("idle");
+  const [manifestError, setManifestError] = useState("");
 
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -104,6 +112,50 @@ function App() {
     const timer = setTimeout(() => setShowToast(false), 3000);
     return () => clearTimeout(timer);
   }, [showToast]);
+
+  // Load published floors from S3 manifest
+  useEffect(() => {
+    if (!MANIFEST_URL) return;
+    let active = true;
+    const loadManifest = async () => {
+      setManifestStatus("loading");
+      try {
+        const res = await fetch(MANIFEST_URL, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!active) return;
+        const manifestFloors = Array.isArray(data?.floors) ? data.floors : [];
+        setFloors(manifestFloors);
+        const defaultId =
+          manifestFloors[0]?.id || manifestFloors[0]?.name || null;
+        setSelectedFloorId(defaultId);
+        setManifestStatus("ready");
+        setManifestError("");
+      } catch (err) {
+        if (!active) return;
+        console.error("Failed to load manifest", err);
+        setFloors([]);
+        setSelectedFloorId(null);
+        setManifestStatus("error");
+        setManifestError("Unable to load published floors.");
+      }
+    };
+    loadManifest();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const selectedFloor = useMemo(() => {
+    if (!floors.length) return null;
+    return (
+      floors.find(
+        (f) =>
+          f.id === selectedFloorId ||
+          f.name === selectedFloorId
+      ) || floors[0]
+    );
+  }, [floors, selectedFloorId]);
 
   return (
     <>
@@ -351,8 +403,41 @@ function App() {
           </div>
         </div>
       )}
-
-      <MapPreview />
+      <div className="mt-4">
+        <MapPreview imageUrl={selectedFloor?.url} />
+        <div className="mt-2">
+          {manifestStatus === "loading" && (
+            <span className="text-muted small">
+              Loading published floors…
+            </span>
+          )}
+          {manifestStatus === "error" && (
+            <span className="text-danger small">{manifestError}</span>
+          )}
+          {floors.length > 1 && (
+            <div className="d-flex align-items-center gap-2 mt-2">
+              <label className="form-label small m-0" htmlFor="floorSelect">
+                Floor:
+              </label>
+              <select
+                id="floorSelect"
+                className="form-select form-select-sm"
+                value={selectedFloorId ?? ""}
+                onChange={(e) => setSelectedFloorId(e.target.value)}
+              >
+                {floors.map((floor) => (
+                  <option
+                    key={floor.id || floor.name}
+                    value={floor.id || floor.name}
+                  >
+                    {floor.name || "Unnamed floor"}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
     </>
   );
 }

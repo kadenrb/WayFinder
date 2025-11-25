@@ -124,7 +124,8 @@ export default function MapEditor({ imageSrc }) {
   // ===============================
   // SECTION: Walkable Path Color (admin)
   // ===============================
-  const [walkable, setWalkable] = useState({ color: "#9F9383", tolerance: 12 });
+  const [walkable, setWalkable] = useState({ color: '#9F9383', tolerance: 12 });
+  const [northOffset, setNorthOffset] = useState(0);
   // Routing overlay (dev tool): path from user to selected point, constrained to walkable color
   const [routePts, setRoutePts] = useState([]); // [{x,y}] in normalized coords
   const [routeBusy, setRouteBusy] = useState(false);
@@ -375,11 +376,17 @@ export default function MapEditor({ imageSrc }) {
         } else {
           setWalkable({ color: "#9F9383", tolerance: 12 });
         }
+        if (typeof data?.northOffset === 'number' && Number.isFinite(data.northOffset)) {
+          setNorthOffset(data.northOffset);
+        } else {
+          setNorthOffset(0);
+        }
       } else {
         setPoints([]);
         setDbBoxes([]);
         setUserPos(null);
-        setWalkable({ color: "#9F9383", tolerance: 12 });
+        setWalkable({ color: '#9F9383', tolerance: 12 });
+        setNorthOffset(0);
       }
     } catch {}
   }, [storageKey]);
@@ -399,10 +406,10 @@ export default function MapEditor({ imageSrc }) {
     try {
       localStorage.setItem(
         storageKey,
-        JSON.stringify({ points, dbBoxes, userPos, walkable })
+        JSON.stringify({ points, dbBoxes, userPos, walkable, northOffset })
       );
-    } catch {}
-  }, [points, dbBoxes, userPos, walkable, storageKey]);
+    } catch { }
+  }, [points, dbBoxes, userPos, walkable, northOffset, storageKey]);
 
   // Must declare hooks before any early returns
   /*
@@ -1982,27 +1989,58 @@ export default function MapEditor({ imageSrc }) {
     try {
       const text = await f.text();
       const data = JSON.parse(text);
-      if (Array.isArray(data?.points)) setPoints(data.points);
-      if (Array.isArray(data?.dbBoxes)) setDbBoxes(data.dbBoxes);
-      if (
-        data &&
-        typeof data.userPos === "object" &&
-        data.userPos &&
-        typeof data.userPos.x === "number" &&
-        typeof data.userPos.y === "number"
-      )
-        setUserPos({ x: data.userPos.x, y: data.userPos.y });
-      if (
-        data &&
-        typeof data.walkable === "object" &&
-        data.walkable &&
-        typeof data.walkable.color === "string"
-      ) {
-        const tol =
-          typeof data.walkable.tolerance === "number"
-            ? data.walkable.tolerance
-            : 12;
-        setWalkable({ color: normHex(data.walkable.color), tolerance: tol });
+      const applyState = (state) => {
+        if (Array.isArray(state?.points)) setPoints(state.points);
+        if (Array.isArray(state?.dbBoxes)) setDbBoxes(state.dbBoxes);
+        if (
+          state &&
+          typeof state.userPos === 'object' &&
+          state.userPos &&
+          typeof state.userPos.x === 'number' &&
+          typeof state.userPos.y === 'number'
+        ) {
+          setUserPos({ x: state.userPos.x, y: state.userPos.y });
+        }
+        if (state && typeof state.walkable === 'object' && state.walkable && typeof state.walkable.color === 'string') {
+          const tol = typeof state.walkable.tolerance === 'number' ? state.walkable.tolerance : 12;
+          setWalkable({ color: normHex(state.walkable.color), tolerance: tol });
+        }
+      };
+
+      if (Array.isArray(data?.floors)) {
+        let chosen = null;
+        if (imageSrc) {
+          chosen = data.floors.find((floor) => floor?.url === imageSrc);
+        }
+        if (!chosen && data.floors.length > 1) {
+          const labels = data.floors.map((floor, index) => {
+            const label = floor?.name || floor?.id || floor?.url || `Floor ${index + 1}`;
+            const count = Array.isArray(floor?.points) ? floor.points.length : 0;
+            return `${index + 1}. ${label} (${count} pts)`;
+          });
+          const promptMsg = [
+            "Multiple floors found in this file.",
+            "Enter the number of the floor you want to import:",
+            labels.join("\n"),
+          ].join("\n");
+          const input = window.prompt(promptMsg, "1");
+          const idx = Number.parseInt(input || "", 10);
+          if (Number.isInteger(idx) && idx >= 1 && idx <= data.floors.length) {
+            chosen = data.floors[idx - 1];
+          }
+        }
+        if (!chosen) {
+          chosen = data.floors
+            .slice()
+            .sort(
+              (a, b) =>
+                (Array.isArray(b?.points) ? b.points.length : 0) -
+                (Array.isArray(a?.points) ? a.points.length : 0)
+            )[0];
+        }
+        if (chosen) applyState(chosen);
+      } else {
+        applyState(data);
       }
     } catch {}
   };
@@ -2268,12 +2306,20 @@ export default function MapEditor({ imageSrc }) {
                 }
                 placeholder="#9F9383"
               />
-              <button
-                className="btn btn-sm btn-primary"
-                onClick={pickWalkableFromScreen}
-              >
-                Pick
-              </button>
+              <button className="btn btn-sm btn-outline-secondary" onClick={pickWalkableFromScreen}>Pick</button>
+              <span>North offset</span>
+              <input
+                type="number"
+                className="form-control form-control-sm"
+                style={{ width: 80 }}
+                value={Number.isFinite(northOffset) ? northOffset : 0}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setNorthOffset(Number.isFinite(val) ? Math.max(-360, Math.min(360, val)) : 0);
+                }}
+                title="Degrees between map up and true north"
+              />
+              <span className="text-muted">deg</span>
             </div>
           </div>
         </div>

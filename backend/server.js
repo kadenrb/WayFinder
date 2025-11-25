@@ -3,8 +3,8 @@ const express = require("express");
 const cors = require("cors");
 
 const authRoutes = require("./routes/auth");
-
 const notifyRoutes = require("./routes/notify");
+const storageRoutes = require("./routes/storage");
 
 const adminRoutes = require("./routes/admin");
 
@@ -36,6 +36,7 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 
 app.use("/notify", notifyRoutes);
+app.use("/storage", storageRoutes);
 
 //Start server
 app.listen(5000, () => console.log("Server running on port 5000"));
