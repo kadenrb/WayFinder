@@ -6,6 +6,8 @@ const authRoutes = require("./routes/auth");
 const notifyRoutes = require("./routes/notify");
 const storageRoutes = require("./routes/storage");
 
+const adminRoutes = require("./routes/admin");
+
 const app = express();
 
 const allowedOrigins = [
@@ -30,6 +32,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/auth", authRoutes);
+
+app.use("/admin", adminRoutes);
+
 app.use("/notify", notifyRoutes);
 app.use("/storage", storageRoutes);
 
