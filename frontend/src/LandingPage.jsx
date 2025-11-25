@@ -119,8 +119,14 @@ export default function LandingPage({ user }) {
     }
 
     async function fetchAdmin() {
+      if (!API_URL) {
+        console.error("Missing REACT_APP_API_URL; cannot load admin");
+        navigate("/");
+        return;
+      }
+      const baseUrl = API_URL.replace(/\/$/, "");
       try {
-        const res = await fetch("http://localhost:5000/admin/me", {
+        const res = await fetch(`${baseUrl}/admin/me`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
