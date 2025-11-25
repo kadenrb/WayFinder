@@ -169,7 +169,8 @@ export default function LandingPage({ user }) {
 
   const uploadFloorImage = async (img) => {
     if (img.remoteUrl) return img.remoteUrl;
-    if (!img.file) throw new Error("Missing original image file. Re-upload the floor.");
+    if (!img.file)
+      throw new Error("Missing original image file. Re-upload the floor.");
     const formData = new FormData();
     formData.append("image", img.file, img.name || "floor.png");
     const res = await fetch(`${API_URL}/storage/floors`, {
@@ -252,7 +253,9 @@ export default function LandingPage({ user }) {
       for (let index = 0; index < images.length; index++) {
         const img = images[index];
         const hostedUrl = await uploadFloorImage(img);
-        const raw = localStorage.getItem(`wf_map_editor_state:${img.url || ""}`);
+        const raw = localStorage.getItem(
+          `wf_map_editor_state:${img.url || ""}`
+        );
         const state = raw ? JSON.parse(raw) : {};
         floors.push({
           id: img.id,
@@ -262,7 +265,8 @@ export default function LandingPage({ user }) {
           walkable: state?.walkable || { color: "#9F9383", tolerance: 12 },
           sortOrder: index,
           northOffset:
-            typeof state?.northOffset === "number" && Number.isFinite(state.northOffset)
+            typeof state?.northOffset === "number" &&
+            Number.isFinite(state.northOffset)
               ? state.northOffset
               : 0,
         });
@@ -321,7 +325,6 @@ export default function LandingPage({ user }) {
           </nav>
         </header>
       </div>
-
       <div className="d-flex justify-content-center">
         <div className="text-center mb-5 mt-4 card shadow-sm bg-card text-card h3 border-4 d-inline-block py-3 rounded-pill px-5">
           {admin ? (
@@ -341,43 +344,102 @@ export default function LandingPage({ user }) {
           <div className="grid-left">
             <div className="card shadow-sm">
               <h2 className="card__title">Multi-Floor Images</h2>
-              <p className="card__desc">Upload multiple floor images and switch between them while editing.</p>
+              <p className="card__desc">
+                Upload multiple floor images and switch between them while
+                editing.
+              </p>
               <div className="d-flex align-items-center gap-2 flex-wrap">
                 <label className="btn btn-secondary">
                   Add Images
-                  <input type="file" accept="image/*" multiple hidden onChange={(e) => { addImages(e.target.files); e.target.value = ""; }} />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    hidden
+                    onChange={(e) => {
+                      addImages(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
                 </label>
-                <button className="btn btn-outline-secondary" onClick={() => selectNext(-1)} disabled={!images.length}>Prev</button>
-                <button className="btn btn-outline-secondary" onClick={() => selectNext(+1)} disabled={!images.length}>Next</button>
-                <button className="btn btn-outline-danger" onClick={clearAllImages} disabled={!images.length}>Clear All</button>
+                <button
+                  className="btn btn-outline-secondary"
+                  onClick={() => selectNext(-1)}
+                  disabled={!images.length}
+                >
+                  Prev
+                </button>
+                <button
+                  className="btn btn-outline-secondary"
+                  onClick={() => selectNext(+1)}
+                  disabled={!images.length}
+                >
+                  Next
+                </button>
+                <button
+                  className="btn btn-outline-danger"
+                  onClick={clearAllImages}
+                  disabled={!images.length}
+                >
+                  Clear All
+                </button>
                 {/* Removed: Plan Cross-floor Route (dev aid) */}
-                <button className="btn btn-primary" onClick={publishPublicFloors} disabled={!images.length || publishing}>
+                <button
+                  className="btn btn-primary"
+                  onClick={publishPublicFloors}
+                  disabled={!images.length || publishing}
+                >
                   {publishing ? "Publishing..." : "Publish Floors"}
                 </button>
               </div>
               {images.length === 0 && (
-                <p className="muted mt-2">No images yet. Click "Add Images" and choose multiple files.</p>
+                <p className="muted mt-2">
+                  No images yet. Click "Add Images" and choose multiple files.
+                </p>
               )}
               {images.length > 0 && (
                 <ul className="list mt-3">
                   {images.map((img, i) => (
-                    <li key={img.id} className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
-                      <span style={{ cursor: 'pointer' }} onClick={() => setSelectedImageId(img.id)}>
-                        {selectedImageId === img.id ? <strong>{i+1}. {img.name}</strong> : <>{i+1}. {img.name}</>}
+                    <li
+                      key={img.id}
+                      className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2"
+                    >
+                      <span
+                        style={{ cursor: "pointer" }}
+                        onClick={() => setSelectedImageId(img.id)}
+                      >
+                        {selectedImageId === img.id ? (
+                          <strong>
+                            {i + 1}. {img.name}
+                          </strong>
+                        ) : (
+                          <>
+                            {i + 1}. {img.name}
+                          </>
+                        )}
                       </span>
                       <div className="d-flex align-items-center gap-2 flex-wrap">
                         <small className="text-muted">
                           Set north in the editor (default 0°).
                         </small>
-                        <button className="btn btn-sm btn-outline-primary" onClick={() => setSelectedImageId(img.id)}>Select</button>
-                        <button className="btn btn-sm btn-outline-danger" onClick={() => removeImage(img.id)}>Remove</button>
+                        <button
+                          className="btn btn-sm btn-outline-primary"
+                          onClick={() => setSelectedImageId(img.id)}
+                        >
+                          Select
+                        </button>
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => removeImage(img.id)}
+                        >
+                          Remove
+                        </button>
                       </div>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
-
             <div className="card shadow-sm mt-4">
               <div className="d-flex justify-content-between align-items-center">
                 <h2 className="card__title mb-0">Published Floors</h2>
@@ -409,7 +471,11 @@ export default function LandingPage({ user }) {
                           URL: {floor.url ? floor.url.slice(0, 40) : ""}
                         </small>
                         <small className="text-muted">
-                          North offset: {Number.isFinite(Number(floor.northOffset)) ? Number(floor.northOffset) : 0}&deg;
+                          North offset:{" "}
+                          {Number.isFinite(Number(floor.northOffset))
+                            ? Number(floor.northOffset)
+                            : 0}
+                          &deg;
                         </small>
                       </span>
                       <button
@@ -423,7 +489,9 @@ export default function LandingPage({ user }) {
                 </ul>
               )}
             </div>
-
+          </div>
+        </section>
+      </main>
       <main className="container-fluid">
         <section className="justify-content-center d-grid">
           <div className="card shadow-sm bg-card text-card px-4 py-3 mb-5 border-4 text-center rounded-5">
