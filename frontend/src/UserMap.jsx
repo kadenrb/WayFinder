@@ -1292,6 +1292,13 @@ export default function UserMap() {
           >
             Auto warp: {autoWarp ? "On" : "Off"}
           </button>
+          <button
+            className={`btn btn-${sensorTracking ? "danger" : "success"} btn-sm`}
+            onClick={sensorTracking ? stopSensorTracking : startSensorTracking}
+            disabled={!sensorTracking && !userPos}
+          >
+            {sensorTracking ? "Stop tracking" : "Start tracking"}
+          </button>
           <div
             className="d-flex align-items-center small text-muted"
             style={{ gap: 8 }}
