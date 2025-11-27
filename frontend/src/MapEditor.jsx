@@ -1759,13 +1759,12 @@ export default function MapEditor({ imageSrc }) {
   const toNorm = (clientX, clientY) => {
     const el = spacerRef.current; // use scaled box for pointer math
     const rect = el?.getBoundingClientRect();
-    if (!rect || !el || !natSize.w || !natSize.h) return { x: 0, y: 0 };
+    if (!rect || !el || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
     const sx = clientX - rect.left;
     const sy = clientY - rect.top;
-    const ux = sx / zoom; // unscaled px
-    const uy = sy / zoom;
-    const x = clamp01(ux / natSize.w);
-    const y = clamp01(uy / natSize.h);
+    // rect already reflects the scaled size; divide by rect dims to get normalized coords
+    const x = clamp01(sx / rect.width);
+    const y = clamp01(sy / rect.height);
     return { x, y };
   };
 
