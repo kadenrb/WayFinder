@@ -196,6 +196,18 @@ export default function LandingPage({ user }) {
     return data.url;
   };
 
+  const getImageSize = (url) =>
+    new Promise((resolve) => {
+      if (!url) return resolve({ w: 0, h: 0 });
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        resolve({ w: img.naturalWidth || 0, h: img.naturalHeight || 0 });
+      };
+      img.onerror = () => resolve({ w: 0, h: 0 });
+      img.src = url;
+    });
+
   // Pull published floors from manifest and hydrate editor state for each
   const resumeFromManifest = async () => {
     const manifestUrl = process.env.REACT_APP_MANIFEST_URL;
@@ -213,12 +225,27 @@ export default function LandingPage({ user }) {
         setPublishMsg("No published floors to resume.");
         return;
       }
+      // fetch natural sizes in parallel so we can keep point scaling identical
+      const floorsWithSize = await Promise.all(
+        floors.map(async (floor) => {
+          const { w, h } = await getImageSize(floor.url);
+          return { ...floor, width: w, height: h };
+        })
+      );
       // Persist editor state locally so MapEditor can pick up points/walkable
-      floors.forEach((floor) => {
+      floorsWithSize.forEach((floor) => {
         const state = {
           imageSrc: floor.url || "",
           points: Array.isArray(floor.points) ? floor.points : [],
           walkable: floor.walkable || { color: "#9F9383", tolerance: 12 },
+          imageWidth:
+            typeof floor.width === "number" && floor.width > 0
+              ? floor.width
+              : undefined,
+          imageHeight:
+            typeof floor.height === "number" && floor.height > 0
+              ? floor.height
+              : undefined,
           northOffset:
             typeof floor.northOffset === "number" && Number.isFinite(floor.northOffset)
               ? floor.northOffset
@@ -233,16 +260,18 @@ export default function LandingPage({ user }) {
       });
       // Rehydrate images list for the editor
       setImages(
-        floors.map((f, idx) => ({
+        floorsWithSize.map((f, idx) => ({
           id: f.id || f.name || uid(),
           name: f.name || `Floor ${idx + 1}`,
           url: f.url || "",
           remoteUrl: f.url || null,
+          width: typeof f.width === "number" ? f.width : undefined,
+          height: typeof f.height === "number" ? f.height : undefined,
           size: 0,
           file: null,
         }))
       );
-      const first = floors[0];
+      const first = floorsWithSize[0];
       setSelectedImageId(first?.id || first?.name || null);
       setPublishMsg(`Loaded ${floors.length} published floor(s) for editing.`);
     } catch (err) {
@@ -329,6 +358,14 @@ export default function LandingPage({ user }) {
           points: Array.isArray(state?.points) ? state.points : [],
           walkable: state?.walkable || { color: "#9F9383", tolerance: 12 },
           sortOrder: index,
+          width:
+            typeof state?.imageWidth === "number" && state.imageWidth > 0
+              ? state.imageWidth
+              : undefined,
+          height:
+            typeof state?.imageHeight === "number" && state.imageHeight > 0
+              ? state.imageHeight
+              : undefined,
           northOffset:
             typeof state?.northOffset === "number" &&
             Number.isFinite(state.northOffset)

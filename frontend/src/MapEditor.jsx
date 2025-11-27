@@ -346,6 +346,14 @@ export default function MapEditor({ imageSrc }) {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const data = JSON.parse(raw);
+        if (
+          typeof data?.imageWidth === "number" &&
+          typeof data?.imageHeight === "number" &&
+          data.imageWidth > 0 &&
+          data.imageHeight > 0
+        ) {
+          setNatSize({ w: data.imageWidth, h: data.imageHeight });
+        }
         if (Array.isArray(data?.points)) setPoints(data.points);
         if (Array.isArray(data?.dbBoxes)) setDbBoxes(data.dbBoxes);
         if (
@@ -406,10 +414,18 @@ export default function MapEditor({ imageSrc }) {
     try {
       localStorage.setItem(
         storageKey,
-        JSON.stringify({ points, dbBoxes, userPos, walkable, northOffset })
+        JSON.stringify({
+          points,
+          dbBoxes,
+          userPos,
+          walkable,
+          northOffset,
+          imageWidth: natSize.w,
+          imageHeight: natSize.h,
+        })
       );
     } catch { }
-  }, [points, dbBoxes, userPos, walkable, northOffset, storageKey]);
+  }, [points, dbBoxes, userPos, walkable, northOffset, storageKey, natSize.w, natSize.h]);
 
   // Must declare hooks before any early returns
   /*
