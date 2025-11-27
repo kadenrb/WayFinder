@@ -1774,9 +1774,12 @@ export default function MapEditor({ imageSrc }) {
     - Helpful for placing absolute overlays precisely on the content layer.
   */
   const toPx = (x, y) => {
-    if (!natSize.w || !natSize.h) return { x: 0, y: 0 };
-    // return UN-SCALED px for content layer
-    return { x: x * natSize.w, y: y * natSize.h };
+    const rect = spacerRef.current?.getBoundingClientRect();
+    const w = rect?.width || natSize.w;
+    const h = rect?.height || natSize.h;
+    if (!w || !h) return { x: 0, y: 0 };
+    // return UN-SCALED px for content layer using rendered box dimensions
+    return { x: x * w, y: y * h };
   };
 
   /*
