@@ -1013,10 +1013,10 @@ export default function UserMap() {
         return;
       }
       // If the destination is on the next floor, choose the warp pair that best aligns with it
-      const nextUrl =
+      const nextUrl2 =
         planArg && planArg.steps ? planArg.steps[planArg.index + 1]?.url : null;
-      const nextFloor = nextUrl
-        ? floors.find((f) => f.url === nextUrl)
+      const nextFloor = nextUrl2
+        ? floors.find((f) => f.url === nextUrl2)
         : null;
       const destId = dest?.id || destRef.current?.id;
       const destPoint = destId
@@ -1038,7 +1038,7 @@ export default function UserMap() {
           );
         const distUser = Math.hypot(p.x - userPos.x, p.y - userPos.y);
         let distDest = 0;
-        if (destPoint && destFloorUrl === nextUrl && matches && matches.length) {
+        if (destPoint && destFloorUrl === nextUrl2 && matches && matches.length) {
           distDest = Math.min(
             ...matches.map((m) => Math.hypot(m.x - destPoint.x, m.y - destPoint.y))
           );
