@@ -2683,6 +2683,7 @@ export default function MapEditor({ imageSrc }) {
                     <div
                       key="user"
                       data-marker
+                      onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => {
                         e.stopPropagation();
                         if (selectMode !== "none") return;
@@ -2717,6 +2718,7 @@ export default function MapEditor({ imageSrc }) {
                     key={p.id}
                     data-marker
                     onMouseDown={(e) => onMarkerMouseDown(e, p.id)}
+                    onClick={(e) => e.stopPropagation()}
                     onDoubleClick={() => {
                       focusPoint(p);
                       beginEdit(p);
