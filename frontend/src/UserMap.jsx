@@ -860,6 +860,8 @@ export default function UserMap() {
   };
 
   // Build a cross-floor plan from current floor to destination floor using shared warp keys
+  const normalizeKey = (k) =>
+    typeof k === "string" ? k.trim().toLowerCase() : "";
   const sharedWarpKeys = (a, b) => {
     const A = new Set(),
       B = new Set();
@@ -869,7 +871,7 @@ export default function UserMap() {
         (p.poiType === "stairs" || p.poiType === "elevator") &&
         p.warpKey
       )
-        A.add(p.warpKey.trim());
+        A.add(normalizeKey(p.warpKey));
     });
     (b?.points || []).forEach((p) => {
       if (
@@ -877,7 +879,7 @@ export default function UserMap() {
         (p.poiType === "stairs" || p.poiType === "elevator") &&
         p.warpKey
       )
-        B.add(p.warpKey.trim());
+        B.add(normalizeKey(p.warpKey));
     });
     const out = [];
     for (const k of A) if (B.has(k)) out.push(k);
@@ -899,7 +901,7 @@ export default function UserMap() {
                 p?.warpKey &&
                 (p.poiType === "stairs" || p.poiType === "elevator")
             )
-            .map((p) => p.warpKey.trim())
+            .map((p) => normalizeKey(p.warpKey))
         ),
       ])
     );
@@ -982,7 +984,7 @@ export default function UserMap() {
           p?.kind === "poi" &&
           (p.poiType === "stairs" || p.poiType === "elevator") &&
           p.warpKey &&
-          shared.includes(p.warpKey.trim())
+          shared.includes(normalizeKey(p.warpKey))
       );
       const elevators = accessibleMode
         ? candidates.filter((p) => p.poiType === "elevator")
@@ -1001,7 +1003,7 @@ export default function UserMap() {
       }
       target = { x: best.x, y: best.y };
       // Store current warp target on step for proximity check
-      step.key = best.warpKey.trim();
+      step.key = normalizeKey(best.warpKey);
       step.target = target;
     }
     const tx=Math.max(0,Math.min(gw-1,Math.round((target.x*w)/stp))); const ty=Math.max(0,Math.min(gh-1,Math.round((target.y*h)/stp)));
@@ -1060,7 +1062,7 @@ export default function UserMap() {
           p?.kind === "poi" &&
           (p.poiType === "stairs" || p.poiType === "elevator") &&
           p.warpKey &&
-          p.warpKey.trim() === step.key
+          normalizeKey(p.warpKey) === step.key
       );
       if (match) {
         saveUserPos(nextFloor.url, { x: match.x, y: match.y });
