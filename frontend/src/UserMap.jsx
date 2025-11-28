@@ -1012,40 +1012,47 @@ export default function UserMap() {
         setRoutePts([]);
         return;
       }
-      // If the destination is on the next floor, choose the warp pair that best aligns with it
+      // Prefer the warp pair that is closest to the destination on the next floor, then break ties by user distance
       const nextUrl2 =
         planArg && planArg.steps ? planArg.steps[planArg.index + 1]?.url : null;
       const nextFloor = nextUrl2
         ? floors.find((f) => f.url === nextUrl2)
         : null;
       const destId = dest?.id || destRef.current?.id;
-      const destPoint = destId
-        ? floors.flatMap((f) => f.points || []).find((p) => p.id === destId)
-        : null;
-      const destFloorUrl = destPoint
-        ? (floors.find((f) => (f.points || []).some((p) => p.id === destId)) || {}).url
-        : null;
+      const destPoint =
+        destId && nextFloor
+          ? (nextFloor.points || []).find((p) => p.id === destId)
+          : null;
 
-      for (const p of pool) {
-        const matches =
-          nextFloor &&
-          (nextFloor.points || []).filter(
+      // Find the warp key whose counterpart on the next floor is closest to the destination
+      let bestKey = null;
+      let bestDestDist = Infinity;
+      if (destPoint && nextFloor) {
+        for (const p of pool) {
+          const matches = (nextFloor.points || []).filter(
             (np) =>
               np?.kind === "poi" &&
               (np.poiType === "stairs" || np.poiType === "elevator") &&
               np.warpKey &&
               normalizeKey(np.warpKey) === normalizeKey(p.warpKey)
           );
-        const distUser = Math.hypot(p.x - userPos.x, p.y - userPos.y);
-        let distDest = 0;
-        if (destPoint && destFloorUrl === nextUrl2 && matches && matches.length) {
-          distDest = Math.min(
+          if (!matches.length) continue;
+          const dist = Math.min(
             ...matches.map((m) => Math.hypot(m.x - destPoint.x, m.y - destPoint.y))
           );
+          if (dist < bestDestDist) {
+            bestDestDist = dist;
+            bestKey = normalizeKey(p.warpKey);
+          }
         }
-        const cost = distUser + distDest; // balance current proximity and destination alignment
-        if (cost < bestD) {
-          bestD = cost;
+      }
+
+      for (const p of pool) {
+        const keyNorm = normalizeKey(p.warpKey);
+        if (bestKey && keyNorm !== bestKey) continue;
+        const distUser = Math.hypot(p.x - userPos.x, p.y - userPos.y);
+        if (distUser < bestD) {
+          bestD = distUser;
           best = p;
         }
       }
