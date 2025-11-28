@@ -47,6 +47,7 @@ export default function UserMap() {
   const waypointPtsRef = useRef([]);
   const [waypoints, setWaypoints] = useState([]);
   const waypointIdxRef = useRef(0);
+  const planRef = useRef(null);
   const stepDetectorRef = useRef(null);
   const stepSampleIntervalRef = useRef(50);
   const lastStepTsRef = useRef(0);
@@ -935,7 +936,7 @@ export default function UserMap() {
     }));
   };
 
-  const computeRouteForStep = async (step, startPosOverride = null) => {
+  const computeRouteForStep = async (step, startPosOverride = null, planArg = null) => {
     const curFloor = floors.find(f=>f.url===selUrl); if (!curFloor) return;
     const img = imgRef.current; if (!img || !img.naturalWidth) { setSensorMsg("Image not ready for routing."); return; }
     let gridObj;
@@ -1049,8 +1050,9 @@ export default function UserMap() {
     if (!destFloor) return;
     const steps = makePlan(selUrl, destFloor.url);
     const planObj = { steps, index: 0 };
+    planRef.current = planObj;
     setPlan(planObj);
-    await computeRouteForStep(planObj.steps[0], userPos);
+    await computeRouteForStep(planObj.steps[0], userPos, planObj);
   };
 
   const clearRoute = () => { setRoutePts([]); setPlan(null); routePtsRef.current = []; waypointPtsRef.current = []; setWaypoints([]); waypointIdxRef.current = 0; };
@@ -1065,7 +1067,8 @@ export default function UserMap() {
     const d = Math.hypot(userPos.x - step.target.x, userPos.y - step.target.y);
     if (d <= warpProximity) {
       // Switch to next floor and place user at matching warp
-      const next = plan.steps[plan.index + 1];
+      const planObj = planArg || planRef.current;
+      const next = planObj && planObj.steps ? planObj.steps[planObj.index + 1] : null;
       if (!next) return;
       const curFloor = floors.find((f) => f.url === selUrl);
       const nextFloor = floors.find((f) => f.url === next.url);
@@ -1091,7 +1094,7 @@ export default function UserMap() {
     (async () => {
       if (!plan || !plan.steps || plan.index>=plan.steps.length) return;
       const step = plan.steps[plan.index]; if (step.url !== selUrl) return;
-      await computeRouteForStep(step);
+      await computeRouteForStep(step, null, plan);
     })();
   }, [selUrl, plan, gapCells]);
 
