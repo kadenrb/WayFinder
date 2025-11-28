@@ -1012,19 +1012,24 @@ export default function UserMap() {
         setRoutePts([]);
         return;
       }
-      // If the destination is on the next floor, choose the warp that best aligns with it
-      const nextFloor = planArg?.steps?.[planArg.index + 1]?.url
-        ? floors.find((f) => f.url === planArg.steps[planArg.index + 1].url)
+      // If the destination is on the next floor, choose the warp pair that best aligns with it
+      const nextUrl =
+        planArg && planArg.steps ? planArg.steps[planArg.index + 1]?.url : null;
+      const nextFloor = nextUrl
+        ? floors.find((f) => f.url === nextUrl)
         : null;
-      const destPoint =
-        dest &&
-        nextFloor &&
-        (nextFloor.points || []).find((p) => p.id === dest.id);
+      const destId = dest?.id || destRef.current?.id;
+      const destPoint = destId
+        ? floors.flatMap((f) => f.points || []).find((p) => p.id === destId)
+        : null;
+      const destFloorUrl = destPoint
+        ? (floors.find((f) => (f.points || []).some((p) => p.id === destId)) || {}).url
+        : null;
 
       for (const p of pool) {
-        const match =
+        const matches =
           nextFloor &&
-          (nextFloor.points || []).find(
+          (nextFloor.points || []).filter(
             (np) =>
               np?.kind === "poi" &&
               (np.poiType === "stairs" || np.poiType === "elevator") &&
@@ -1032,10 +1037,12 @@ export default function UserMap() {
               normalizeKey(np.warpKey) === normalizeKey(p.warpKey)
           );
         const distUser = Math.hypot(p.x - userPos.x, p.y - userPos.y);
-        const distDest =
-          destPoint && match
-            ? Math.hypot(match.x - destPoint.x, match.y - destPoint.y)
-            : 0;
+        let distDest = 0;
+        if (destPoint && destFloorUrl === nextUrl && matches && matches.length) {
+          distDest = Math.min(
+            ...matches.map((m) => Math.hypot(m.x - destPoint.x, m.y - destPoint.y))
+          );
+        }
         const cost = distUser + distDest; // balance current proximity and destination alignment
         if (cost < bestD) {
           bestD = cost;
