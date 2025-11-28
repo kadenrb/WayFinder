@@ -2008,19 +2008,46 @@ export default function MapEditor({ imageSrc }) {
       const text = await f.text();
       const data = JSON.parse(text);
       const applyState = (state) => {
-        if (Array.isArray(state?.points)) setPoints(state.points);
+        const w = typeof state?.imageWidth === "number" && state.imageWidth > 0 ? state.imageWidth : null;
+        const h = typeof state?.imageHeight === "number" && state.imageHeight > 0 ? state.imageHeight : null;
+
+        // If the JSON carries image dimensions, seed natSize so overlays match
+        if (w && h) setNatSize({ w, h });
+
+        // Normalize points that might be stored in pixels (older exports)
+        const normalizePoint = (p) => {
+          let { x, y } = p || {};
+          if (w && typeof x === "number" && x > 1) x = x / w;
+          if (h && typeof y === "number" && y > 1) y = y / h;
+          return { ...p, x, y };
+        };
+
+        if (Array.isArray(state?.points)) {
+          setPoints(state.points.map(normalizePoint));
+        }
         if (Array.isArray(state?.dbBoxes)) setDbBoxes(state.dbBoxes);
         if (
           state &&
-          typeof state.userPos === 'object' &&
+          typeof state.userPos === "object" &&
           state.userPos &&
-          typeof state.userPos.x === 'number' &&
-          typeof state.userPos.y === 'number'
+          typeof state.userPos.x === "number" &&
+          typeof state.userPos.y === "number"
         ) {
-          setUserPos({ x: state.userPos.x, y: state.userPos.y });
+          let { x, y } = state.userPos;
+          if (w && x > 1) x = x / w;
+          if (h && y > 1) y = y / h;
+          setUserPos({ x, y });
         }
-        if (state && typeof state.walkable === 'object' && state.walkable && typeof state.walkable.color === 'string') {
-          const tol = typeof state.walkable.tolerance === 'number' ? state.walkable.tolerance : 12;
+        if (
+          state &&
+          typeof state.walkable === "object" &&
+          state.walkable &&
+          typeof state.walkable.color === "string"
+        ) {
+          const tol =
+            typeof state.walkable.tolerance === "number"
+              ? state.walkable.tolerance
+              : 12;
           setWalkable({ color: normHex(state.walkable.color), tolerance: tol });
         }
       };
