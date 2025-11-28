@@ -1121,7 +1121,7 @@ export default function UserMap() {
     const d = Math.hypot(userPos.x - step.target.x, userPos.y - step.target.y);
     if (d <= warpProximity) {
       // Switch to next floor and place user at matching warp
-      const planObj = planArg || planRef.current;
+      const planObj = planRef.current || plan;
       const next = planObj && planObj.steps ? planObj.steps[planObj.index + 1] : null;
       if (!next) return;
       const curFloor = floors.find((f) => f.url === selUrl);
