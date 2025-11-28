@@ -62,6 +62,7 @@ export default function MapEditor({ imageSrc }) {
   const spacerRef = useRef(null); // scaled box
   const contentRef = useRef(null); // unscaled content (scaled via CSS transform)
   const imgRef = useRef(null);
+  const pointItemRefs = useRef(new Map());
   // ===============================
   // SECTION: Pins & Core Editor State
   // ===============================
@@ -2231,6 +2232,8 @@ export default function MapEditor({ imageSrc }) {
         const top = Math.max(0, targetY - sc.clientHeight / 2);
         sc.scrollTo({ left, top, behavior: "smooth" });
       }
+      const li = pointItemRefs.current.get(p.id);
+      li?.scrollIntoView({ behavior: "smooth", block: "center" });
       rootRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       setPulseId(p.id);
       setTimeout(() => setPulseId(null), 3000);
@@ -2714,7 +2717,10 @@ export default function MapEditor({ imageSrc }) {
                     key={p.id}
                     data-marker
                     onMouseDown={(e) => onMarkerMouseDown(e, p.id)}
-                    onDoubleClick={() => beginEdit(p)}
+                    onDoubleClick={() => {
+                      focusPoint(p);
+                      beginEdit(p);
+                    }}
                     className={`position-absolute rounded-circle marker ${markerClass(
                       p.kind
                     )} ${isSel ? "border border-light" : ""} ${
@@ -3179,6 +3185,10 @@ export default function MapEditor({ imageSrc }) {
                 .map((p) => (
                   <li
                     key={p.id}
+                    ref={(el) => {
+                      if (el) pointItemRefs.current.set(p.id, el);
+                      else pointItemRefs.current.delete(p.id);
+                    }}
                     className={`list-group-item ${
                       selectedId === p.id ? "active" : ""
                     }`}
