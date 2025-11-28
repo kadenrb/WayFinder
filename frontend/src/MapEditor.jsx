@@ -104,6 +104,7 @@ export default function MapEditor({ imageSrc }) {
   const [dbForceCh, setDbForceCh] = useState("auto"); // internal only
   const [dbSoftmax, setDbSoftmax] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [pointsLocked, setPointsLocked] = useState(false); // toggle to prevent accidental moves
 
   // ===============================
   // SECTION: Inline List Editing (quick fixes)
@@ -1841,6 +1842,7 @@ export default function MapEditor({ imageSrc }) {
   const onMarkerMouseDown = (e, id) => {
     e.stopPropagation();
     if (selectMode !== "none") return; // disable dragging while selection tool is active
+    if (pointsLocked) return; // locking prevents accidental drags
     setDrag({ id });
     setSelectedId(id);
   };
@@ -2301,6 +2303,13 @@ export default function MapEditor({ imageSrc }) {
                     ? "Hide Advanced Settings"
                     : "Advanced Settings"}
                 </button>
+                <button
+                  className={`btn ${pointsLocked ? "btn-outline-danger" : "btn-danger"}`}
+                  title="Lock pins to prevent dragging"
+                  onClick={() => setPointsLocked((v) => !v)}
+                >
+                  {pointsLocked ? "Unlock dots" : "Lock dots"}
+                </button>
               </div>
               <div className="gap-3 d-flex flex-wrap">
                 <button
@@ -2733,9 +2742,13 @@ export default function MapEditor({ imageSrc }) {
                       top: pos.y - size / 2,
                       width: size,
                       height: size,
-                      cursor: selectMode === "none" ? "grab" : "crosshair",
+                      cursor:
+                        pointsLocked || selectMode !== "none"
+                          ? "not-allowed"
+                          : "grab",
                       transformOrigin: "center",
-                      pointerEvents: selectMode === "none" ? "auto" : "none",
+                      pointerEvents:
+                        pointsLocked || selectMode !== "none" ? "auto" : "auto",
                     }}
                     title={
                       (p.roomNumber ? `#${p.roomNumber} ` : "") +
