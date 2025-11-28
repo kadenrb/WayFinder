@@ -1192,7 +1192,10 @@ export default function UserMap() {
         pendingRouteRef.current = null;
         if (targetDest) {
           destRef.current = targetDest;
-          await startRouteInternal(startPos, targetDest);
+          // allow the image/grid to settle after floor switch before routing
+          setTimeout(() => {
+            startRouteInternal(startPos, targetDest);
+          }, 300);
           return;
         }
       }
