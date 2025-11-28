@@ -1159,7 +1159,12 @@ export default function UserMap() {
       if (match) {
         saveUserPos(nextFloor.url, { x: match.x, y: match.y });
         setSelUrl(nextFloor.url);
-        setPlan((p) => (p ? { ...p, index: p.index + 1 } : p));
+        setPlan((p) => {
+          if (!p) return p;
+          const updated = { ...p, index: p.index + 1 };
+          planRef.current = updated;
+          return updated;
+        });
         setRoutePts([]);
       }
     }
