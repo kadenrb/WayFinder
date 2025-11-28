@@ -1190,29 +1190,29 @@ export default function UserMap() {
     (async () => {
       if (pendingRouteRef.current && pendingRouteRef.current.startUrl === selUrl) {
         const { startPos, destId } = pendingRouteRef.current;
-        const targetDest =
-          dest ||
-          destRef.current ||
-          floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
-          null;
-        console.info("Route: resuming pending route after floor switch", pendingRouteRef.current);
-        pendingRouteRef.current = null;
-        if (targetDest) {
-          destRef.current = targetDest;
-          // wait for the image to load before rerouting
-          let attempts = 0;
-          const retry = () => {
-            attempts += 1;
-            const img = imgRef.current;
-            if (img && img.naturalWidth && img.naturalHeight) {
-              startRouteInternal(startPos, targetDest);
-            } else if (attempts < 10) {
-              setTimeout(retry, 300);
-            } else {
-              setRouteMsg("Image not ready for routing after warp.");
-            }
-          };
-          retry();
+      const targetDest =
+        dest ||
+        destRef.current ||
+        floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
+        null;
+      console.info("Route: resuming pending route after floor switch", pendingRouteRef.current);
+      pendingRouteRef.current = null;
+      if (targetDest) {
+        destRef.current = targetDest;
+        // wait for the image to load before rerouting
+        let attempts = 0;
+        const retry = () => {
+          attempts += 1;
+          const img = imgRef.current;
+          if (img && img.naturalWidth && img.naturalHeight) {
+            startRouteInternal(startPos, targetDest);
+          } else if (attempts < 10) {
+            setTimeout(retry, 2000);
+          } else {
+            setRouteMsg("Image not ready for routing after warp.");
+          }
+        };
+        retry();
           return;
         }
       }
