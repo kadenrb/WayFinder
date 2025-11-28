@@ -65,6 +65,7 @@ export default function UserMap() {
     routePtsRef.current = Array.isArray(routePts) ? routePts : [];
   }, [routePts]);
   const [autoWarp, setAutoWarp] = useState(true);
+  const [accessibleMode, setAccessibleMode] = useState(false); // prefer elevators when crossing floors
   const [gapCells, setGapCells] = useState(1);
   const [warpProximity, setWarpProximity] = useState(0.02); // normalized distance
   const [plan, setPlan] = useState(null); // { steps:[{ url, kind:'warp'|'dest', key?, target:{x,y} }], index }
@@ -976,18 +977,22 @@ export default function UserMap() {
       );
       let best = null,
         bestD = Infinity;
-      for (const p of curFloor.points || []) {
-        if (
+      const candidates = (curFloor.points || []).filter(
+        (p) =>
           p?.kind === "poi" &&
           (p.poiType === "stairs" || p.poiType === "elevator") &&
           p.warpKey &&
           shared.includes(p.warpKey.trim())
-        ) {
-          const d = Math.hypot(p.x - userPos.x, p.y - userPos.y);
-          if (d < bestD) {
-            bestD = d;
-            best = p;
-          }
+      );
+      const elevators = accessibleMode
+        ? candidates.filter((p) => p.poiType === "elevator")
+        : [];
+      const pool = elevators.length ? elevators : candidates;
+      for (const p of pool) {
+        const d = Math.hypot(p.x - userPos.x, p.y - userPos.y);
+        if (d < bestD) {
+          bestD = d;
+          best = p;
         }
       }
       if (!best) {
@@ -1291,6 +1296,19 @@ export default function UserMap() {
             onClick={() => setAutoWarp((v) => !v)}
           >
             Auto warp: {autoWarp ? "On" : "Off"}
+          </button>
+          <button
+            className={`btn btn-${accessibleMode ? "secondary" : "outline-secondary"} btn-sm`}
+            onClick={() => {
+              setAccessibleMode((v) => !v);
+              // Clear current plan so the next route rebuild honors the mode
+              setPlan(null);
+              setRoutePts([]);
+              waypointPtsRef.current = [];
+              waypointIdxRef.current = 0;
+            }}
+          >
+            Accessibility: {accessibleMode ? "Elevator" : "Any"}
           </button>
           <button
             className={`btn btn-${sensorTracking ? "danger" : "success"} btn-sm`}
