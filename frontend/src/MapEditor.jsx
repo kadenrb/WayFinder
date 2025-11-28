@@ -346,6 +346,14 @@ export default function MapEditor({ imageSrc }) {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const data = JSON.parse(raw);
+        if (
+          typeof data?.imageWidth === "number" &&
+          typeof data?.imageHeight === "number" &&
+          data.imageWidth > 0 &&
+          data.imageHeight > 0
+        ) {
+          setNatSize({ w: data.imageWidth, h: data.imageHeight });
+        }
         if (Array.isArray(data?.points)) setPoints(data.points);
         if (Array.isArray(data?.dbBoxes)) setDbBoxes(data.dbBoxes);
         if (
@@ -406,10 +414,18 @@ export default function MapEditor({ imageSrc }) {
     try {
       localStorage.setItem(
         storageKey,
-        JSON.stringify({ points, dbBoxes, userPos, walkable, northOffset })
+        JSON.stringify({
+          points,
+          dbBoxes,
+          userPos,
+          walkable,
+          northOffset,
+          imageWidth: natSize.w,
+          imageHeight: natSize.h,
+        })
       );
     } catch { }
-  }, [points, dbBoxes, userPos, walkable, northOffset, storageKey]);
+  }, [points, dbBoxes, userPos, walkable, northOffset, storageKey, natSize.w, natSize.h]);
 
   // Must declare hooks before any early returns
   /*
@@ -1743,13 +1759,12 @@ export default function MapEditor({ imageSrc }) {
   const toNorm = (clientX, clientY) => {
     const el = spacerRef.current; // use scaled box for pointer math
     const rect = el?.getBoundingClientRect();
-    if (!rect || !el || !natSize.w || !natSize.h) return { x: 0, y: 0 };
+    if (!rect || !el || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
     const sx = clientX - rect.left;
     const sy = clientY - rect.top;
-    const ux = sx / zoom; // unscaled px
-    const uy = sy / zoom;
-    const x = clamp01(ux / natSize.w);
-    const y = clamp01(uy / natSize.h);
+    // rect already reflects the scaled size; divide by rect dims to get normalized coords
+    const x = clamp01(sx / rect.width);
+    const y = clamp01(sy / rect.height);
     return { x, y };
   };
 
@@ -1759,9 +1774,12 @@ export default function MapEditor({ imageSrc }) {
     - Helpful for placing absolute overlays precisely on the content layer.
   */
   const toPx = (x, y) => {
-    if (!natSize.w || !natSize.h) return { x: 0, y: 0 };
-    // return UN-SCALED px for content layer
-    return { x: x * natSize.w, y: y * natSize.h };
+    const rect = spacerRef.current?.getBoundingClientRect();
+    const w = rect?.width || natSize.w;
+    const h = rect?.height || natSize.h;
+    if (!w || !h) return { x: 0, y: 0 };
+    // return UN-SCALED px for content layer using rendered box dimensions
+    return { x: x * w, y: y * h };
   };
 
   /*
@@ -1990,19 +2008,46 @@ export default function MapEditor({ imageSrc }) {
       const text = await f.text();
       const data = JSON.parse(text);
       const applyState = (state) => {
-        if (Array.isArray(state?.points)) setPoints(state.points);
+        const w = typeof state?.imageWidth === "number" && state.imageWidth > 0 ? state.imageWidth : null;
+        const h = typeof state?.imageHeight === "number" && state.imageHeight > 0 ? state.imageHeight : null;
+
+        // If the JSON carries image dimensions, seed natSize so overlays match
+        if (w && h) setNatSize({ w, h });
+
+        // Normalize points that might be stored in pixels (older exports)
+        const normalizePoint = (p) => {
+          let { x, y } = p || {};
+          if (w && typeof x === "number" && x > 1) x = x / w;
+          if (h && typeof y === "number" && y > 1) y = y / h;
+          return { ...p, x, y };
+        };
+
+        if (Array.isArray(state?.points)) {
+          setPoints(state.points.map(normalizePoint));
+        }
         if (Array.isArray(state?.dbBoxes)) setDbBoxes(state.dbBoxes);
         if (
           state &&
-          typeof state.userPos === 'object' &&
+          typeof state.userPos === "object" &&
           state.userPos &&
-          typeof state.userPos.x === 'number' &&
-          typeof state.userPos.y === 'number'
+          typeof state.userPos.x === "number" &&
+          typeof state.userPos.y === "number"
         ) {
-          setUserPos({ x: state.userPos.x, y: state.userPos.y });
+          let { x, y } = state.userPos;
+          if (w && x > 1) x = x / w;
+          if (h && y > 1) y = y / h;
+          setUserPos({ x, y });
         }
-        if (state && typeof state.walkable === 'object' && state.walkable && typeof state.walkable.color === 'string') {
-          const tol = typeof state.walkable.tolerance === 'number' ? state.walkable.tolerance : 12;
+        if (
+          state &&
+          typeof state.walkable === "object" &&
+          state.walkable &&
+          typeof state.walkable.color === "string"
+        ) {
+          const tol =
+            typeof state.walkable.tolerance === "number"
+              ? state.walkable.tolerance
+              : 12;
           setWalkable({ color: normHex(state.walkable.color), tolerance: tol });
         }
       };
