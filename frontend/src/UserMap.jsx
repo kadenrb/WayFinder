@@ -48,6 +48,9 @@ export default function UserMap() {
   const [waypoints, setWaypoints] = useState([]);
   const waypointIdxRef = useRef(0);
   const planRef = useRef(null);
+  const destRef = useRef(null);
+  const [lastUser, setLastUser] = useState(null); // last known user position (url + pos)
+  const pendingRouteRef = useRef(null); // used when we auto-switch to the user's floor before routing
   const stepDetectorRef = useRef(null);
   const stepSampleIntervalRef = useRef(50);
   const lastStepTsRef = useRef(0);
@@ -333,7 +336,12 @@ export default function UserMap() {
       setUserPos(null);
     }
   }, [selUrl]);
-  useEffect(() => { userPosRef.current = userPos; }, [userPos]);
+  useEffect(() => {
+    userPosRef.current = userPos;
+    if (userPos && selUrl) {
+      setLastUser({ url: selUrl, pos: userPos });
+    }
+  }, [userPos, selUrl]);
   useEffect(() => {
     setDebugData((prev) => ({ ...prev, sensorMsg }));
   }, [sensorMsg]);
@@ -1042,20 +1050,51 @@ export default function UserMap() {
     setRoutePts(out);
   };
 
-  const startRoute = async () => {
-    if (!floor || !userPos || !dest) return;
+  const startRouteInternal = async (startPos, targetDest) => {
+    const floor = floors.find((f) => f.url === selUrl);
+    if (!floor || !startPos || !targetDest) return;
     const destFloor = floors.find((f) =>
-      f.points?.some((p) => p.id === dest.id)
+      f.points?.some((p) => p.id === targetDest.id)
     );
-    if (!destFloor) return;
+    if (!destFloor) {
+      setRouteMsg("Destination not found on any floor.");
+      console.info("Route: destination not found", targetDest);
+      return;
+    }
     const steps = makePlan(selUrl, destFloor.url);
     const planObj = { steps, index: 0 };
     planRef.current = planObj;
     setPlan(planObj);
-    await computeRouteForStep(planObj.steps[0], userPos, planObj);
+    console.info("Route: plan built", planObj);
+    await computeRouteForStep(planObj.steps[0], startPos, planObj);
   };
 
-  const clearRoute = () => { setRoutePts([]); setPlan(null); routePtsRef.current = []; waypointPtsRef.current = []; setWaypoints([]); waypointIdxRef.current = 0; };
+  const startRoute = async () => {
+    const destId = dest?.id || destRef.current?.id;
+    const targetDest = dest || destRef.current;
+    if (!targetDest) {
+      setRouteMsg("Select a destination room first.");
+      return;
+    }
+    const startPos = userPos || lastUser?.pos;
+    const startUrl = userPos ? selUrl : lastUser?.url;
+    if (!startPos || !startUrl) {
+      setRouteMsg("Place yourself on the map first.");
+      return;
+    }
+
+    // If we are not viewing the user's floor, switch there before routing
+    if (startUrl !== selUrl) {
+      pendingRouteRef.current = { startPos, startUrl, destId };
+      setSensorMsg("Switching to your floor to build the route...");
+      setSelUrl(startUrl);
+      return;
+    }
+
+    await startRouteInternal(startPos, targetDest);
+  };
+
+  const clearRoute = () => { setRoutePts([]); setPlan(null); planRef.current=null; routePtsRef.current = []; waypointPtsRef.current = []; setWaypoints([]); waypointIdxRef.current = 0; pendingRouteRef.current=null; };
 
   // Auto-warp when near target warp
   useEffect(() => {
@@ -1092,6 +1131,21 @@ export default function UserMap() {
   // Recompute route when floor switches within an active plan (but not on userPos changes)
   useEffect(() => {
     (async () => {
+      if (pendingRouteRef.current && pendingRouteRef.current.startUrl === selUrl) {
+        const { startPos, destId } = pendingRouteRef.current;
+        const targetDest =
+          dest ||
+          destRef.current ||
+          floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
+          null;
+        console.info("Route: resuming pending route after floor switch", pendingRouteRef.current);
+        pendingRouteRef.current = null;
+        if (targetDest) {
+          destRef.current = targetDest;
+          await startRouteInternal(startPos, targetDest);
+          return;
+        }
+      }
       if (!plan || !plan.steps || plan.index>=plan.steps.length) return;
       const step = plan.steps[plan.index]; if (step.url !== selUrl) return;
       await computeRouteForStep(step, null, plan);
