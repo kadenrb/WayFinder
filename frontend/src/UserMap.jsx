@@ -1192,10 +1192,20 @@ export default function UserMap() {
         pendingRouteRef.current = null;
         if (targetDest) {
           destRef.current = targetDest;
-          // allow the image/grid to settle after floor switch before routing
-          setTimeout(() => {
-            startRouteInternal(startPos, targetDest);
-          }, 300);
+          // wait for the image to load before rerouting
+          let attempts = 0;
+          const retry = () => {
+            attempts += 1;
+            const img = imgRef.current;
+            if (img && img.naturalWidth && img.naturalHeight) {
+              startRouteInternal(startPos, targetDest);
+            } else if (attempts < 10) {
+              setTimeout(retry, 300);
+            } else {
+              setRouteMsg("Image not ready for routing after warp.");
+            }
+          };
+          retry();
           return;
         }
       }
