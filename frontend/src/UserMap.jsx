@@ -77,6 +77,7 @@ export default function UserMap() {
   const [moveStep, setMoveStep] = useState(0.01); // normalized delta per arrow key press
   const [searchText, setSearchText] = useState("");
   const [searchMsg, setSearchMsg] = useState("");
+  const [routeMsg, setRouteMsg] = useState("");
   const [sensorTracking, setSensorTracking] = useState(false);
   const [sensorMsg, setSensorMsg] = useState("");
   const [debugVisible, setDebugVisible] = useState(false);
@@ -1419,6 +1420,7 @@ export default function UserMap() {
             <span>{moveStep.toFixed(3)}</span>
           </div>
           {searchMsg && <span className="small text-muted">{searchMsg}</span>}
+          {routeMsg && <span className="small text-muted">{routeMsg}</span>}
         </div>
         {sensorMsg && <div className="small text-muted mt-2">{sensorMsg}</div>}
         <DebuggerPanel
