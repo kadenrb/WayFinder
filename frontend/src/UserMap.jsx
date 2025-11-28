@@ -51,6 +51,7 @@ export default function UserMap() {
   const destRef = useRef(null);
   const [lastUser, setLastUser] = useState(null); // last known user position (url + pos)
   const pendingRouteRef = useRef(null); // used when we auto-switch to the user's floor before routing
+  const routeResumeRef = useRef(null); // callback to resume routing when image loads
   const stepDetectorRef = useRef(null);
   const stepSampleIntervalRef = useRef(50);
   const lastStepTsRef = useRef(0);
@@ -390,6 +391,12 @@ export default function UserMap() {
         .catch(() => {
           gridRef.current = null;
         });
+    }
+    // Resume pending route once the image is ready
+    if (routeResumeRef.current) {
+      const resume = routeResumeRef.current;
+      routeResumeRef.current = null;
+      resume();
     }
   };
 
@@ -1199,20 +1206,15 @@ export default function UserMap() {
       pendingRouteRef.current = null;
       if (targetDest) {
         destRef.current = targetDest;
-        // wait for the image to load before rerouting
-        let attempts = 0;
-        const retry = () => {
-          attempts += 1;
-          const img = imgRef.current;
-          if (img && img.naturalWidth && img.naturalHeight) {
-            startRouteInternal(startPos, targetDest);
-          } else if (attempts < 10) {
-            setTimeout(retry, 2000);
-          } else {
-            setRouteMsg("Image not ready for routing after warp.");
-          }
-        };
-        retry();
+          // wait for the image to load before rerouting; hook into onImgLoad
+          routeResumeRef.current = () => startRouteInternal(startPos, targetDest);
+          // fallback timer in case onImgLoad never fires
+          setTimeout(() => {
+            if (routeResumeRef.current) {
+              routeResumeRef.current();
+              routeResumeRef.current = null;
+            }
+          }, 2500);
           return;
         }
       }
