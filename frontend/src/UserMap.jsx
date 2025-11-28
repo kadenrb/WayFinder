@@ -986,10 +986,22 @@ export default function UserMap() {
           p.warpKey &&
           shared.includes(normalizeKey(p.warpKey))
       );
+      if (!candidates.length) {
+        setRouteMsg("No shared warp keys between these floors.");
+        setSensorMsg("No shared warp keys between these floors.");
+        setRoutePts([]);
+        return;
+      }
       const elevators = accessibleMode
         ? candidates.filter((p) => p.poiType === "elevator")
         : [];
       const pool = elevators.length ? elevators : candidates;
+      if (!pool.length) {
+        setRouteMsg("No usable warps on this floor.");
+        setSensorMsg("No usable warps on this floor.");
+        setRoutePts([]);
+        return;
+      }
       for (const p of pool) {
         const d = Math.hypot(p.x - userPos.x, p.y - userPos.y);
         if (d < bestD) {
