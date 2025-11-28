@@ -52,6 +52,7 @@ export default function UserMap() {
   const [lastUser, setLastUser] = useState(null); // last known user position (url + pos)
   const pendingRouteRef = useRef(null); // used when we auto-switch to the user's floor before routing
   const routeResumeRef = useRef(null); // callback to resume routing when image loads
+  const imageCacheRef = useRef(new Map()); // url -> {img, w, h}
   const stepDetectorRef = useRef(null);
   const stepSampleIntervalRef = useRef(50);
   const lastStepTsRef = useRef(0);
@@ -378,7 +379,13 @@ export default function UserMap() {
   };
   const toPx = (x, y) => ({ x: x * natSize.w, y: y * natSize.h });
   const onImgLoad = (e) => {
-    setNatSize({ w: e.target.naturalWidth, h: e.target.naturalHeight });
+    const w = e.target.naturalWidth;
+    const h = e.target.naturalHeight;
+    setNatSize({ w, h });
+    // cache this image size for reuse
+    if (selUrl) {
+      imageCacheRef.current.set(selUrl, { img: e.target, w, h });
+    }
     // Build/capture walkable grid for this floor
     const f = floors.find((fl) => fl.url === selUrl);
     if (f) {
@@ -1125,6 +1132,20 @@ export default function UserMap() {
     planRef.current = planObj;
     setPlan(planObj);
     console.info("Route: plan built", planObj);
+    // Prefetch next floor image if plan spans floors
+    const next = planObj.steps[1];
+    if (next && next.url && !imageCacheRef.current.has(next.url)) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        imageCacheRef.current.set(next.url, {
+          img,
+          w: img.naturalWidth,
+          h: img.naturalHeight,
+        });
+      };
+      img.src = next.url;
+    }
     await computeRouteForStep(planObj.steps[0], startPos, planObj);
   };
 
@@ -1178,7 +1199,21 @@ export default function UserMap() {
           normalizeKey(p.warpKey) === step.key
       );
       if (match) {
-        saveUserPos(nextFloor.url, { x: match.x, y: match.y });
+        const landing = { x: match.x, y: match.y };
+        saveUserPos(nextFloor.url, landing);
+        const destId = dest?.id || destRef.current?.id || null;
+        const targetDest =
+          dest ||
+          destRef.current ||
+          floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
+          null;
+        // schedule resume once next image loads
+        pendingRouteRef.current = { startPos: landing, startUrl: nextFloor.url, destId };
+        routeResumeRef.current = () => {
+          const tgt = targetDest || (destId && { id: destId });
+          if (tgt) destRef.current = tgt;
+          startRouteInternal(landing, tgt);
+        };
         setSelUrl(nextFloor.url);
         setPlan((p) => {
           if (!p) return p;
@@ -1187,6 +1222,13 @@ export default function UserMap() {
           return updated;
         });
         setRoutePts([]);
+        setTimeout(() => {
+          if (routeResumeRef.current) {
+            const resume = routeResumeRef.current;
+            routeResumeRef.current = null;
+            resume();
+          }
+        }, 2500);
       }
     }
   }, [autoWarp, userPos, plan, floors, selUrl, warpProximity]);
