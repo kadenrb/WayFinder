@@ -1012,10 +1012,33 @@ export default function UserMap() {
         setRoutePts([]);
         return;
       }
+      // If the destination is on the next floor, choose the warp that best aligns with it
+      const nextFloor = planArg?.steps?.[planArg.index + 1]?.url
+        ? floors.find((f) => f.url === planArg.steps[planArg.index + 1].url)
+        : null;
+      const destPoint =
+        dest &&
+        nextFloor &&
+        (nextFloor.points || []).find((p) => p.id === dest.id);
+
       for (const p of pool) {
-        const d = Math.hypot(p.x - userPos.x, p.y - userPos.y);
-        if (d < bestD) {
-          bestD = d;
+        const match =
+          nextFloor &&
+          (nextFloor.points || []).find(
+            (np) =>
+              np?.kind === "poi" &&
+              (np.poiType === "stairs" || np.poiType === "elevator") &&
+              np.warpKey &&
+              normalizeKey(np.warpKey) === normalizeKey(p.warpKey)
+          );
+        const distUser = Math.hypot(p.x - userPos.x, p.y - userPos.y);
+        const distDest =
+          destPoint && match
+            ? Math.hypot(match.x - destPoint.x, match.y - destPoint.y)
+            : 0;
+        const cost = distUser + distDest; // balance current proximity and destination alignment
+        if (cost < bestD) {
+          bestD = cost;
           best = p;
         }
       }
