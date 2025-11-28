@@ -52,6 +52,7 @@ export default function UserMap() {
   const [lastUser, setLastUser] = useState(null); // last known user position (url + pos)
   const pendingRouteRef = useRef(null); // used when we auto-switch to the user's floor before routing
   const routeResumeRef = useRef(null); // callback to resume routing when image loads
+  // Cache floor images and their natural size so we can route immediately after a warp
   const imageCacheRef = useRef(new Map()); // url -> {img, w, h}
   const stepDetectorRef = useRef(null);
   const stepSampleIntervalRef = useRef(50);
@@ -378,11 +379,12 @@ export default function UserMap() {
     return { x, y };
   };
   const toPx = (x, y) => ({ x: x * natSize.w, y: y * natSize.h });
+  // Image load: update natural size, cache it, rebuild grid, and resume any pending route after a warp
   const onImgLoad = (e) => {
     const w = e.target.naturalWidth;
     const h = e.target.naturalHeight;
     setNatSize({ w, h });
-    // cache this image size for reuse
+    // Cache this image size for reuse to avoid waiting on naturalWidth after a warp
     if (selUrl) {
       imageCacheRef.current.set(selUrl, { img: e.target, w, h });
     }
@@ -399,7 +401,7 @@ export default function UserMap() {
           gridRef.current = null;
         });
     }
-    // Resume pending route once the image is ready
+    // Resume pending route once the image is ready (after switching floors)
     if (routeResumeRef.current) {
       const resume = routeResumeRef.current;
       routeResumeRef.current = null;
@@ -1132,7 +1134,7 @@ export default function UserMap() {
     planRef.current = planObj;
     setPlan(planObj);
     console.info("Route: plan built", planObj);
-    // Prefetch next floor image if plan spans floors
+    // Prefetch next floor image if plan spans floors so routing can resume immediately after warp
     const next = planObj.steps[1];
     if (next && next.url && !imageCacheRef.current.has(next.url)) {
       const img = new Image();
@@ -1207,7 +1209,7 @@ export default function UserMap() {
           destRef.current ||
           floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
           null;
-        // schedule resume once next image loads
+        // Schedule resume once next image loads; do not route immediately because image/pos may not be ready yet
         pendingRouteRef.current = { startPos: landing, startUrl: nextFloor.url, destId };
         routeResumeRef.current = () => {
           const tgt = targetDest || (destId && { id: destId });
@@ -1222,6 +1224,7 @@ export default function UserMap() {
           return updated;
         });
         setRoutePts([]);
+        // Fallback timer in case onImgLoad does not fire
         setTimeout(() => {
           if (routeResumeRef.current) {
             const resume = routeResumeRef.current;
@@ -1237,6 +1240,7 @@ export default function UserMap() {
   // Recompute route when floor switches within an active plan (but not on userPos changes)
   useEffect(() => {
     (async () => {
+      // If we switched floors for a pending route, resume once the image is ready (onImgLoad will trigger resume)
       if (pendingRouteRef.current && pendingRouteRef.current.startUrl === selUrl) {
         const { startPos, destId } = pendingRouteRef.current;
       const targetDest =
