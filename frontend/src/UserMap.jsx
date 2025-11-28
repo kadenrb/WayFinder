@@ -1062,6 +1062,20 @@ export default function UserMap() {
       return;
     }
     const steps = makePlan(selUrl, destFloor.url);
+    if (steps.length === 1 && destFloor.url !== selUrl) {
+      const shared = sharedWarpKeys(
+        floors.find((f) => f.url === selUrl),
+        destFloor
+      );
+      setRouteMsg("No shared warp keys between these floors.");
+      setSensorMsg("No shared warp keys between these floors.");
+      console.info("Route: no path across floors", {
+        from: selUrl,
+        to: destFloor.url,
+        sharedKeys: shared,
+      });
+      return;
+    }
     const planObj = { steps, index: 0 };
     planRef.current = planObj;
     setPlan(planObj);
