@@ -1034,7 +1034,13 @@ export default function UserMap() {
     }));
   };
 
-  const computeRouteForStep = async (step, startPosOverride = null, planArg = null) => {
+  const computeRouteForStep = async (
+    step,
+    startPosOverride = null,
+    planArg = null,
+    fallbackUsed = false,
+    gapOverride = null
+  ) => {
     const curFloor = floors.find(f=>f.url===selUrl); if (!curFloor) return;
     const img = imgRef.current; if (!img || !img.naturalWidth) { setSensorMsg("Image not ready for routing."); return; }
     const baseColors = [hexToRgb(curFloor.walkable?.color || "#9F9383")];
@@ -1177,10 +1183,18 @@ export default function UserMap() {
       setRoutePts([]);
       return;
     }
-    const path = bfs(grid,gw,gh,sCell,tCell, Math.max(0,Math.floor(gapCells)));
-    if (!path || path.length<2) { setRoutePts([]); return; }
+    const gapVal = Math.max(0, Math.floor(gapOverride ?? gapCells ?? 0));
+    const path = bfs(grid,gw,gh,sCell,tCell, gapVal);
+    if (!path || path.length<2) {
+      if (!fallbackUsed && gapVal === 0) {
+        await computeRouteForStep(step, startPosOverride, planArg, true, 1);
+      } else {
+        setRoutePts([]);
+      }
+      return;
+    }
     const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
-    const simpTol = 0.003 + Math.max(0, Math.floor(gapCells)) * 0.003; // higher gap -> allow more smoothing
+    const simpTol = 0.003 + gapVal * 0.003; // higher gap -> allow more smoothing
     const simplified = simplifyRoute(out, simpTol);
     routePtsRef.current = simplified;
     // Only (re)build waypoints and reset index if waypointIdxRef is at 0 (initial build)
