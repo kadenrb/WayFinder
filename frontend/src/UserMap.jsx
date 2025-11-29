@@ -1184,7 +1184,7 @@ export default function UserMap() {
       return;
     }
     const gapVal = Math.max(0, Math.floor(gapOverride ?? gapCells ?? 0));
-    const path = bfs(grid,gw,gh,sCell,tCell, gapVal);
+    const path = bfs(gridObj.grid,gw,gh,sCell,tCell, gapVal);
     if (!path || path.length<2) {
       if (!fallbackUsed && gapVal === 0) {
         await computeRouteForStep(step, startPosOverride, planArg, true, 1);
