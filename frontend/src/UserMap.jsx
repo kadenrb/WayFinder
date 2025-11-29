@@ -1042,37 +1042,36 @@ export default function UserMap() {
       ? curFloor.walkable.extraColors.map((c) => hexToRgb(normHex(c)))
       : [];
     const tol = curFloor.walkable?.tolerance;
-    let gridObj;
-    try {
-      // Try with main walkable color only to avoid black text dominating
-      gridObj = await buildGrid(img, baseColors, tol, 4);
-      // If start/target fail, fall back to including extra colors
-      const w = gridObj.w,
-        h = gridObj.h,
-        stp = gridObj.step,
-        gw = gridObj.gw,
-        gh = gridObj.gh;
+
+    const buildGridTry = async (useExtra) => {
+      const cols = useExtra ? baseColors.concat(extraColors) : baseColors;
+      return buildGrid(img, cols, tol, 4);
+    };
+
+    const tryBuild = async (useExtra) => {
+      const obj = await buildGridTry(useExtra);
+      const { grid, gw, gh, step: stp, w, h } = obj;
       const startPos = startPosOverride || userPos;
-      if (startPos) {
-        const ux = Math.max(0, Math.min(gw - 1, Math.round((startPos.x * w) / stp)));
-        const uy = Math.max(0, Math.min(gh - 1, Math.round((startPos.y * h) / stp)));
-        const sCell = nearestWalkable(gridObj.grid, gw, gh, ux, uy);
-        if (!sCell && extraColors.length) {
-          gridObj = await buildGrid(img, baseColors.concat(extraColors), tol, 4);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to build walkable grid", err);
-      setSensorMsg("Routing failed (image/CORS).");
+      if (!startPos) return { obj, sCell: null, tCell: null, w, h, stp, gw, gh };
+      const ux = Math.max(0, Math.min(gw - 1, Math.round((startPos.x * w) / stp)));
+      const uy = Math.max(0, Math.min(gh - 1, Math.round((startPos.y * h) / stp)));
+      const sCell = nearestWalkable(grid, gw, gh, ux, uy);
+      const tx = Math.max(0, Math.min(gw - 1, Math.round(((target?.x || 0) * w) / stp)));
+      const ty = Math.max(0, Math.min(gh - 1, Math.round(((target?.y || 0) * h) / stp)));
+      const tCell = target ? nearestWalkable(grid, gw, gh, tx, ty) : null;
+      return { obj, sCell, tCell, w, h, stp, gw, gh };
+    };
+
+    let attempt = await tryBuild(false);
+    if ((!attempt.sCell || !attempt.tCell) && extraColors.length) {
+      attempt = await tryBuild(true);
+    }
+    if (!attempt.sCell || !attempt.tCell) {
       setRoutePts([]);
       return;
     }
-    const {grid,gw,gh,step:stp,w,h}=gridObj;
-    const startPos = startPosOverride || userPos;
-    if (!startPos) { setRoutePts([]); return; }
-    const ux = Math.max(0, Math.min(gw-1, Math.round((startPos.x*w)/stp)));
-    const uy = Math.max(0, Math.min(gh-1, Math.round((startPos.y*h)/stp)));
-    const sCell = nearestWalkable(grid,gw,gh,ux,uy); if (!sCell) { setRoutePts([]); return; }
+
+    const { obj: gridObj, sCell, tCell, w, h, stp, gw, gh } = attempt;
     let target = null;
     if (step.kind === "dest") {
       const destFloor = floors.find((f) =>
