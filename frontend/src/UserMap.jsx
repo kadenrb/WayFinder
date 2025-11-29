@@ -866,7 +866,7 @@ export default function UserMap() {
     return out;
   };
 
-  // Simplify a polyline using Ramer-Douglas-Peucker to reduce zig-zags from the grid path
+  // Simplify a polyline using Ramer-Douglas-Peucker and colinear collapse to reduce zig-zags from the grid path
   const simplifyRoute = (pts, epsilon = 0.003) => {
     if (!pts || pts.length < 3) return pts || [];
     const sq = (v) => v * v;
@@ -902,7 +902,30 @@ export default function UserMap() {
       const right = rdp(arr.slice(maxIdx));
       return left.slice(0, -1).concat(right);
     };
-    return rdp(pts);
+    // First RDP
+    let simplified = rdp(pts);
+    // Then collapse nearly-colinear points (angle change below threshold)
+    const angle = (a, b, c) => {
+      const abx = b.x - a.x, aby = b.y - a.y;
+      const bcx = c.x - b.x, bcy = c.y - b.y;
+      const dot = abx * bcx + aby * bcy;
+      const mag1 = Math.hypot(abx, aby) || 1e-9;
+      const mag2 = Math.hypot(bcx, bcy) || 1e-9;
+      const cos = dot / (mag1 * mag2);
+      return Math.acos(Math.max(-1, Math.min(1, cos)));
+    };
+    const collapsed = [simplified[0]];
+    for (let i = 1; i < simplified.length - 1; i++) {
+      const a = collapsed[collapsed.length - 1];
+      const b = simplified[i];
+      const c = simplified[i + 1];
+      const ang = angle(a, b, c);
+      if (ang > (5 * Math.PI) / 180) {
+        collapsed.push(b);
+      }
+    }
+    collapsed.push(simplified[simplified.length - 1]);
+    return collapsed;
   };
 
   const routeDirection = () => {
@@ -1140,10 +1163,11 @@ export default function UserMap() {
     }
     const tx=Math.max(0,Math.min(gw-1,Math.round((target.x*w)/stp))); const ty=Math.max(0,Math.min(gh-1,Math.round((target.y*h)/stp)));
    const tCell = nearestWalkable(grid,gw,gh,tx,ty); if (!tCell) { setRoutePts([]); return; }
-   const path = bfs(grid,gw,gh,sCell,tCell, Math.max(0,Math.floor(gapCells)));
-   if (!path || path.length<2) { setRoutePts([]); return; }
-   const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
-    const simplified = simplifyRoute(out, 0.003);
+    const path = bfs(grid,gw,gh,sCell,tCell, Math.max(0,Math.floor(gapCells)));
+    if (!path || path.length<2) { setRoutePts([]); return; }
+    const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
+    const simpTol = 0.003 + Math.max(0, Math.floor(gapCells)) * 0.003; // higher gap -> allow more smoothing
+    const simplified = simplifyRoute(out, simpTol);
     routePtsRef.current = simplified;
     // Only (re)build waypoints and reset index if waypointIdxRef is at 0 (initial build)
     if (waypointIdxRef.current === 0) {
