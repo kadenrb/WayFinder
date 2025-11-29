@@ -7,7 +7,7 @@ import logo from "./images/logo.png";
 export default function AdminRegister() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tag, setTag] = useState("");
+  const [company, setCompany] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -25,7 +25,7 @@ export default function AdminRegister() {
         body: JSON.stringify({
           email: email,
           password: password,
-          tags: tag,
+          company: company,
         }),
       });
       const data = await res.json();
@@ -85,8 +85,8 @@ export default function AdminRegister() {
               <input
                 type="text"
                 className="form-control bg-card-inner"
-                value={tag}
-                onChange={(e) => setTag(e.target.value)}
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
                 placeholder="Your Company Name"
                 required
               />
