@@ -1052,26 +1052,23 @@ export default function UserMap() {
       const obj = await buildGridTry(useExtra);
       const { grid, gw, gh, step: stp, w, h } = obj;
       const startPos = startPosOverride || userPos;
-      if (!startPos) return { obj, sCell: null, tCell: null, w, h, stp, gw, gh };
+      if (!startPos) return { obj, sCell: null, w, h, stp, gw, gh };
       const ux = Math.max(0, Math.min(gw - 1, Math.round((startPos.x * w) / stp)));
       const uy = Math.max(0, Math.min(gh - 1, Math.round((startPos.y * h) / stp)));
       const sCell = nearestWalkable(grid, gw, gh, ux, uy);
-      const tx = Math.max(0, Math.min(gw - 1, Math.round(((target?.x || 0) * w) / stp)));
-      const ty = Math.max(0, Math.min(gh - 1, Math.round(((target?.y || 0) * h) / stp)));
-      const tCell = target ? nearestWalkable(grid, gw, gh, tx, ty) : null;
-      return { obj, sCell, tCell, w, h, stp, gw, gh };
+      return { obj, sCell, w, h, stp, gw, gh };
     };
 
     let attempt = await tryBuild(false);
-    if ((!attempt.sCell || !attempt.tCell) && extraColors.length) {
+    if (!attempt.sCell && extraColors.length) {
       attempt = await tryBuild(true);
     }
-    if (!attempt.sCell || !attempt.tCell) {
+    if (!attempt.sCell) {
       setRoutePts([]);
       return;
     }
 
-    const { obj: gridObj, sCell, tCell, w, h, stp, gw, gh } = attempt;
+    const { obj: gridObj, sCell, w, h, stp, gw, gh } = attempt;
     let target = null;
     if (step.kind === "dest") {
       const destFloor = floors.find((f) =>
