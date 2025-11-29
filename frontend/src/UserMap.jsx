@@ -1175,7 +1175,11 @@ export default function UserMap() {
       step.target = target;
     }
     const tx=Math.max(0,Math.min(gw-1,Math.round((target.x*w)/stp))); const ty=Math.max(0,Math.min(gh-1,Math.round((target.y*h)/stp)));
-   const tCell = nearestWalkable(grid,gw,gh,tx,ty); if (!tCell) { setRoutePts([]); return; }
+    const tCell = nearestWalkable(grid, gw, gh, tx, ty);
+    if (!tCell) {
+      setRoutePts([]);
+      return;
+    }
     const path = bfs(grid,gw,gh,sCell,tCell, Math.max(0,Math.floor(gapCells)));
     if (!path || path.length<2) { setRoutePts([]); return; }
     const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
