@@ -866,6 +866,45 @@ export default function UserMap() {
     return out;
   };
 
+  // Simplify a polyline using Ramer-Douglas-Peucker to reduce zig-zags from the grid path
+  const simplifyRoute = (pts, epsilon = 0.003) => {
+    if (!pts || pts.length < 3) return pts || [];
+    const sq = (v) => v * v;
+    const distSqToSegment = (p, a, b) => {
+      const abx = b.x - a.x;
+      const aby = b.y - a.y;
+      const apx = p.x - a.x;
+      const apy = p.y - a.y;
+      const abLenSq = abx * abx + aby * aby || 1e-9;
+      let t = (apx * abx + apy * aby) / abLenSq;
+      t = Math.max(0, Math.min(1, t));
+      const projx = a.x + t * abx;
+      const projy = a.y + t * aby;
+      return sq(p.x - projx) + sq(p.y - projy);
+    };
+    const rdp = (arr) => {
+      if (arr.length < 3) return arr;
+      let maxIdx = 0;
+      let maxDistSq = 0;
+      const start = arr[0];
+      const end = arr[arr.length - 1];
+      for (let i = 1; i < arr.length - 1; i++) {
+        const d = distSqToSegment(arr[i], start, end);
+        if (d > maxDistSq) {
+          maxDistSq = d;
+          maxIdx = i;
+        }
+      }
+      if (Math.sqrt(maxDistSq) <= epsilon) {
+        return [start, end];
+      }
+      const left = rdp(arr.slice(0, maxIdx + 1));
+      const right = rdp(arr.slice(maxIdx));
+      return left.slice(0, -1).concat(right);
+    };
+    return rdp(pts);
+  };
+
   const routeDirection = () => {
     return null;
   };
@@ -1100,14 +1139,15 @@ export default function UserMap() {
       step.target = target;
     }
     const tx=Math.max(0,Math.min(gw-1,Math.round((target.x*w)/stp))); const ty=Math.max(0,Math.min(gh-1,Math.round((target.y*h)/stp)));
-    const tCell = nearestWalkable(grid,gw,gh,tx,ty); if (!tCell) { setRoutePts([]); return; }
-    const path = bfs(grid,gw,gh,sCell,tCell, Math.max(0,Math.floor(gapCells)));
-    if (!path || path.length<2) { setRoutePts([]); return; }
-    const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
-    routePtsRef.current = out;
+   const tCell = nearestWalkable(grid,gw,gh,tx,ty); if (!tCell) { setRoutePts([]); return; }
+   const path = bfs(grid,gw,gh,sCell,tCell, Math.max(0,Math.floor(gapCells)));
+   if (!path || path.length<2) { setRoutePts([]); return; }
+   const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
+    const simplified = simplifyRoute(out, 0.003);
+    routePtsRef.current = simplified;
     // Only (re)build waypoints and reset index if waypointIdxRef is at 0 (initial build)
     if (waypointIdxRef.current === 0) {
-      let wp = buildWaypoints(out);
+      let wp = buildWaypoints(simplified);
       const startPt = wp[0];
       const endPt = wp[wp.length - 1];
       const userPt = userPos || startPt;
@@ -1119,7 +1159,7 @@ export default function UserMap() {
       setWaypoints(wp);
       setSensorMsg(`Route ready: ${out.length} points, waypoints: ${wp.length}`);
     }
-    setRoutePts(out);
+    setRoutePts(simplified);
   };
 
   const startRouteInternal = async (startPos, targetDest) => {
