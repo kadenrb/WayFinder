@@ -73,7 +73,7 @@ export default function UserMap() {
   }, [routePts]);
   const [autoWarp, setAutoWarp] = useState(true);
   const [accessibleMode, setAccessibleMode] = useState(false); // prefer elevators when crossing floors
-  const [gapCells, setGapCells] = useState(1);
+  const [gapCells, setGapCells] = useState(0);
   const [warpProximity, setWarpProximity] = useState(0.02); // normalized distance
   const [plan, setPlan] = useState(null); // { steps:[{ url, kind:'warp'|'dest', key?, target:{x,y} }], index }
   const dragRef = useRef(null);
@@ -1546,22 +1546,6 @@ export default function UserMap() {
           >
             Clear
           </button>
-          <div
-            className="d-flex align-items-center small text-muted"
-            style={{ gap: 8 }}
-          >
-            <span>Gap</span>
-            <input
-              type="range"
-              min="0"
-              max="5"
-              step="1"
-              value={gapCells}
-              onChange={(e) => setGapCells(parseInt(e.target.value) || 0)}
-              style={{ width: 80 }}
-            />
-            <span>{gapCells}</span>
-          </div>
           <button
             className={`btn btn-${autoWarp ? "info" : "outline-info"} btn-sm`}
             onClick={() => setAutoWarp((v) => !v)}
