@@ -62,6 +62,7 @@ export default function MapEditor({ imageSrc }) {
   const spacerRef = useRef(null); // scaled box
   const contentRef = useRef(null); // unscaled content (scaled via CSS transform)
   const imgRef = useRef(null);
+  const pointItemRefs = useRef(new Map());
   // ===============================
   // SECTION: Pins & Core Editor State
   // ===============================
@@ -103,6 +104,7 @@ export default function MapEditor({ imageSrc }) {
   const [dbForceCh, setDbForceCh] = useState("auto"); // internal only
   const [dbSoftmax, setDbSoftmax] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [pointsLocked, setPointsLocked] = useState(false); // toggle to prevent accidental moves
 
   // ===============================
   // SECTION: Inline List Editing (quick fixes)
@@ -1840,6 +1842,7 @@ export default function MapEditor({ imageSrc }) {
   const onMarkerMouseDown = (e, id) => {
     e.stopPropagation();
     if (selectMode !== "none") return; // disable dragging while selection tool is active
+    if (pointsLocked) return; // locking prevents accidental drags
     setDrag({ id });
     setSelectedId(id);
   };
@@ -2231,6 +2234,8 @@ export default function MapEditor({ imageSrc }) {
         const top = Math.max(0, targetY - sc.clientHeight / 2);
         sc.scrollTo({ left, top, behavior: "smooth" });
       }
+      const li = pointItemRefs.current.get(p.id);
+      li?.scrollIntoView({ behavior: "smooth", block: "center" });
       rootRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       setPulseId(p.id);
       setTimeout(() => setPulseId(null), 3000);
@@ -2297,6 +2302,13 @@ export default function MapEditor({ imageSrc }) {
                   {showAdvanced
                     ? "Hide Advanced Settings"
                     : "Advanced Settings"}
+                </button>
+                <button
+                  className={`btn ${pointsLocked ? "btn-outline-danger" : "btn-danger"}`}
+                  title="Lock pins to prevent dragging"
+                  onClick={() => setPointsLocked((v) => !v)}
+                >
+                  {pointsLocked ? "Unlock dots" : "Lock dots"}
                 </button>
               </div>
               <div className="gap-3 d-flex flex-wrap">
@@ -2680,6 +2692,7 @@ export default function MapEditor({ imageSrc }) {
                     <div
                       key="user"
                       data-marker
+                      onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => {
                         e.stopPropagation();
                         if (selectMode !== "none") return;
@@ -2714,7 +2727,11 @@ export default function MapEditor({ imageSrc }) {
                     key={p.id}
                     data-marker
                     onMouseDown={(e) => onMarkerMouseDown(e, p.id)}
-                    onDoubleClick={() => beginEdit(p)}
+                    onClick={(e) => e.stopPropagation()}
+                    onDoubleClick={() => {
+                      focusPoint(p);
+                      beginEdit(p);
+                    }}
                     className={`position-absolute rounded-circle marker ${markerClass(
                       p.kind
                     )} ${isSel ? "border border-light" : ""} ${
@@ -2725,9 +2742,13 @@ export default function MapEditor({ imageSrc }) {
                       top: pos.y - size / 2,
                       width: size,
                       height: size,
-                      cursor: selectMode === "none" ? "grab" : "crosshair",
+                      cursor:
+                        pointsLocked || selectMode !== "none"
+                          ? "not-allowed"
+                          : "grab",
                       transformOrigin: "center",
-                      pointerEvents: selectMode === "none" ? "auto" : "none",
+                      pointerEvents:
+                        pointsLocked || selectMode !== "none" ? "auto" : "auto",
                     }}
                     title={
                       (p.roomNumber ? `#${p.roomNumber} ` : "") +
@@ -3179,6 +3200,10 @@ export default function MapEditor({ imageSrc }) {
                 .map((p) => (
                   <li
                     key={p.id}
+                    ref={(el) => {
+                      if (el) pointItemRefs.current.set(p.id, el);
+                      else pointItemRefs.current.delete(p.id);
+                    }}
                     className={`list-group-item ${
                       selectedId === p.id ? "active" : ""
                     }`}
