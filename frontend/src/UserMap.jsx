@@ -48,6 +48,13 @@ export default function UserMap() {
   const waypointPtsRef = useRef([]);
   const [waypoints, setWaypoints] = useState([]);
   const waypointIdxRef = useRef(0);
+  const planRef = useRef(null);
+  const destRef = useRef(null);
+  const [lastUser, setLastUser] = useState(null); // last known user position (url + pos)
+  const pendingRouteRef = useRef(null); // used when we auto-switch to the user's floor before routing
+  const routeResumeRef = useRef(null); // callback to resume routing when image loads
+  // Cache floor images and their natural size so we can route immediately after a warp
+  const imageCacheRef = useRef(new Map()); // url -> {img, w, h}
   const stepDetectorRef = useRef(null);
   const stepSampleIntervalRef = useRef(50);
   const lastStepTsRef = useRef(0);
@@ -66,6 +73,7 @@ export default function UserMap() {
     routePtsRef.current = Array.isArray(routePts) ? routePts : [];
   }, [routePts]);
   const [autoWarp, setAutoWarp] = useState(true);
+  const [accessibleMode, setAccessibleMode] = useState(false); // prefer elevators when crossing floors
   const [gapCells, setGapCells] = useState(1);
   const [warpProximity, setWarpProximity] = useState(0.02); // normalized distance
   const [plan, setPlan] = useState(null); // { steps:[{ url, kind:'warp'|'dest', key?, target:{x,y} }], index }
@@ -73,6 +81,7 @@ export default function UserMap() {
   const [moveStep, setMoveStep] = useState(0.01); // normalized delta per arrow key press
   const [searchText, setSearchText] = useState("");
   const [searchMsg, setSearchMsg] = useState("");
+  const [routeMsg, setRouteMsg] = useState("");
   const [sensorTracking, setSensorTracking] = useState(false);
   const [sensorMsg, setSensorMsg] = useState("");
   const [debugVisible, setDebugVisible] = useState(false);
@@ -348,7 +357,10 @@ export default function UserMap() {
   }, [selUrl]);
   useEffect(() => {
     userPosRef.current = userPos;
-  }, [userPos]);
+    if (userPos && selUrl) {
+      setLastUser({ url: selUrl, pos: userPos });
+    }
+  }, [userPos, selUrl]);
   useEffect(() => {
     setDebugData((prev) => ({ ...prev, sensorMsg }));
   }, [sensorMsg]);
@@ -387,8 +399,15 @@ export default function UserMap() {
     return { x, y };
   };
   const toPx = (x, y) => ({ x: x * natSize.w, y: y * natSize.h });
+  // Image load: update natural size, cache it, rebuild grid, and resume any pending route after a warp
   const onImgLoad = (e) => {
-    setNatSize({ w: e.target.naturalWidth, h: e.target.naturalHeight });
+    const w = e.target.naturalWidth;
+    const h = e.target.naturalHeight;
+    setNatSize({ w, h });
+    // Cache this image size for reuse to avoid waiting on naturalWidth after a warp
+    if (selUrl) {
+      imageCacheRef.current.set(selUrl, { img: e.target, w, h });
+    }
     // Build/capture walkable grid for this floor
     const f = floors.find((fl) => fl.url === selUrl);
     if (f) {
@@ -401,6 +420,12 @@ export default function UserMap() {
         .catch(() => {
           gridRef.current = null;
         });
+    }
+    // Resume pending route once the image is ready (after switching floors)
+    if (routeResumeRef.current) {
+      const resume = routeResumeRef.current;
+      routeResumeRef.current = null;
+      resume();
     }
   };
 
@@ -927,6 +952,8 @@ export default function UserMap() {
   }
 
   // Build a cross-floor plan from current floor to destination floor using shared warp keys
+  const normalizeKey = (k) =>
+    typeof k === "string" ? k.trim().toLowerCase() : "";
   const sharedWarpKeys = (a, b) => {
     const A = new Set(),
       B = new Set();
@@ -936,7 +963,7 @@ export default function UserMap() {
         (p.poiType === "stairs" || p.poiType === "elevator") &&
         p.warpKey
       )
-        A.add(p.warpKey.trim());
+        A.add(normalizeKey(p.warpKey));
     });
     (b?.points || []).forEach((p) => {
       if (
@@ -944,7 +971,7 @@ export default function UserMap() {
         (p.poiType === "stairs" || p.poiType === "elevator") &&
         p.warpKey
       )
-        B.add(p.warpKey.trim());
+        B.add(normalizeKey(p.warpKey));
     });
     const out = [];
     for (const k of A) if (B.has(k)) out.push(k);
@@ -966,7 +993,7 @@ export default function UserMap() {
                 p?.warpKey &&
                 (p.poiType === "stairs" || p.poiType === "elevator")
             )
-            .map((p) => p.warpKey.trim())
+            .map((p) => normalizeKey(p.warpKey))
         ),
       ])
     );
@@ -1000,14 +1027,9 @@ export default function UserMap() {
     }));
   };
 
-  const computeRouteForStep = async (step, startPosOverride = null) => {
-    const curFloor = floors.find((f) => f.url === selUrl);
-    if (!curFloor) return;
-    const img = imgRef.current;
-    if (!img || !img.naturalWidth) {
-      setSensorMsg("Image not ready for routing.");
-      return;
-    }
+  const computeRouteForStep = async (step, startPosOverride = null, planArg = null) => {
+    const curFloor = floors.find(f=>f.url===selUrl); if (!curFloor) return;
+    const img = imgRef.current; if (!img || !img.naturalWidth) { setSensorMsg("Image not ready for routing."); return; }
     let gridObj;
     try {
       gridObj = await buildGrid(
@@ -1067,18 +1089,71 @@ export default function UserMap() {
       );
       let best = null,
         bestD = Infinity;
-      for (const p of curFloor.points || []) {
-        if (
+      const candidates = (curFloor.points || []).filter(
+        (p) =>
           p?.kind === "poi" &&
           (p.poiType === "stairs" || p.poiType === "elevator") &&
           p.warpKey &&
-          shared.includes(p.warpKey.trim())
-        ) {
-          const d = Math.hypot(p.x - userPos.x, p.y - userPos.y);
-          if (d < bestD) {
-            bestD = d;
-            best = p;
+          shared.includes(normalizeKey(p.warpKey))
+      );
+      if (!candidates.length) {
+        setRouteMsg("No shared warp keys between these floors.");
+        setSensorMsg("No shared warp keys between these floors.");
+        setRoutePts([]);
+        return;
+      }
+      const elevators = accessibleMode
+        ? candidates.filter((p) => p.poiType === "elevator")
+        : [];
+      const pool = elevators.length ? elevators : candidates;
+      if (!pool.length) {
+        setRouteMsg("No usable warps on this floor.");
+        setSensorMsg("No usable warps on this floor.");
+        setRoutePts([]);
+        return;
+      }
+      // Prefer the warp pair that is closest to the destination on the next floor, then break ties by user distance
+      const nextUrl2 =
+        planArg && planArg.steps ? planArg.steps[planArg.index + 1]?.url : null;
+      const nextFloor = nextUrl2
+        ? floors.find((f) => f.url === nextUrl2)
+        : null;
+      const destId = dest?.id || destRef.current?.id;
+      const destPoint =
+        destId && nextFloor
+          ? (nextFloor.points || []).find((p) => p.id === destId)
+          : null;
+
+      // Find the warp key whose counterpart on the next floor is closest to the destination
+      let bestKey = null;
+      let bestDestDist = Infinity;
+      if (destPoint && nextFloor) {
+        for (const p of pool) {
+          const matches = (nextFloor.points || []).filter(
+            (np) =>
+              np?.kind === "poi" &&
+              (np.poiType === "stairs" || np.poiType === "elevator") &&
+              np.warpKey &&
+              normalizeKey(np.warpKey) === normalizeKey(p.warpKey)
+          );
+          if (!matches.length) continue;
+          const dist = Math.min(
+            ...matches.map((m) => Math.hypot(m.x - destPoint.x, m.y - destPoint.y))
+          );
+          if (dist < bestDestDist) {
+            bestDestDist = dist;
+            bestKey = normalizeKey(p.warpKey);
           }
+        }
+      }
+
+      for (const p of pool) {
+        const keyNorm = normalizeKey(p.warpKey);
+        if (bestKey && keyNorm !== bestKey) continue;
+        const distUser = Math.hypot(p.x - userPos.x, p.y - userPos.y);
+        if (distUser < bestD) {
+          bestD = distUser;
+          best = p;
         }
       }
       if (!best) {
@@ -1087,7 +1162,7 @@ export default function UserMap() {
       }
       target = { x: best.x, y: best.y };
       // Store current warp target on step for proximity check
-      step.key = best.warpKey.trim();
+      step.key = normalizeKey(best.warpKey);
       step.target = target;
     }
     const tx = Math.max(0, Math.min(gw - 1, Math.round((target.x * w) / stp)));
@@ -1139,26 +1214,79 @@ export default function UserMap() {
     setRoutePts(out);
   };
 
-  const startRoute = async () => {
-    if (!floor || !userPos || !dest) return;
+  const startRouteInternal = async (startPos, targetDest) => {
+    const floor = floors.find((f) => f.url === selUrl);
+    if (!floor || !startPos || !targetDest) return;
     const destFloor = floors.find((f) =>
-      f.points?.some((p) => p.id === dest.id)
+      f.points?.some((p) => p.id === targetDest.id)
     );
-    if (!destFloor) return;
+    if (!destFloor) {
+      setRouteMsg("Destination not found on any floor.");
+      console.info("Route: destination not found", targetDest);
+      return;
+    }
     const steps = makePlan(selUrl, destFloor.url);
+    if (steps.length === 1 && destFloor.url !== selUrl) {
+      const shared = sharedWarpKeys(
+        floors.find((f) => f.url === selUrl),
+        destFloor
+      );
+      setRouteMsg("No shared warp keys between these floors.");
+      setSensorMsg("No shared warp keys between these floors.");
+      console.info("Route: no path across floors", {
+        from: selUrl,
+        to: destFloor.url,
+        sharedKeys: shared,
+      });
+      return;
+    }
     const planObj = { steps, index: 0 };
+    planRef.current = planObj;
     setPlan(planObj);
-    await computeRouteForStep(planObj.steps[0], userPos);
+    console.info("Route: plan built", planObj);
+    // Prefetch next floor image if plan spans floors so routing can resume immediately after warp
+    const next = planObj.steps[1];
+    if (next && next.url && !imageCacheRef.current.has(next.url)) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        imageCacheRef.current.set(next.url, {
+          img,
+          w: img.naturalWidth,
+          h: img.naturalHeight,
+        });
+      };
+      img.src = next.url;
+    }
+    await computeRouteForStep(planObj.steps[0], startPos, planObj);
   };
 
-  const clearRoute = () => {
-    setRoutePts([]);
-    setPlan(null);
-    routePtsRef.current = [];
-    waypointPtsRef.current = [];
-    setWaypoints([]);
-    waypointIdxRef.current = 0;
+  const startRoute = async () => {
+    const destId = dest?.id || destRef.current?.id;
+    const targetDest = dest || destRef.current;
+    if (!targetDest) {
+      setRouteMsg("Select a destination room first.");
+      return;
+    }
+    const startPos = userPos || lastUser?.pos;
+    const startUrl = userPos ? selUrl : lastUser?.url;
+    if (!startPos || !startUrl) {
+      setRouteMsg("Place yourself on the map first.");
+      return;
+    }
+
+    // If we are not viewing the user's floor, switch there before routing
+    if (startUrl !== selUrl) {
+      pendingRouteRef.current = { startPos, startUrl, destId };
+      setSensorMsg("Switching to your floor to build the route...");
+      setSelUrl(startUrl);
+      return;
+    }
+
+    await startRouteInternal(startPos, targetDest);
   };
+
+  const clearRoute = () => { setRoutePts([]); setPlan(null); planRef.current=null; routePtsRef.current = []; waypointPtsRef.current = []; setWaypoints([]); waypointIdxRef.current = 0; pendingRouteRef.current=null; };
 
   // Auto-warp when near target warp
   useEffect(() => {
@@ -1170,7 +1298,8 @@ export default function UserMap() {
     const d = Math.hypot(userPos.x - step.target.x, userPos.y - step.target.y);
     if (d <= warpProximity) {
       // Switch to next floor and place user at matching warp
-      const next = plan.steps[plan.index + 1];
+      const planObj = planRef.current || plan;
+      const next = planObj && planObj.steps ? planObj.steps[planObj.index + 1] : null;
       if (!next) return;
       const curFloor = floors.find((f) => f.url === selUrl);
       const nextFloor = floors.find((f) => f.url === next.url);
@@ -1179,13 +1308,40 @@ export default function UserMap() {
           p?.kind === "poi" &&
           (p.poiType === "stairs" || p.poiType === "elevator") &&
           p.warpKey &&
-          p.warpKey.trim() === step.key
+          normalizeKey(p.warpKey) === step.key
       );
       if (match) {
-        saveUserPos(nextFloor.url, { x: match.x, y: match.y });
+        const landing = { x: match.x, y: match.y };
+        saveUserPos(nextFloor.url, landing);
+        const destId = dest?.id || destRef.current?.id || null;
+        const targetDest =
+          dest ||
+          destRef.current ||
+          floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
+          null;
+        // Schedule resume once next image loads; do not route immediately because image/pos may not be ready yet
+        pendingRouteRef.current = { startPos: landing, startUrl: nextFloor.url, destId };
+        routeResumeRef.current = () => {
+          const tgt = targetDest || (destId && { id: destId });
+          if (tgt) destRef.current = tgt;
+          startRouteInternal(landing, tgt);
+        };
         setSelUrl(nextFloor.url);
-        setPlan((p) => (p ? { ...p, index: p.index + 1 } : p));
+        setPlan((p) => {
+          if (!p) return p;
+          const updated = { ...p, index: p.index + 1 };
+          planRef.current = updated;
+          return updated;
+        });
         setRoutePts([]);
+        // Fallback timer in case onImgLoad does not fire
+        setTimeout(() => {
+          if (routeResumeRef.current) {
+            const resume = routeResumeRef.current;
+            routeResumeRef.current = null;
+            resume();
+          }
+        }, 2500);
       }
     }
   }, [autoWarp, userPos, plan, floors, selUrl, warpProximity]);
@@ -1194,10 +1350,33 @@ export default function UserMap() {
   // Recompute route when floor switches within an active plan (but not on userPos changes)
   useEffect(() => {
     (async () => {
-      if (!plan || !plan.steps || plan.index >= plan.steps.length) return;
-      const step = plan.steps[plan.index];
-      if (step.url !== selUrl) return;
-      await computeRouteForStep(step);
+      // If we switched floors for a pending route, resume once the image is ready (onImgLoad will trigger resume)
+      if (pendingRouteRef.current && pendingRouteRef.current.startUrl === selUrl) {
+        const { startPos, destId } = pendingRouteRef.current;
+      const targetDest =
+        dest ||
+        destRef.current ||
+        floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
+        null;
+      console.info("Route: resuming pending route after floor switch", pendingRouteRef.current);
+      pendingRouteRef.current = null;
+      if (targetDest) {
+        destRef.current = targetDest;
+          // wait for the image to load before rerouting; hook into onImgLoad
+          routeResumeRef.current = () => startRouteInternal(startPos, targetDest);
+          // fallback timer in case onImgLoad never fires
+          setTimeout(() => {
+            if (routeResumeRef.current) {
+              routeResumeRef.current();
+              routeResumeRef.current = null;
+            }
+          }, 2500);
+          return;
+        }
+      }
+      if (!plan || !plan.steps || plan.index>=plan.steps.length) return;
+      const step = plan.steps[plan.index]; if (step.url !== selUrl) return;
+      await computeRouteForStep(step, null, plan);
     })();
   }, [selUrl, plan, gapCells]);
 
@@ -1522,6 +1701,19 @@ export default function UserMap() {
             Auto warp: {autoWarp ? "On" : "Off"}
           </button>
           <button
+            className={`btn btn-${accessibleMode ? "secondary" : "outline-secondary"} btn-sm`}
+            onClick={() => {
+              setAccessibleMode((v) => !v);
+              // Clear current plan so the next route rebuild honors the mode
+              setPlan(null);
+              setRoutePts([]);
+              waypointPtsRef.current = [];
+              waypointIdxRef.current = 0;
+            }}
+          >
+            Accessibility: {accessibleMode ? "Elevator" : "Any"}
+          </button>
+          <button
             className={`btn btn-${sensorTracking ? "danger" : "success"} btn-sm`}
             onClick={sensorTracking ? stopSensorTracking : startSensorTracking}
             disabled={!sensorTracking && !userPos}
@@ -1545,6 +1737,7 @@ export default function UserMap() {
             <span>{moveStep.toFixed(3)}</span>
           </div> */}
           {searchMsg && <span className="small text-muted">{searchMsg}</span>}
+          {routeMsg && <span className="small text-muted">{routeMsg}</span>}
         </div>
         {sensorMsg && <div className="small text-muted mt-2">{sensorMsg}</div>}
         <DebuggerPanel

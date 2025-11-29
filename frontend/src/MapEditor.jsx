@@ -62,6 +62,7 @@ export default function MapEditor({ imageSrc }) {
   const spacerRef = useRef(null); // scaled box
   const contentRef = useRef(null); // unscaled content (scaled via CSS transform)
   const imgRef = useRef(null);
+  const pointItemRefs = useRef(new Map());
   // ===============================
   // SECTION: Pins & Core Editor State
   // ===============================
@@ -103,6 +104,7 @@ export default function MapEditor({ imageSrc }) {
   const [dbForceCh, setDbForceCh] = useState("auto"); // internal only
   const [dbSoftmax, setDbSoftmax] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [pointsLocked, setPointsLocked] = useState(false); // toggle to prevent accidental moves
 
   // ===============================
   // SECTION: Inline List Editing (quick fixes)
@@ -346,6 +348,14 @@ export default function MapEditor({ imageSrc }) {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const data = JSON.parse(raw);
+        if (
+          typeof data?.imageWidth === "number" &&
+          typeof data?.imageHeight === "number" &&
+          data.imageWidth > 0 &&
+          data.imageHeight > 0
+        ) {
+          setNatSize({ w: data.imageWidth, h: data.imageHeight });
+        }
         if (Array.isArray(data?.points)) setPoints(data.points);
         if (Array.isArray(data?.dbBoxes)) setDbBoxes(data.dbBoxes);
         if (
@@ -409,10 +419,18 @@ export default function MapEditor({ imageSrc }) {
     try {
       localStorage.setItem(
         storageKey,
-        JSON.stringify({ points, dbBoxes, userPos, walkable, northOffset })
+        JSON.stringify({
+          points,
+          dbBoxes,
+          userPos,
+          walkable,
+          northOffset,
+          imageWidth: natSize.w,
+          imageHeight: natSize.h,
+        })
       );
-    } catch {}
-  }, [points, dbBoxes, userPos, walkable, northOffset, storageKey]);
+    } catch { }
+  }, [points, dbBoxes, userPos, walkable, northOffset, storageKey, natSize.w, natSize.h]);
 
   // Must declare hooks before any early returns
   /*
@@ -1746,13 +1764,12 @@ export default function MapEditor({ imageSrc }) {
   const toNorm = (clientX, clientY) => {
     const el = spacerRef.current; // use scaled box for pointer math
     const rect = el?.getBoundingClientRect();
-    if (!rect || !el || !natSize.w || !natSize.h) return { x: 0, y: 0 };
+    if (!rect || !el || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
     const sx = clientX - rect.left;
     const sy = clientY - rect.top;
-    const ux = sx / zoom; // unscaled px
-    const uy = sy / zoom;
-    const x = clamp01(ux / natSize.w);
-    const y = clamp01(uy / natSize.h);
+    // rect already reflects the scaled size; divide by rect dims to get normalized coords
+    const x = clamp01(sx / rect.width);
+    const y = clamp01(sy / rect.height);
     return { x, y };
   };
 
@@ -1762,9 +1779,12 @@ export default function MapEditor({ imageSrc }) {
     - Helpful for placing absolute overlays precisely on the content layer.
   */
   const toPx = (x, y) => {
-    if (!natSize.w || !natSize.h) return { x: 0, y: 0 };
-    // return UN-SCALED px for content layer
-    return { x: x * natSize.w, y: y * natSize.h };
+    const rect = spacerRef.current?.getBoundingClientRect();
+    const w = rect?.width || natSize.w;
+    const h = rect?.height || natSize.h;
+    if (!w || !h) return { x: 0, y: 0 };
+    // return UN-SCALED px for content layer using rendered box dimensions
+    return { x: x * w, y: y * h };
   };
 
   /*
@@ -1825,6 +1845,7 @@ export default function MapEditor({ imageSrc }) {
   const onMarkerMouseDown = (e, id) => {
     e.stopPropagation();
     if (selectMode !== "none") return; // disable dragging while selection tool is active
+    if (pointsLocked) return; // locking prevents accidental drags
     setDrag({ id });
     setSelectedId(id);
   };
@@ -1993,7 +2014,23 @@ export default function MapEditor({ imageSrc }) {
       const text = await f.text();
       const data = JSON.parse(text);
       const applyState = (state) => {
-        if (Array.isArray(state?.points)) setPoints(state.points);
+        const w = typeof state?.imageWidth === "number" && state.imageWidth > 0 ? state.imageWidth : null;
+        const h = typeof state?.imageHeight === "number" && state.imageHeight > 0 ? state.imageHeight : null;
+
+        // If the JSON carries image dimensions, seed natSize so overlays match
+        if (w && h) setNatSize({ w, h });
+
+        // Normalize points that might be stored in pixels (older exports)
+        const normalizePoint = (p) => {
+          let { x, y } = p || {};
+          if (w && typeof x === "number" && x > 1) x = x / w;
+          if (h && typeof y === "number" && y > 1) y = y / h;
+          return { ...p, x, y };
+        };
+
+        if (Array.isArray(state?.points)) {
+          setPoints(state.points.map(normalizePoint));
+        }
         if (Array.isArray(state?.dbBoxes)) setDbBoxes(state.dbBoxes);
         if (
           state &&
@@ -2002,7 +2039,10 @@ export default function MapEditor({ imageSrc }) {
           typeof state.userPos.x === "number" &&
           typeof state.userPos.y === "number"
         ) {
-          setUserPos({ x: state.userPos.x, y: state.userPos.y });
+          let { x, y } = state.userPos;
+          if (w && x > 1) x = x / w;
+          if (h && y > 1) y = y / h;
+          setUserPos({ x, y });
         }
         if (
           state &&
@@ -2200,6 +2240,8 @@ export default function MapEditor({ imageSrc }) {
         const top = Math.max(0, targetY - sc.clientHeight / 2);
         sc.scrollTo({ left, top, behavior: "smooth" });
       }
+      const li = pointItemRefs.current.get(p.id);
+      li?.scrollIntoView({ behavior: "smooth", block: "center" });
       rootRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       setPulseId(p.id);
       setTimeout(() => setPulseId(null), 3000);
@@ -2266,6 +2308,13 @@ export default function MapEditor({ imageSrc }) {
                   {showAdvanced
                     ? "Hide Advanced Settings"
                     : "Advanced Settings"}
+                </button>
+                <button
+                  className={`btn ${pointsLocked ? "btn-outline-danger" : "btn-danger"}`}
+                  title="Lock pins to prevent dragging"
+                  onClick={() => setPointsLocked((v) => !v)}
+                >
+                  {pointsLocked ? "Unlock dots" : "Lock dots"}
                 </button>
               </div>
               <div className="gap-3 d-flex flex-wrap">
@@ -2658,6 +2707,7 @@ export default function MapEditor({ imageSrc }) {
                     <div
                       key="user"
                       data-marker
+                      onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => {
                         e.stopPropagation();
                         if (selectMode !== "none") return;
@@ -2692,7 +2742,11 @@ export default function MapEditor({ imageSrc }) {
                     key={p.id}
                     data-marker
                     onMouseDown={(e) => onMarkerMouseDown(e, p.id)}
-                    onDoubleClick={() => beginEdit(p)}
+                    onClick={(e) => e.stopPropagation()}
+                    onDoubleClick={() => {
+                      focusPoint(p);
+                      beginEdit(p);
+                    }}
                     className={`position-absolute rounded-circle marker ${markerClass(
                       p.kind
                     )} ${isSel ? "border border-light" : ""} ${
@@ -2703,9 +2757,13 @@ export default function MapEditor({ imageSrc }) {
                       top: pos.y - size / 2,
                       width: size,
                       height: size,
-                      cursor: selectMode === "none" ? "grab" : "crosshair",
+                      cursor:
+                        pointsLocked || selectMode !== "none"
+                          ? "not-allowed"
+                          : "grab",
                       transformOrigin: "center",
-                      pointerEvents: selectMode === "none" ? "auto" : "none",
+                      pointerEvents:
+                        pointsLocked || selectMode !== "none" ? "auto" : "auto",
                     }}
                     title={
                       (p.roomNumber ? `#${p.roomNumber} ` : "") +
@@ -3157,6 +3215,10 @@ export default function MapEditor({ imageSrc }) {
                 .map((p) => (
                   <li
                     key={p.id}
+                    ref={(el) => {
+                      if (el) pointItemRefs.current.set(p.id, el);
+                      else pointItemRefs.current.delete(p.id);
+                    }}
                     className={`list-group-item ${
                       selectedId === p.id ? "active" : ""
                     }`}
