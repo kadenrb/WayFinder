@@ -15,7 +15,8 @@
   deployment, this would fetch floors.json from a hosted location on the client’s
   website.
 */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { StepDetector } from "./stepDetector";
 import DebuggerPanel from "./DebuggerPanel";
 
@@ -119,7 +120,7 @@ export default function UserMap() {
 
   const loadHeadingOffset = () => {
     try {
-      const raw = localStorage.getItem('wf_heading_offset');
+      const raw = localStorage.getItem("wf_heading_offset");
       const val = raw ? parseFloat(raw) : 0;
       if (Number.isFinite(val)) {
         headingOffsetRef.current = normalizeAngle(val);
@@ -128,14 +129,22 @@ export default function UserMap() {
   };
   const saveHeadingOffset = (val) => {
     headingOffsetRef.current = normalizeAngle(val || 0);
-    try { localStorage.setItem('wf_heading_offset', headingOffsetRef.current.toString()); } catch {}
+    try {
+      localStorage.setItem(
+        "wf_heading_offset",
+        headingOffsetRef.current.toString()
+      );
+    } catch {}
   };
-  useEffect(() => { loadHeadingOffset(); }, []);
-  const applyHeadingOffset = (val) => normalizeAngle((val || 0) + (headingOffsetRef.current || 0));
+  useEffect(() => {
+    loadHeadingOffset();
+  }, []);
+  const applyHeadingOffset = (val) =>
+    normalizeAngle((val || 0) + (headingOffsetRef.current || 0));
 
   const headingUpdateRef = useRef({ ts: 0, value: 0 });
   const limitHeadingRate = (prev, next) => {
-    const now = (performance && performance.now) ? performance.now() : Date.now();
+    const now = performance && performance.now ? performance.now() : Date.now();
     const { ts = now, value = prev || 0 } = headingUpdateRef.current;
     const dtSec = Math.max(0.016, Math.min(0.5, (now - ts) / 1000));
     const maxRate = 90; // deg/s cap
@@ -159,7 +168,8 @@ export default function UserMap() {
     const buf = geoBufferRef.current || [];
     const now = Date.now();
     const recent = buf.filter(
-      (e) => now - e.ts < 5000 && e.speed && e.speed > 0.5 && e.acc && e.acc < 50
+      (e) =>
+        now - e.ts < 5000 && e.speed && e.speed > 0.5 && e.acc && e.acc < 50
     );
     if (recent.length < 3) return null;
     const rad = (deg) => (deg * Math.PI) / 180;
@@ -170,7 +180,9 @@ export default function UserMap() {
       sy += Math.sin(rad(r.heading));
     });
     const mean = normalizeAngle((Math.atan2(sy, sx) * 180) / Math.PI);
-    const maxDiff = Math.max(...recent.map((r) => angularDiff(r.heading, mean)));
+    const maxDiff = Math.max(
+      ...recent.map((r) => angularDiff(r.heading, mean))
+    );
     if (maxDiff > 20) return null;
     return mean;
   };
@@ -194,8 +206,10 @@ export default function UserMap() {
   };
 
   const smoothHeading = (prev, next, alpha = 0.2) => {
-    if (typeof prev !== 'number' || !Number.isFinite(prev)) return normalizeAngle(next || 0);
-    if (typeof next !== 'number' || !Number.isFinite(next)) return normalizeAngle(prev || 0);
+    if (typeof prev !== "number" || !Number.isFinite(prev))
+      return normalizeAngle(next || 0);
+    if (typeof next !== "number" || !Number.isFinite(next))
+      return normalizeAngle(prev || 0);
     let delta = normalizeAngle(next - prev);
     if (delta > 180) delta -= 360;
     const blended = prev + alpha * delta;
@@ -246,7 +260,8 @@ export default function UserMap() {
 
   const initSensorBaseline = () => {
     const now =
-      typeof performance !== 'undefined' && typeof performance.now === 'function'
+      typeof performance !== "undefined" &&
+      typeof performance.now === "function"
         ? performance.now()
         : Date.now();
     sensorBaselineRef.current = {
@@ -273,10 +288,10 @@ export default function UserMap() {
       arr
         .map((f, index) => ({
           ...f,
-          url: f.url || f.imageData || '',
+          url: f.url || f.imageData || "",
           points: Array.isArray(f.points) ? f.points : [],
-          walkable: f.walkable || { color: '#9F9383', tolerance: 12 },
-          sortOrder: typeof f.sortOrder === 'number' ? f.sortOrder : index,
+          walkable: f.walkable || { color: "#9F9383", tolerance: 12 },
+          sortOrder: typeof f.sortOrder === "number" ? f.sortOrder : index,
         }))
         .filter((f) => f.url);
 
@@ -290,7 +305,7 @@ export default function UserMap() {
     const load = async () => {
       try {
         const res = await fetch(MANIFEST_URL, { cache: "no-store" });
-        if (!res.ok) throw new Error('Failed to fetch floors');
+        if (!res.ok) throw new Error("Failed to fetch floors");
         const data = await res.json();
         if (aborted) return;
         const normalized = normalizeFloors(data?.floors);
@@ -300,7 +315,7 @@ export default function UserMap() {
           return;
         }
       } catch (err) {
-        console.error('Failed to load published floors from manifest', err);
+        console.error("Failed to load published floors from manifest", err);
       }
     };
     load();
@@ -331,21 +346,28 @@ export default function UserMap() {
       setUserPos(null);
     }
   }, [selUrl]);
-  useEffect(() => { userPosRef.current = userPos; }, [userPos]);
+  useEffect(() => {
+    userPosRef.current = userPos;
+  }, [userPos]);
   useEffect(() => {
     setDebugData((prev) => ({ ...prev, sensorMsg }));
   }, [sensorMsg]);
 
-  const floor = useMemo(() => floors.find(f => f.url === selUrl) || null, [floors, selUrl]);
+  const floor = useMemo(
+    () => floors.find((f) => f.url === selUrl) || null,
+    [floors, selUrl]
+  );
   useEffect(() => {
     northOffsetRef.current =
-      typeof floor?.northOffset === 'number' && Number.isFinite(floor.northOffset)
+      typeof floor?.northOffset === "number" &&
+      Number.isFinite(floor.northOffset)
         ? floor.northOffset
         : 0;
   }, [floor]);
   useEffect(() => {
     northOffsetRef.current =
-      typeof floor?.northOffset === 'number' && Number.isFinite(floor.northOffset)
+      typeof floor?.northOffset === "number" &&
+      Number.isFinite(floor.northOffset)
         ? floor.northOffset
         : 0;
   }, [floor]);
@@ -478,27 +500,42 @@ export default function UserMap() {
   };
 
   const requestMotionPermissions = async () => {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    if (
+      typeof DeviceMotionEvent !== "undefined" &&
+      typeof DeviceMotionEvent.requestPermission === "function"
+    ) {
       const res = await DeviceMotionEvent.requestPermission();
-      if (res !== 'granted') throw new Error('Motion permission denied');
+      if (res !== "granted") throw new Error("Motion permission denied");
     }
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    if (
+      typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function"
+    ) {
       const res = await DeviceOrientationEvent.requestPermission();
-      if (res !== 'granted') throw new Error('Orientation permission denied');
+      if (res !== "granted") throw new Error("Orientation permission denied");
     }
   };
 
   // Start the sensor loop: request permissions, reset calibration, seed heading
   const startSensorTracking = async () => {
-    if (!userPos) { setSensorMsg("Place yourself on the map first."); return; }
-    if (typeof window === 'undefined' || typeof DeviceMotionEvent === 'undefined') {
+    if (!userPos) {
+      setSensorMsg("Place yourself on the map first.");
+      return;
+    }
+    if (
+      typeof window === "undefined" ||
+      typeof DeviceMotionEvent === "undefined"
+    ) {
       setSensorMsg("Device motion API not supported.");
       return;
     }
     try {
       await requestMotionPermissions();
       calibrationRef.current = { baseline: 0, samples: 0, done: false };
-      stepStateRef.current = { lastStepTs: performance.now ? performance.now() : Date.now(), active: false };
+      stepStateRef.current = {
+        lastStepTs: performance.now ? performance.now() : Date.now(),
+        active: false,
+      };
       gyroInitializedRef.current = false;
       initSensorBaseline();
       headingRef.current = compassHeadingRef.current || headingRef.current || 0;
@@ -510,12 +547,19 @@ export default function UserMap() {
             const h = pos?.coords?.heading;
             const spd = pos?.coords?.speed;
             const acc = pos?.coords?.accuracy;
-            if (typeof h === 'number' && Number.isFinite(h) && h >= 0 && h < 360) {
+            if (
+              typeof h === "number" &&
+              Number.isFinite(h) &&
+              h >= 0 &&
+              h < 360
+            ) {
               const entry = { heading: h, speed: spd, acc, ts: Date.now() };
               geoHeadingRef.current = entry;
               const buf = geoBufferRef.current || [];
               buf.push(entry);
-              geoBufferRef.current = buf.filter((e) => entry.ts - e.ts < 8000).slice(-20);
+              geoBufferRef.current = buf
+                .filter((e) => entry.ts - e.ts < 8000)
+                .slice(-20);
             }
           },
           () => {},
@@ -575,9 +619,11 @@ export default function UserMap() {
     setRecording(false);
     const samples = recordDataRef.current || [];
     if (download && samples.length) {
-      const blob = new Blob([JSON.stringify(samples, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify(samples, null, 2)], {
+        type: "application/json",
+      });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `wf-sensors-${Date.now()}.json`;
       a.click();
@@ -596,7 +642,10 @@ export default function UserMap() {
     setRecordMsg(`Recording for ${secs}s...`);
     setRecording(true);
     if (recordStopTimerRef.current) clearTimeout(recordStopTimerRef.current);
-    recordStopTimerRef.current = setTimeout(() => stopRecording(true), secs * 1000);
+    recordStopTimerRef.current = setTimeout(
+      () => stopRecording(true),
+      secs * 1000
+    );
   };
 
   const logSample = (sample, force = false) => {
@@ -638,8 +687,15 @@ export default function UserMap() {
 
   // Wire devicemotion to the step detector and waypoint stepper
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof DeviceMotionEvent === 'undefined') return;
-    stepDetectorRef.current = new StepDetector({ sampleIntervalMs: stepSampleIntervalRef.current, windowMs: 2000 });
+    if (
+      typeof window === "undefined" ||
+      typeof DeviceMotionEvent === "undefined"
+    )
+      return;
+    stepDetectorRef.current = new StepDetector({
+      sampleIntervalMs: stepSampleIntervalRef.current,
+      windowMs: 2000,
+    });
     const handler = (event) => {
       const acc = event.accelerationIncludingGravity || event.acceleration;
       if (!acc) return;
@@ -663,8 +719,8 @@ export default function UserMap() {
         }
       }
     };
-    window.addEventListener('devicemotion', handler);
-    return () => window.removeEventListener('devicemotion', handler);
+    window.addEventListener("devicemotion", handler);
+    return () => window.removeEventListener("devicemotion", handler);
   }, [stepWaypoint]);
 
   // Helpers similar to editor for routing
@@ -807,7 +863,7 @@ export default function UserMap() {
   };
 
   // Build evenly spaced waypoints along a route polyline (normalized coords)
-  const buildWaypoints = (pts, spacingNorm = 1/700) => {
+  const buildWaypoints = (pts, spacingNorm = 1 / 700) => {
     if (!pts || pts.length < 2) return [];
     const out = [pts[0]];
     let acc = 0;
@@ -818,12 +874,17 @@ export default function UserMap() {
       let t = spacingNorm - acc;
       while (t <= segLen) {
         const ratio = t / segLen;
-        out.push({ x: a.x + (b.x - a.x) * ratio, y: a.y + (b.y - a.y) * ratio });
+        out.push({
+          x: a.x + (b.x - a.x) * ratio,
+          y: a.y + (b.y - a.y) * ratio,
+        });
         t += spacingNorm;
       }
-      acc = segLen + acc - Math.floor((segLen + acc) / spacingNorm) * spacingNorm;
+      acc =
+        segLen + acc - Math.floor((segLen + acc) / spacingNorm) * spacingNorm;
     }
-    if (out[out.length - 1] !== pts[pts.length - 1]) out.push(pts[pts.length - 1]);
+    if (out[out.length - 1] !== pts[pts.length - 1])
+      out.push(pts[pts.length - 1]);
     return out;
   };
 
@@ -839,9 +900,16 @@ export default function UserMap() {
   const waypointStride = 2; // advance this many waypoints per detected step/click
 
   async function stepWaypoint() {
-    const pts = waypointPtsRef.current && waypointPtsRef.current.length ? waypointPtsRef.current : waypoints;
-    if (!pts || !pts.length) { setSensorMsg("No route available; build a route first."); return; }
-    let currentIdx = typeof waypointIdxRef.current === 'number' ? waypointIdxRef.current : 0;
+    const pts =
+      waypointPtsRef.current && waypointPtsRef.current.length
+        ? waypointPtsRef.current
+        : waypoints;
+    if (!pts || !pts.length) {
+      setSensorMsg("No route available; build a route first.");
+      return;
+    }
+    let currentIdx =
+      typeof waypointIdxRef.current === "number" ? waypointIdxRef.current : 0;
     if (currentIdx < 0 || currentIdx >= pts.length) currentIdx = 0;
     // advance forward by stride
     currentIdx = Math.min(currentIdx + waypointStride, pts.length - 1);
@@ -856,7 +924,7 @@ export default function UserMap() {
     setDisplayHeading(quantizeHeading(headingDeg));
     console.log("Step route", { currentIdx, target, waypoints: pts.length });
     setSensorMsg(`Moved to waypoint ${currentIdx + 1}/${pts.length}`);
-  };
+  }
 
   // Build a cross-floor plan from current floor to destination floor using shared warp keys
   const sharedWarpKeys = (a, b) => {
@@ -933,23 +1001,46 @@ export default function UserMap() {
   };
 
   const computeRouteForStep = async (step, startPosOverride = null) => {
-    const curFloor = floors.find(f=>f.url===selUrl); if (!curFloor) return;
-    const img = imgRef.current; if (!img || !img.naturalWidth) { setSensorMsg("Image not ready for routing."); return; }
+    const curFloor = floors.find((f) => f.url === selUrl);
+    if (!curFloor) return;
+    const img = imgRef.current;
+    if (!img || !img.naturalWidth) {
+      setSensorMsg("Image not ready for routing.");
+      return;
+    }
     let gridObj;
     try {
-      gridObj = await buildGrid(img, curFloor.walkable?.color, curFloor.walkable?.tolerance, 4);
+      gridObj = await buildGrid(
+        img,
+        curFloor.walkable?.color,
+        curFloor.walkable?.tolerance,
+        4
+      );
     } catch (err) {
       console.error("Failed to build walkable grid", err);
       setSensorMsg("Routing failed (image/CORS).");
       setRoutePts([]);
       return;
     }
-    const {grid,gw,gh,step:stp,w,h}=gridObj;
+    const { grid, gw, gh, step: stp, w, h } = gridObj;
     const startPos = startPosOverride || userPos;
-    if (!startPos) { setRoutePts([]); return; }
-    const ux = Math.max(0, Math.min(gw-1, Math.round((startPos.x*w)/stp)));
-    const uy = Math.max(0, Math.min(gh-1, Math.round((startPos.y*h)/stp)));
-    const sCell = nearestWalkable(grid,gw,gh,ux,uy); if (!sCell) { setRoutePts([]); return; }
+    if (!startPos) {
+      setRoutePts([]);
+      return;
+    }
+    const ux = Math.max(
+      0,
+      Math.min(gw - 1, Math.round((startPos.x * w) / stp))
+    );
+    const uy = Math.max(
+      0,
+      Math.min(gh - 1, Math.round((startPos.y * h) / stp))
+    );
+    const sCell = nearestWalkable(grid, gw, gh, ux, uy);
+    if (!sCell) {
+      setRoutePts([]);
+      return;
+    }
     let target = null;
     if (step.kind === "dest") {
       const destFloor = floors.find((f) =>
@@ -999,11 +1090,29 @@ export default function UserMap() {
       step.key = best.warpKey.trim();
       step.target = target;
     }
-    const tx=Math.max(0,Math.min(gw-1,Math.round((target.x*w)/stp))); const ty=Math.max(0,Math.min(gh-1,Math.round((target.y*h)/stp)));
-    const tCell = nearestWalkable(grid,gw,gh,tx,ty); if (!tCell) { setRoutePts([]); return; }
-    const path = bfs(grid,gw,gh,sCell,tCell, Math.max(0,Math.floor(gapCells)));
-    if (!path || path.length<2) { setRoutePts([]); return; }
-    const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
+    const tx = Math.max(0, Math.min(gw - 1, Math.round((target.x * w) / stp)));
+    const ty = Math.max(0, Math.min(gh - 1, Math.round((target.y * h) / stp)));
+    const tCell = nearestWalkable(grid, gw, gh, tx, ty);
+    if (!tCell) {
+      setRoutePts([]);
+      return;
+    }
+    const path = bfs(
+      grid,
+      gw,
+      gh,
+      sCell,
+      tCell,
+      Math.max(0, Math.floor(gapCells))
+    );
+    if (!path || path.length < 2) {
+      setRoutePts([]);
+      return;
+    }
+    const out = path.map(([gx, gy]) => ({
+      x: (gx * stp + stp / 2) / w,
+      y: (gy * stp + stp / 2) / h,
+    }));
     routePtsRef.current = out;
     // Only (re)build waypoints and reset index if waypointIdxRef is at 0 (initial build)
     if (waypointIdxRef.current === 0) {
@@ -1011,13 +1120,21 @@ export default function UserMap() {
       const startPt = wp[0];
       const endPt = wp[wp.length - 1];
       const userPt = userPos || startPt;
-      const dStart = Math.hypot((startPt?.x || 0) - (userPt?.x || 0), (startPt?.y || 0) - (userPt?.y || 0));
-      const dEnd = Math.hypot((endPt?.x || 0) - (userPt?.x || 0), (endPt?.y || 0) - (userPt?.y || 0));
+      const dStart = Math.hypot(
+        (startPt?.x || 0) - (userPt?.x || 0),
+        (startPt?.y || 0) - (userPt?.y || 0)
+      );
+      const dEnd = Math.hypot(
+        (endPt?.x || 0) - (userPt?.x || 0),
+        (endPt?.y || 0) - (userPt?.y || 0)
+      );
       if (dEnd < dStart) wp = [...wp].reverse();
       waypointIdxRef.current = 0; // start at beginning of path (user side)
       waypointPtsRef.current = wp;
       setWaypoints(wp);
-      setSensorMsg(`Route ready: ${out.length} points, waypoints: ${wp.length}`);
+      setSensorMsg(
+        `Route ready: ${out.length} points, waypoints: ${wp.length}`
+      );
     }
     setRoutePts(out);
   };
@@ -1034,7 +1151,14 @@ export default function UserMap() {
     await computeRouteForStep(planObj.steps[0], userPos);
   };
 
-  const clearRoute = () => { setRoutePts([]); setPlan(null); routePtsRef.current = []; waypointPtsRef.current = []; setWaypoints([]); waypointIdxRef.current = 0; };
+  const clearRoute = () => {
+    setRoutePts([]);
+    setPlan(null);
+    routePtsRef.current = [];
+    waypointPtsRef.current = [];
+    setWaypoints([]);
+    waypointIdxRef.current = 0;
+  };
 
   // Auto-warp when near target warp
   useEffect(() => {
@@ -1070,8 +1194,9 @@ export default function UserMap() {
   // Recompute route when floor switches within an active plan (but not on userPos changes)
   useEffect(() => {
     (async () => {
-      if (!plan || !plan.steps || plan.index>=plan.steps.length) return;
-      const step = plan.steps[plan.index]; if (step.url !== selUrl) return;
+      if (!plan || !plan.steps || plan.index >= plan.steps.length) return;
+      const step = plan.steps[plan.index];
+      if (step.url !== selUrl) return;
       await computeRouteForStep(step);
     })();
   }, [selUrl, plan, gapCells]);
@@ -1150,104 +1275,208 @@ export default function UserMap() {
                   setPlacing(false);
                 }}
               >
-                <style>{`@keyframes routeDash { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }`}</style>
-                <img
-                  ref={imgRef}
-                  src={floor.url}
-                  alt={floor.name||'floor'}
-                  crossOrigin="anonymous"
-                  onLoad={onImgLoad}
-                  style={{ width: '100%', height: '100%', display:'block', userSelect:'none', pointerEvents:'none' }}
-                />
-
-                {userPos && (()=>{ const pos = toPx(userPos.x, userPos.y); const size=22; const angle = displayHeading || 0; return (
-                  <div
-                    key="user"
-                    className="position-absolute"
-                    style={{ left: pos.x-size/2, top: pos.y-size/2, width:size, height:size, pointerEvents:'none', zIndex:5 }}
-                    title="You"
+                <TransformWrapper
+                  initialScale={1}
+                  minScale={0.8}
+                  maxScale={4}
+                  wheel={{ step: 0.1 }}
+                  pinch={{ step: 5 }}
+                  doubleClick={{ disabled: false }}
+                  limitToBounds={false}
+                >
+                  <TransformComponent
+                    wrapperStyle={{ width: natSize.w, height: natSize.h }}
                   >
-                    <div
+                    {/* Map image */}
+                    <img
+                      ref={imgRef}
+                      src={floor.url}
+                      alt={floor.name || "floor"}
+                      crossOrigin="anonymous"
+                      onLoad={onImgLoad}
                       style={{
-                        position:'absolute',
-                        inset:0,
-                        borderRadius:'50%',
-                        background:'#ff3366',
-                        border:'3px solid #fff',
-                        boxShadow:'0 0 0 4px rgba(255,51,102,0.35)',
+                        width: "100%",
+                        height: "100%",
+                        display: "block",
+                        userSelect: "none",
+                        touchAction: "none",
                       }}
                     />
-                    <div
-                      style={{
-                        position:'absolute',
-                        left:'50%',
-                        top:'50%',
-                        width:size,
-                        height:size,
-                        transform:`translate(-50%,-50%) rotate(${angle}deg)`,
-                        transformOrigin:'50% 50%',
-                      }}
-                    >
+
+                    {/* User marker */}
+                    {userPos &&
+                      (() => {
+                        const pos = toPx(userPos.x, userPos.y);
+                        const size = 22;
+                        const angle = displayHeading || 0;
+                        return (
+                          <div
+                            key="user"
+                            className="position-absolute"
+                            style={{
+                              left: pos.x - size / 2,
+                              top: pos.y - size / 2,
+                              width: size,
+                              height: size,
+                              pointerEvents: "none",
+                              zIndex: 5,
+                            }}
+                            title="You"
+                          >
+                            <div
+                              style={{
+                                position: "absolute",
+                                inset: 0,
+                                borderRadius: "50%",
+                                background: "#ff3366",
+                                border: "3px solid #fff",
+                                boxShadow: "0 0 0 4px rgba(255,51,102,0.35)",
+                              }}
+                            />
+                            <div
+                              style={{
+                                position: "absolute",
+                                left: "50%",
+                                top: "50%",
+                                width: size,
+                                height: size,
+                                transform: `translate(-50%,-50%) rotate(${angle}deg)`,
+                                transformOrigin: "50% 50%",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  left: "50%",
+                                  top: 2,
+                                  width: 0,
+                                  height: 0,
+                                  borderLeft: "6px solid transparent",
+                                  borderRight: "6px solid transparent",
+                                  borderBottom: "12px solid #fff",
+                                  transform: "translateX(-50%)",
+                                }}
+                              />
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  left: "50%",
+                                  top: "12px",
+                                  width: 2,
+                                  height: size / 2.4,
+                                  background: "#fff",
+                                  borderRadius: 2,
+                                  transform: "translateX(-50%)",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                    {/* Floor points */}
+                    {(Array.isArray(floor.points) ? floor.points : []).map(
+                      (p) => {
+                        const pos = toPx(p.x, p.y);
+                        const size = 8;
+                        const isDest = dest && dest.id === p.id;
+                        return (
+                          <div
+                            key={p.id}
+                            className={`position-absolute rounded-circle ${markerClass(
+                              p.kind
+                            )} ${isDest ? "border border-light" : ""}`}
+                            style={{
+                              left: pos.x - size / 2,
+                              top: pos.y - size / 2,
+                              width: size,
+                              height: size,
+                              cursor: "pointer",
+                            }}
+                            title={
+                              (p.roomNumber ? `#${p.roomNumber} ` : "") +
+                              (p.name || p.poiType || p.kind)
+                            }
+                            onClick={() => setDest({ url: selUrl, id: p.id })}
+                          />
+                        );
+                      }
+                    )}
+
+                    {/* Waypoints */}
+                    {waypoints && waypoints.length > 0 && (
                       <div
+                        className="position-absolute"
                         style={{
-                          position:'absolute',
-                          left:'50%',
-                          top:2,
-                          width:0,
-                          height:0,
-                          borderLeft:'6px solid transparent',
-                          borderRight:'6px solid transparent',
-                          borderBottom:'12px solid #fff',
-                          transform:'translateX(-50%)',
+                          left: 0,
+                          top: 0,
+                          width: natSize.w,
+                          height: natSize.h,
+                          pointerEvents: "none",
                         }}
-                      />
-                      <div
-                        style={{
-                          position:'absolute',
-                          left:'50%',
-                          top:'12px',
-                          width:2,
-                          height:size/2.4,
-                          background:'#fff',
-                          borderRadius:2,
-                          transform:'translateX(-50%)',
-                        }}
-                      />
-                    </div>
-                  </div>
-                );})()}
+                      >
+                        {waypoints.map((pt, idx) => {
+                          const pos = toPx(pt.x, pt.y);
+                          const size = 4;
+                          return (
+                            <div
+                              key={`wp-${idx}`}
+                              style={{
+                                position: "absolute",
+                                left: pos.x - size / 2,
+                                top: pos.y - size / 2,
+                                width: size,
+                                height: size,
+                                borderRadius: "50%",
+                                background: "rgba(0,123,255,0.15)",
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
 
-        {(Array.isArray(floor.points)?floor.points:[]).map(p=>{ const pos=toPx(p.x,p.y); const size=8; const isDest = dest && dest.id===p.id; return (
-          <div key={p.id}
-            className={`position-absolute rounded-circle ${markerClass(p.kind)} ${isDest?'border border-light':''}`}
-            style={{ left: pos.x-size/2, top: pos.y-size/2, width:size, height:size, cursor:'pointer' }}
-            title={(p.roomNumber?`#${p.roomNumber} `:'') + (p.name||p.poiType||p.kind)}
-            onClick={()=> setDest({ url: selUrl, id: p.id })}
-          />
-        );})}
-
-        {waypoints && waypoints.length>0 && (
-          <div className="position-absolute" style={{ left:0, top:0, width: natSize.w, height: natSize.h, pointerEvents:'none' }}>
-            {waypoints.map((pt, idx)=>{ const pos=toPx(pt.x, pt.y); const size=4; return (
-              <div key={`wp-${idx}`} style={{
-                position:'absolute',
-                left: pos.x-size/2,
-                top: pos.y-size/2,
-                width:size,
-                height:size,
-                borderRadius:'50%',
-                background:'rgba(0,123,255,0.15)',
-              }} />
-            );})}
-          </div>
-        )}
-
-        {routePts && routePts.length>1 && (
-          <svg className="position-absolute" width={natSize.w} height={natSize.h} style={{ left:0, top:0, pointerEvents:'none' }}>
-            <polyline points={routePts.map(p=>`${p.x*natSize.w},${p.y*natSize.h}`).join(' ')} fill="none" stroke="#00D1FF" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="8 10" style={{ animation:'routeDash 1.5s linear infinite' }} />
-            <polyline points={routePts.map(p=>`${p.x*natSize.w},${p.y*natSize.h}`).join(' ')} fill="none" stroke="rgba(0,209,255,0.35)" strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="12 14" style={{ filter:'blur(1px)', animation:'routeDash 1.5s linear infinite' }} />
-          </svg>
-                )}
+                    {/* Route lines */}
+                    {routePts && routePts.length > 1 && (
+                      <svg
+                        className="position-absolute"
+                        width={natSize.w}
+                        height={natSize.h}
+                        style={{ left: 0, top: 0, pointerEvents: "none" }}
+                      >
+                        <polyline
+                          points={routePts
+                            .map((p) => `${p.x * natSize.w},${p.y * natSize.h}`)
+                            .join(" ")}
+                          fill="none"
+                          stroke="#00D1FF"
+                          strokeWidth={3}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeDasharray="8 10"
+                          style={{
+                            animation: "routeDash 1.5s linear infinite",
+                          }}
+                        />
+                        <polyline
+                          points={routePts
+                            .map((p) => `${p.x * natSize.w},${p.y * natSize.h}`)
+                            .join(" ")}
+                          fill="none"
+                          stroke="rgba(0,209,255,0.35)"
+                          strokeWidth={7}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeDasharray="12 14"
+                          style={{
+                            filter: "blur(1px)",
+                            animation: "routeDash 1.5s linear infinite",
+                          }}
+                        />
+                      </svg>
+                    )}
+                  </TransformComponent>
+                </TransformWrapper>
               </div>
             </div>
           </div>
@@ -1270,7 +1499,7 @@ export default function UserMap() {
           >
             Clear
           </button>
-          <div
+          {/* <div
             className="d-flex align-items-center small text-muted"
             style={{ gap: 8 }}
           >
@@ -1285,8 +1514,8 @@ export default function UserMap() {
               style={{ width: 80 }}
             />
             <span>{gapCells}</span>
-          </div>
-          <button
+          </div> */}
+          {/* <button
             className={`btn btn-${autoWarp ? "info" : "outline-info"} btn-sm`}
             onClick={() => setAutoWarp((v) => !v)}
           >
@@ -1298,8 +1527,8 @@ export default function UserMap() {
             disabled={!sensorTracking && !userPos}
           >
             {sensorTracking ? "Stop tracking" : "Start tracking"}
-          </button>
-          <div
+          </button> */}
+          {/* <div
             className="d-flex align-items-center small text-muted"
             style={{ gap: 8 }}
           >
@@ -1314,7 +1543,7 @@ export default function UserMap() {
               style={{ width: 120 }}
             />
             <span>{moveStep.toFixed(3)}</span>
-          </div>
+          </div> */}
           {searchMsg && <span className="small text-muted">{searchMsg}</span>}
         </div>
         {sensorMsg && <div className="small text-muted mt-2">{sensorMsg}</div>}
@@ -1336,4 +1565,3 @@ export default function UserMap() {
     </div>
   );
 }
-
