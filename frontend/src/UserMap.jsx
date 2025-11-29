@@ -1178,7 +1178,7 @@ export default function UserMap() {
       step.target = target;
     }
     const tx=Math.max(0,Math.min(gw-1,Math.round((target.x*w)/stp))); const ty=Math.max(0,Math.min(gh-1,Math.round((target.y*h)/stp)));
-    const tCell = nearestWalkable(grid, gw, gh, tx, ty);
+    const tCell = nearestWalkable(gridObj.grid, gw, gh, tx, ty);
     if (!tCell) {
       setRoutePts([]);
       return;
