@@ -391,9 +391,13 @@ export default function UserMap() {
     // Build/capture walkable grid for this floor
     const f = floors.find((fl) => fl.url === selUrl);
     if (f) {
-      Promise.resolve(
-        buildGrid(e.target, f.walkable?.color, f.walkable?.tolerance, 4)
-      )
+      const colors = [
+        hexToRgb(f.walkable?.color || "#9F9383"),
+        ...(Array.isArray(f.walkable?.extraColors)
+          ? f.walkable.extraColors.map((c) => hexToRgb(normHex(c)))
+          : []),
+      ];
+      Promise.resolve(buildGrid(e.target, colors, f.walkable?.tolerance, 4))
         .then((g) => {
           gridRef.current = g;
         })
@@ -710,7 +714,8 @@ export default function UserMap() {
       parseInt(h.slice(5, 7), 16),
     ];
   };
-  const buildGrid = async (imgEl, color, tol, step = 4, extraColors = []) => {
+  // Build a walkable grid using one or more colors. Colors is [[r,g,b], ...].
+  const buildGrid = async (imgEl, colors, tol, step = 4) => {
     const w = imgEl.naturalWidth || imgEl.width,
       h = imgEl.naturalHeight || imgEl.height;
     const c = document.createElement("canvas");
@@ -720,12 +725,6 @@ export default function UserMap() {
     ctx.drawImage(imgEl, 0, 0, w, h);
     const id = ctx.getImageData(0, 0, w, h);
     const data = id.data;
-    const colors = [
-      hexToRgb(color || "#9F9383"),
-      ...(Array.isArray(extraColors)
-        ? extraColors.map((c2) => hexToRgb(normHex(c2)))
-        : []),
-    ];
     const gw = Math.max(1, Math.floor(w / step)),
       gh = Math.max(1, Math.floor(h / step));
     const grid = new Uint8Array(gw * gh);
@@ -1038,15 +1037,30 @@ export default function UserMap() {
   const computeRouteForStep = async (step, startPosOverride = null, planArg = null) => {
     const curFloor = floors.find(f=>f.url===selUrl); if (!curFloor) return;
     const img = imgRef.current; if (!img || !img.naturalWidth) { setSensorMsg("Image not ready for routing."); return; }
+    const baseColors = [hexToRgb(curFloor.walkable?.color || "#9F9383")];
+    const extraColors = Array.isArray(curFloor.walkable?.extraColors)
+      ? curFloor.walkable.extraColors.map((c) => hexToRgb(normHex(c)))
+      : [];
+    const tol = curFloor.walkable?.tolerance;
     let gridObj;
     try {
-      gridObj = await buildGrid(
-        img,
-        curFloor.walkable?.color,
-        curFloor.walkable?.tolerance,
-        4,
-        curFloor.walkable?.extraColors || []
-      );
+      // Try with main walkable color only to avoid black text dominating
+      gridObj = await buildGrid(img, baseColors, tol, 4);
+      // If start/target fail, fall back to including extra colors
+      const w = gridObj.w,
+        h = gridObj.h,
+        stp = gridObj.step,
+        gw = gridObj.gw,
+        gh = gridObj.gh;
+      const startPos = startPosOverride || userPos;
+      if (startPos) {
+        const ux = Math.max(0, Math.min(gw - 1, Math.round((startPos.x * w) / stp)));
+        const uy = Math.max(0, Math.min(gh - 1, Math.round((startPos.y * h) / stp)));
+        const sCell = nearestWalkable(gridObj.grid, gw, gh, ux, uy);
+        if (!sCell && extraColors.length) {
+          gridObj = await buildGrid(img, baseColors.concat(extraColors), tol, 4);
+        }
+      }
     } catch (err) {
       console.error("Failed to build walkable grid", err);
       setSensorMsg("Routing failed (image/CORS).");
