@@ -113,7 +113,6 @@ export default function LandingPage({ user }) {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    console.log("Token in LandingPage:", token); // Debug log
     if (!token) {
       navigate("/"); // redirect if no token
       return;

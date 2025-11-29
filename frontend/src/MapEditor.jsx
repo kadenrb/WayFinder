@@ -126,7 +126,7 @@ export default function MapEditor({ imageSrc }) {
   // ===============================
   // SECTION: Walkable Path Color (admin)
   // ===============================
-  const [walkable, setWalkable] = useState({ color: '#9F9383', tolerance: 12 });
+  const [walkable, setWalkable] = useState({ color: "#9F9383", tolerance: 12 });
   const [northOffset, setNorthOffset] = useState(0);
   // Routing overlay (dev tool): path from user to selected point, constrained to walkable color
   const [routePts, setRoutePts] = useState([]); // [{x,y}] in normalized coords
@@ -386,7 +386,10 @@ export default function MapEditor({ imageSrc }) {
         } else {
           setWalkable({ color: "#9F9383", tolerance: 12 });
         }
-        if (typeof data?.northOffset === 'number' && Number.isFinite(data.northOffset)) {
+        if (
+          typeof data?.northOffset === "number" &&
+          Number.isFinite(data.northOffset)
+        ) {
           setNorthOffset(data.northOffset);
         } else {
           setNorthOffset(0);
@@ -395,7 +398,7 @@ export default function MapEditor({ imageSrc }) {
         setPoints([]);
         setDbBoxes([]);
         setUserPos(null);
-        setWalkable({ color: '#9F9383', tolerance: 12 });
+        setWalkable({ color: "#9F9383", tolerance: 12 });
         setNorthOffset(0);
       }
     } catch {}
@@ -462,7 +465,7 @@ export default function MapEditor({ imageSrc }) {
     } catch {}
   };
 
-  // using CSS transform scaling on a fixed-size content layer; no canvasStyle needed
+  // using CSS transform scaling on a fixed-size content layer
 
   const changeZoom = (delta) =>
     setZoom((z) => Math.min(4, Math.max(0.25, +(z + delta).toFixed(2))));
@@ -2062,8 +2065,11 @@ export default function MapEditor({ imageSrc }) {
         }
         if (!chosen && data.floors.length > 1) {
           const labels = data.floors.map((floor, index) => {
-            const label = floor?.name || floor?.id || floor?.url || `Floor ${index + 1}`;
-            const count = Array.isArray(floor?.points) ? floor.points.length : 0;
+            const label =
+              floor?.name || floor?.id || floor?.url || `Floor ${index + 1}`;
+            const count = Array.isArray(floor?.points)
+              ? floor.points.length
+              : 0;
             return `${index + 1}. ${label} (${count} pts)`;
           });
           const promptMsg = [
@@ -2363,7 +2369,12 @@ export default function MapEditor({ imageSrc }) {
                 }
                 placeholder="#9F9383"
               />
-              <button className="btn btn-sm btn-outline-secondary" onClick={pickWalkableFromScreen}>Pick</button>
+              <button
+                className="btn btn-sm btn-outline-secondary"
+                onClick={pickWalkableFromScreen}
+              >
+                Pick
+              </button>
               <span>North offset</span>
               <input
                 type="number"
@@ -2372,7 +2383,11 @@ export default function MapEditor({ imageSrc }) {
                 value={Number.isFinite(northOffset) ? northOffset : 0}
                 onChange={(e) => {
                   const val = parseFloat(e.target.value);
-                  setNorthOffset(Number.isFinite(val) ? Math.max(-360, Math.min(360, val)) : 0);
+                  setNorthOffset(
+                    Number.isFinite(val)
+                      ? Math.max(-360, Math.min(360, val))
+                      : 0
+                  );
                 }}
                 title="Degrees between map up and true north"
               />
