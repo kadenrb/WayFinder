@@ -710,7 +710,7 @@ export default function UserMap() {
       parseInt(h.slice(5, 7), 16),
     ];
   };
-  const buildGrid = async (imgEl, color, tol, step = 4) => {
+  const buildGrid = async (imgEl, color, tol, step = 4, extraColors = []) => {
     const w = imgEl.naturalWidth || imgEl.width,
       h = imgEl.naturalHeight || imgEl.height;
     const c = document.createElement("canvas");
@@ -720,7 +720,12 @@ export default function UserMap() {
     ctx.drawImage(imgEl, 0, 0, w, h);
     const id = ctx.getImageData(0, 0, w, h);
     const data = id.data;
-    const [tr, tg, tb] = hexToRgb(color || "#9F9383");
+    const colors = [
+      hexToRgb(color || "#9F9383"),
+      ...(Array.isArray(extraColors)
+        ? extraColors.map((c2) => hexToRgb(normHex(c2)))
+        : []),
+    ];
     const gw = Math.max(1, Math.floor(w / step)),
       gh = Math.max(1, Math.floor(h / step));
     const grid = new Uint8Array(gw * gh);
@@ -733,11 +738,18 @@ export default function UserMap() {
         const r = data[idx],
           g = data[idx + 1],
           b = data[idx + 2];
-        const dr = r - tr,
-          dg = g - tg,
-          db = b - tb;
-        const dist = Math.sqrt(dr * dr + dg * dg + db * db);
-        grid[gy * gw + gx] = dist <= tolv ? 1 : 0;
+        let pass = 0;
+        for (const [tr, tg, tb] of colors) {
+          const dr = r - tr,
+            dg = g - tg,
+            db = b - tb;
+          const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+          if (dist <= tolv) {
+            pass = 1;
+            break;
+          }
+        }
+        grid[gy * gw + gx] = pass;
       }
     }
     return { grid, gw, gh, step, w, h };
@@ -966,7 +978,13 @@ export default function UserMap() {
     const img = imgRef.current; if (!img || !img.naturalWidth) { setSensorMsg("Image not ready for routing."); return; }
     let gridObj;
     try {
-      gridObj = await buildGrid(img, curFloor.walkable?.color, curFloor.walkable?.tolerance, 4);
+      gridObj = await buildGrid(
+        img,
+        curFloor.walkable?.color,
+        curFloor.walkable?.tolerance,
+        4,
+        curFloor.walkable?.extraColors || []
+      );
     } catch (err) {
       console.error("Failed to build walkable grid", err);
       setSensorMsg("Routing failed (image/CORS).");

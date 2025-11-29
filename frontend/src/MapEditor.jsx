@@ -77,6 +77,7 @@ export default function MapEditor({ imageSrc }) {
   const [busy, setBusy] = useState("");
   const [pulseId, setPulseId] = useState(null);
   const cancelScanRef = useRef(false);
+  const [extraColorDraft, setExtraColorDraft] = useState("#000000");
   // Sort pins nicely (numbers in order). Collator is a fancy sorter.
   const collator = useMemo(
     () => new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }),
@@ -126,7 +127,7 @@ export default function MapEditor({ imageSrc }) {
   // ===============================
   // SECTION: Walkable Path Color (admin)
   // ===============================
-  const [walkable, setWalkable] = useState({ color: '#9F9383', tolerance: 12 });
+  const [walkable, setWalkable] = useState({ color: '#9F9383', tolerance: 12, extraColors: [] });
   const [northOffset, setNorthOffset] = useState(0);
   // Routing overlay (dev tool): path from user to selected point, constrained to walkable color
   const [routePts, setRoutePts] = useState([]); // [{x,y}] in normalized coords
@@ -382,9 +383,12 @@ export default function MapEditor({ imageSrc }) {
           setWalkable({
             color: (data.walkable.color || "#9F9383").toUpperCase(),
             tolerance: tol,
+            extraColors: Array.isArray(data.walkable.extraColors)
+              ? data.walkable.extraColors.map((c) => normHex(c))
+              : [],
           });
         } else {
-          setWalkable({ color: "#9F9383", tolerance: 12 });
+          setWalkable({ color: "#9F9383", tolerance: 12, extraColors: [] });
         }
         if (typeof data?.northOffset === 'number' && Number.isFinite(data.northOffset)) {
           setNorthOffset(data.northOffset);
@@ -395,7 +399,7 @@ export default function MapEditor({ imageSrc }) {
         setPoints([]);
         setDbBoxes([]);
         setUserPos(null);
-        setWalkable({ color: '#9F9383', tolerance: 12 });
+        setWalkable({ color: '#9F9383', tolerance: 12, extraColors: [] });
         setNorthOffset(0);
       }
     } catch {}
@@ -513,7 +517,12 @@ export default function MapEditor({ imageSrc }) {
     ctx.drawImage(img, 0, 0, w, h);
     const id = ctx.getImageData(0, 0, w, h);
     const data = id.data;
-    const [tr, tg, tb] = hexToRgb(walkable.color || "#9F9383");
+    const colors = [
+      hexToRgb(walkable.color || "#9F9383"),
+      ...(Array.isArray(walkable.extraColors)
+        ? walkable.extraColors.map((c) => hexToRgb(normHex(c)))
+        : []),
+    ];
     const tol = Math.max(0, Math.min(255, +walkable.tolerance || 0));
     const gw = Math.max(1, Math.floor(w / step));
     const gh = Math.max(1, Math.floor(h / step));
@@ -526,11 +535,18 @@ export default function MapEditor({ imageSrc }) {
         const r = data[idx],
           g = data[idx + 1],
           b = data[idx + 2];
-        const dr = r - tr,
-          dg = g - tg,
-          db = b - tb;
-        const dist = Math.sqrt(dr * dr + dg * dg + db * db);
-        grid[gy * gw + gx] = dist <= tol ? 1 : 0;
+        let pass = 0;
+        for (const [tr, tg, tb] of colors) {
+          const dr = r - tr,
+            dg = g - tg,
+            db = b - tb;
+          const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+          if (dist <= tol) {
+            pass = 1;
+            break;
+          }
+        }
+        grid[gy * gw + gx] = pass;
       }
     }
     return { grid, gw, gh, step, w, h };
@@ -2051,7 +2067,13 @@ export default function MapEditor({ imageSrc }) {
             typeof state.walkable.tolerance === "number"
               ? state.walkable.tolerance
               : 12;
-          setWalkable({ color: normHex(state.walkable.color), tolerance: tol });
+          setWalkable({
+            color: normHex(state.walkable.color),
+            tolerance: tol,
+            extraColors: Array.isArray(state.walkable.extraColors)
+              ? state.walkable.extraColors.map((c) => normHex(c))
+              : [],
+          });
         }
       };
 
@@ -2364,6 +2386,46 @@ export default function MapEditor({ imageSrc }) {
                 placeholder="#9F9383"
               />
               <button className="btn btn-sm btn-outline-secondary" onClick={pickWalkableFromScreen}>Pick</button>
+              <div className="d-flex align-items-center gap-2">
+                <span>Extra colours:</span>
+                <input
+                  type="color"
+                  value={extraColorDraft}
+                  onChange={(e) => setExtraColorDraft(normHex(e.target.value))}
+                  title="Add an additional walkable colour"
+                />
+                <button
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={() => {
+                    const next = Array.from(
+                      new Set([...(walkable.extraColors || []), normHex(extraColorDraft)])
+                    );
+                    setWalkable((w) => ({ ...w, extraColors: next }));
+                  }}
+                >
+                  Add
+                </button>
+                {Array.isArray(walkable.extraColors) && walkable.extraColors.length > 0 && (
+                  <div className="d-flex align-items-center gap-1 flex-wrap">
+                    {walkable.extraColors.map((c) => (
+                      <span key={c} className="badge text-bg-light">
+                        {c.toUpperCase()}{" "}
+                        <button
+                          className="btn btn-sm btn-link p-0"
+                          onClick={() =>
+                            setWalkable((w) => ({
+                              ...w,
+                              extraColors: (w.extraColors || []).filter((x) => x !== c),
+                            }))
+                          }
+                        >
+                          x
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
               <span>North offset</span>
               <input
                 type="number"
