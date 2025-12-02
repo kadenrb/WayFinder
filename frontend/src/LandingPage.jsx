@@ -113,7 +113,6 @@ export default function LandingPage({ user }) {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    console.log("Token in LandingPage:", token); // Debug log
     if (!token) {
       navigate("/"); // redirect if no token
       return;
@@ -247,7 +246,8 @@ export default function LandingPage({ user }) {
               ? floor.height
               : undefined,
           northOffset:
-            typeof floor.northOffset === "number" && Number.isFinite(floor.northOffset)
+            typeof floor.northOffset === "number" &&
+            Number.isFinite(floor.northOffset)
               ? floor.northOffset
               : 0,
         };

@@ -15,7 +15,7 @@
   deployment, this would fetch floors.json from a hosted location on the client’s
   website.
 */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StepDetector } from "./stepDetector";
 import DebuggerPanel from "./DebuggerPanel";
 
@@ -128,7 +128,7 @@ export default function UserMap() {
 
   const loadHeadingOffset = () => {
     try {
-      const raw = localStorage.getItem('wf_heading_offset');
+      const raw = localStorage.getItem("wf_heading_offset");
       const val = raw ? parseFloat(raw) : 0;
       if (Number.isFinite(val)) {
         headingOffsetRef.current = normalizeAngle(val);
@@ -137,14 +137,22 @@ export default function UserMap() {
   };
   const saveHeadingOffset = (val) => {
     headingOffsetRef.current = normalizeAngle(val || 0);
-    try { localStorage.setItem('wf_heading_offset', headingOffsetRef.current.toString()); } catch {}
+    try {
+      localStorage.setItem(
+        "wf_heading_offset",
+        headingOffsetRef.current.toString()
+      );
+    } catch {}
   };
-  useEffect(() => { loadHeadingOffset(); }, []);
-  const applyHeadingOffset = (val) => normalizeAngle((val || 0) + (headingOffsetRef.current || 0));
+  useEffect(() => {
+    loadHeadingOffset();
+  }, []);
+  const applyHeadingOffset = (val) =>
+    normalizeAngle((val || 0) + (headingOffsetRef.current || 0));
 
   const headingUpdateRef = useRef({ ts: 0, value: 0 });
   const limitHeadingRate = (prev, next) => {
-    const now = (performance && performance.now) ? performance.now() : Date.now();
+    const now = performance && performance.now ? performance.now() : Date.now();
     const { ts = now, value = prev || 0 } = headingUpdateRef.current;
     const dtSec = Math.max(0.016, Math.min(0.5, (now - ts) / 1000));
     const maxRate = 90; // deg/s cap
@@ -168,7 +176,8 @@ export default function UserMap() {
     const buf = geoBufferRef.current || [];
     const now = Date.now();
     const recent = buf.filter(
-      (e) => now - e.ts < 5000 && e.speed && e.speed > 0.5 && e.acc && e.acc < 50
+      (e) =>
+        now - e.ts < 5000 && e.speed && e.speed > 0.5 && e.acc && e.acc < 50
     );
     if (recent.length < 3) return null;
     const rad = (deg) => (deg * Math.PI) / 180;
@@ -179,7 +188,9 @@ export default function UserMap() {
       sy += Math.sin(rad(r.heading));
     });
     const mean = normalizeAngle((Math.atan2(sy, sx) * 180) / Math.PI);
-    const maxDiff = Math.max(...recent.map((r) => angularDiff(r.heading, mean)));
+    const maxDiff = Math.max(
+      ...recent.map((r) => angularDiff(r.heading, mean))
+    );
     if (maxDiff > 20) return null;
     return mean;
   };
@@ -203,8 +214,10 @@ export default function UserMap() {
   };
 
   const smoothHeading = (prev, next, alpha = 0.2) => {
-    if (typeof prev !== 'number' || !Number.isFinite(prev)) return normalizeAngle(next || 0);
-    if (typeof next !== 'number' || !Number.isFinite(next)) return normalizeAngle(prev || 0);
+    if (typeof prev !== "number" || !Number.isFinite(prev))
+      return normalizeAngle(next || 0);
+    if (typeof next !== "number" || !Number.isFinite(next))
+      return normalizeAngle(prev || 0);
     let delta = normalizeAngle(next - prev);
     if (delta > 180) delta -= 360;
     const blended = prev + alpha * delta;
@@ -255,7 +268,8 @@ export default function UserMap() {
 
   const initSensorBaseline = () => {
     const now =
-      typeof performance !== 'undefined' && typeof performance.now === 'function'
+      typeof performance !== "undefined" &&
+      typeof performance.now === "function"
         ? performance.now()
         : Date.now();
     sensorBaselineRef.current = {
@@ -282,10 +296,10 @@ export default function UserMap() {
       arr
         .map((f, index) => ({
           ...f,
-          url: f.url || f.imageData || '',
+          url: f.url || f.imageData || "",
           points: Array.isArray(f.points) ? f.points : [],
-          walkable: f.walkable || { color: '#9F9383', tolerance: 12 },
-          sortOrder: typeof f.sortOrder === 'number' ? f.sortOrder : index,
+          walkable: f.walkable || { color: "#9F9383", tolerance: 12 },
+          sortOrder: typeof f.sortOrder === "number" ? f.sortOrder : index,
         }))
         .filter((f) => f.url);
 
@@ -299,7 +313,7 @@ export default function UserMap() {
     const load = async () => {
       try {
         const res = await fetch(MANIFEST_URL, { cache: "no-store" });
-        if (!res.ok) throw new Error('Failed to fetch floors');
+        if (!res.ok) throw new Error("Failed to fetch floors");
         const data = await res.json();
         if (aborted) return;
         const normalized = normalizeFloors(data?.floors);
@@ -309,7 +323,7 @@ export default function UserMap() {
           return;
         }
       } catch (err) {
-        console.error('Failed to load published floors from manifest', err);
+        console.error("Failed to load published floors from manifest", err);
       }
     };
     load();
@@ -350,16 +364,21 @@ export default function UserMap() {
     setDebugData((prev) => ({ ...prev, sensorMsg }));
   }, [sensorMsg]);
 
-  const floor = useMemo(() => floors.find(f => f.url === selUrl) || null, [floors, selUrl]);
+  const floor = useMemo(
+    () => floors.find((f) => f.url === selUrl) || null,
+    [floors, selUrl]
+  );
   useEffect(() => {
     northOffsetRef.current =
-      typeof floor?.northOffset === 'number' && Number.isFinite(floor.northOffset)
+      typeof floor?.northOffset === "number" &&
+      Number.isFinite(floor.northOffset)
         ? floor.northOffset
         : 0;
   }, [floor]);
   useEffect(() => {
     northOffsetRef.current =
-      typeof floor?.northOffset === 'number' && Number.isFinite(floor.northOffset)
+      typeof floor?.northOffset === "number" &&
+      Number.isFinite(floor.northOffset)
         ? floor.northOffset
         : 0;
   }, [floor]);
@@ -509,27 +528,42 @@ export default function UserMap() {
   };
 
   const requestMotionPermissions = async () => {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    if (
+      typeof DeviceMotionEvent !== "undefined" &&
+      typeof DeviceMotionEvent.requestPermission === "function"
+    ) {
       const res = await DeviceMotionEvent.requestPermission();
-      if (res !== 'granted') throw new Error('Motion permission denied');
+      if (res !== "granted") throw new Error("Motion permission denied");
     }
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    if (
+      typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function"
+    ) {
       const res = await DeviceOrientationEvent.requestPermission();
-      if (res !== 'granted') throw new Error('Orientation permission denied');
+      if (res !== "granted") throw new Error("Orientation permission denied");
     }
   };
 
   // Start the sensor loop: request permissions, reset calibration, seed heading
   const startSensorTracking = async () => {
-    if (!userPos) { setSensorMsg("Place yourself on the map first."); return; }
-    if (typeof window === 'undefined' || typeof DeviceMotionEvent === 'undefined') {
+    if (!userPos) {
+      setSensorMsg("Place yourself on the map first.");
+      return;
+    }
+    if (
+      typeof window === "undefined" ||
+      typeof DeviceMotionEvent === "undefined"
+    ) {
       setSensorMsg("Device motion API not supported.");
       return;
     }
     try {
       await requestMotionPermissions();
       calibrationRef.current = { baseline: 0, samples: 0, done: false };
-      stepStateRef.current = { lastStepTs: performance.now ? performance.now() : Date.now(), active: false };
+      stepStateRef.current = {
+        lastStepTs: performance.now ? performance.now() : Date.now(),
+        active: false,
+      };
       gyroInitializedRef.current = false;
       initSensorBaseline();
       headingRef.current = compassHeadingRef.current || headingRef.current || 0;
@@ -541,12 +575,19 @@ export default function UserMap() {
             const h = pos?.coords?.heading;
             const spd = pos?.coords?.speed;
             const acc = pos?.coords?.accuracy;
-            if (typeof h === 'number' && Number.isFinite(h) && h >= 0 && h < 360) {
+            if (
+              typeof h === "number" &&
+              Number.isFinite(h) &&
+              h >= 0 &&
+              h < 360
+            ) {
               const entry = { heading: h, speed: spd, acc, ts: Date.now() };
               geoHeadingRef.current = entry;
               const buf = geoBufferRef.current || [];
               buf.push(entry);
-              geoBufferRef.current = buf.filter((e) => entry.ts - e.ts < 8000).slice(-20);
+              geoBufferRef.current = buf
+                .filter((e) => entry.ts - e.ts < 8000)
+                .slice(-20);
             }
           },
           () => {},
@@ -606,9 +647,11 @@ export default function UserMap() {
     setRecording(false);
     const samples = recordDataRef.current || [];
     if (download && samples.length) {
-      const blob = new Blob([JSON.stringify(samples, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify(samples, null, 2)], {
+        type: "application/json",
+      });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `wf-sensors-${Date.now()}.json`;
       a.click();
@@ -627,7 +670,10 @@ export default function UserMap() {
     setRecordMsg(`Recording for ${secs}s...`);
     setRecording(true);
     if (recordStopTimerRef.current) clearTimeout(recordStopTimerRef.current);
-    recordStopTimerRef.current = setTimeout(() => stopRecording(true), secs * 1000);
+    recordStopTimerRef.current = setTimeout(
+      () => stopRecording(true),
+      secs * 1000
+    );
   };
 
   const logSample = (sample, force = false) => {
@@ -669,8 +715,15 @@ export default function UserMap() {
 
   // Wire devicemotion to the step detector and waypoint stepper
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof DeviceMotionEvent === 'undefined') return;
-    stepDetectorRef.current = new StepDetector({ sampleIntervalMs: stepSampleIntervalRef.current, windowMs: 2000 });
+    if (
+      typeof window === "undefined" ||
+      typeof DeviceMotionEvent === "undefined"
+    )
+      return;
+    stepDetectorRef.current = new StepDetector({
+      sampleIntervalMs: stepSampleIntervalRef.current,
+      windowMs: 2000,
+    });
     const handler = (event) => {
       const acc = event.accelerationIncludingGravity || event.acceleration;
       if (!acc) return;
@@ -694,8 +747,8 @@ export default function UserMap() {
         }
       }
     };
-    window.addEventListener('devicemotion', handler);
-    return () => window.removeEventListener('devicemotion', handler);
+    window.addEventListener("devicemotion", handler);
+    return () => window.removeEventListener("devicemotion", handler);
   }, [stepWaypoint]);
 
   // Helpers similar to editor for routing
@@ -845,7 +898,7 @@ export default function UserMap() {
   };
 
   // Build evenly spaced waypoints along a route polyline (normalized coords)
-  const buildWaypoints = (pts, spacingNorm = 1/700) => {
+  const buildWaypoints = (pts, spacingNorm = 1 / 700) => {
     if (!pts || pts.length < 2) return [];
     const out = [pts[0]];
     let acc = 0;
@@ -856,12 +909,17 @@ export default function UserMap() {
       let t = spacingNorm - acc;
       while (t <= segLen) {
         const ratio = t / segLen;
-        out.push({ x: a.x + (b.x - a.x) * ratio, y: a.y + (b.y - a.y) * ratio });
+        out.push({
+          x: a.x + (b.x - a.x) * ratio,
+          y: a.y + (b.y - a.y) * ratio,
+        });
         t += spacingNorm;
       }
-      acc = segLen + acc - Math.floor((segLen + acc) / spacingNorm) * spacingNorm;
+      acc =
+        segLen + acc - Math.floor((segLen + acc) / spacingNorm) * spacingNorm;
     }
-    if (out[out.length - 1] !== pts[pts.length - 1]) out.push(pts[pts.length - 1]);
+    if (out[out.length - 1] !== pts[pts.length - 1])
+      out.push(pts[pts.length - 1]);
     return out;
   };
 
@@ -939,9 +997,16 @@ export default function UserMap() {
   const waypointStride = 2; // advance this many waypoints per detected step/click
 
   async function stepWaypoint() {
-    const pts = waypointPtsRef.current && waypointPtsRef.current.length ? waypointPtsRef.current : waypoints;
-    if (!pts || !pts.length) { setSensorMsg("No route available; build a route first."); return; }
-    let currentIdx = typeof waypointIdxRef.current === 'number' ? waypointIdxRef.current : 0;
+    const pts =
+      waypointPtsRef.current && waypointPtsRef.current.length
+        ? waypointPtsRef.current
+        : waypoints;
+    if (!pts || !pts.length) {
+      setSensorMsg("No route available; build a route first.");
+      return;
+    }
+    let currentIdx =
+      typeof waypointIdxRef.current === "number" ? waypointIdxRef.current : 0;
     if (currentIdx < 0 || currentIdx >= pts.length) currentIdx = 0;
     // advance forward by stride
     currentIdx = Math.min(currentIdx + waypointStride, pts.length - 1);
@@ -956,7 +1021,7 @@ export default function UserMap() {
     setDisplayHeading(quantizeHeading(headingDeg));
     console.log("Step route", { currentIdx, target, waypoints: pts.length });
     setSensorMsg(`Moved to waypoint ${currentIdx + 1}/${pts.length}`);
-  };
+  }
 
   // Build a cross-floor plan from current floor to destination floor using shared warp keys
   const normalizeKey = (k) =>
@@ -1150,7 +1215,9 @@ export default function UserMap() {
           );
           if (!matches.length) continue;
           const dist = Math.min(
-            ...matches.map((m) => Math.hypot(m.x - destPoint.x, m.y - destPoint.y))
+            ...matches.map((m) =>
+              Math.hypot(m.x - destPoint.x, m.y - destPoint.y)
+            )
           );
           if (dist < bestDestDist) {
             bestDestDist = dist;
@@ -1203,13 +1270,21 @@ export default function UserMap() {
       const startPt = wp[0];
       const endPt = wp[wp.length - 1];
       const userPt = userPos || startPt;
-      const dStart = Math.hypot((startPt?.x || 0) - (userPt?.x || 0), (startPt?.y || 0) - (userPt?.y || 0));
-      const dEnd = Math.hypot((endPt?.x || 0) - (userPt?.x || 0), (endPt?.y || 0) - (userPt?.y || 0));
+      const dStart = Math.hypot(
+        (startPt?.x || 0) - (userPt?.x || 0),
+        (startPt?.y || 0) - (userPt?.y || 0)
+      );
+      const dEnd = Math.hypot(
+        (endPt?.x || 0) - (userPt?.x || 0),
+        (endPt?.y || 0) - (userPt?.y || 0)
+      );
       if (dEnd < dStart) wp = [...wp].reverse();
       waypointIdxRef.current = 0; // start at beginning of path (user side)
       waypointPtsRef.current = wp;
       setWaypoints(wp);
-      setSensorMsg(`Route ready: ${out.length} points, waypoints: ${wp.length}`);
+      setSensorMsg(
+        `Route ready: ${out.length} points, waypoints: ${wp.length}`
+      );
     }
     setRoutePts(simplified);
   };
@@ -1286,7 +1361,16 @@ export default function UserMap() {
     await startRouteInternal(startPos, targetDest);
   };
 
-  const clearRoute = () => { setRoutePts([]); setPlan(null); planRef.current=null; routePtsRef.current = []; waypointPtsRef.current = []; setWaypoints([]); waypointIdxRef.current = 0; pendingRouteRef.current=null; };
+  const clearRoute = () => {
+    setRoutePts([]);
+    setPlan(null);
+    planRef.current = null;
+    routePtsRef.current = [];
+    waypointPtsRef.current = [];
+    setWaypoints([]);
+    waypointIdxRef.current = 0;
+    pendingRouteRef.current = null;
+  };
 
   // Auto-warp when near target warp
   useEffect(() => {
@@ -1299,7 +1383,8 @@ export default function UserMap() {
     if (d <= warpProximity) {
       // Switch to next floor and place user at matching warp
       const planObj = planRef.current || plan;
-      const next = planObj && planObj.steps ? planObj.steps[planObj.index + 1] : null;
+      const next =
+        planObj && planObj.steps ? planObj.steps[planObj.index + 1] : null;
       if (!next) return;
       const curFloor = floors.find((f) => f.url === selUrl);
       const nextFloor = floors.find((f) => f.url === next.url);
@@ -1320,7 +1405,11 @@ export default function UserMap() {
           floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
           null;
         // Schedule resume once next image loads; do not route immediately because image/pos may not be ready yet
-        pendingRouteRef.current = { startPos: landing, startUrl: nextFloor.url, destId };
+        pendingRouteRef.current = {
+          startPos: landing,
+          startUrl: nextFloor.url,
+          destId,
+        };
         routeResumeRef.current = () => {
           const tgt = targetDest || (destId && { id: destId });
           if (tgt) destRef.current = tgt;
@@ -1351,19 +1440,26 @@ export default function UserMap() {
   useEffect(() => {
     (async () => {
       // If we switched floors for a pending route, resume once the image is ready (onImgLoad will trigger resume)
-      if (pendingRouteRef.current && pendingRouteRef.current.startUrl === selUrl) {
+      if (
+        pendingRouteRef.current &&
+        pendingRouteRef.current.startUrl === selUrl
+      ) {
         const { startPos, destId } = pendingRouteRef.current;
-      const targetDest =
-        dest ||
-        destRef.current ||
-        floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
-        null;
-      console.info("Route: resuming pending route after floor switch", pendingRouteRef.current);
-      pendingRouteRef.current = null;
-      if (targetDest) {
-        destRef.current = targetDest;
+        const targetDest =
+          dest ||
+          destRef.current ||
+          floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
+          null;
+        console.info(
+          "Route: resuming pending route after floor switch",
+          pendingRouteRef.current
+        );
+        pendingRouteRef.current = null;
+        if (targetDest) {
+          destRef.current = targetDest;
           // wait for the image to load before rerouting; hook into onImgLoad
-          routeResumeRef.current = () => startRouteInternal(startPos, targetDest);
+          routeResumeRef.current = () =>
+            startRouteInternal(startPos, targetDest);
           // fallback timer in case onImgLoad never fires
           setTimeout(() => {
             if (routeResumeRef.current) {
@@ -1374,8 +1470,9 @@ export default function UserMap() {
           return;
         }
       }
-      if (!plan || !plan.steps || plan.index>=plan.steps.length) return;
-      const step = plan.steps[plan.index]; if (step.url !== selUrl) return;
+      if (!plan || !plan.steps || plan.index >= plan.steps.length) return;
+      const step = plan.steps[plan.index];
+      if (step.url !== selUrl) return;
       await computeRouteForStep(step, null, plan);
     })();
   }, [selUrl, plan, gapCells]);
@@ -1387,9 +1484,9 @@ export default function UserMap() {
   return (
     <div className="card shadow-sm bg-card">
       <div className="card-body">
-        <div className="d-flex align-items-center justify-content-between mb-2 flex-wrap">
-          <h5 className="card-title text-card h1 m-0">Public Map</h5>
-          <div className="d-flex align-items-center gap-4">
+        <h5 className="card-title text-card h1 mb-3 text-center">Public Map</h5>
+        <div className="d-flex flex-wrap">
+          <div className="flex-grow-1 d-flex align-items-center gap-3 mb-4">
             <select
               className="form-select form-select-sm bg-card-inner"
               value={selUrl}
@@ -1401,29 +1498,45 @@ export default function UserMap() {
                 </option>
               ))}
             </select>
+
             <button
-              className={`btn ${
-                placing ? "btn-warning" : "btn-outline-warning"
+              className={`btn p-2 btn-sm rounded-pill ${
+                placing ? "btn-dark" : "btn-outline-dark text-white"
               }`}
               onClick={() => setPlacing((p) => !p)}
             >
-              {placing ? "Click map: I'm here" : "I'm here"}
+              {placing ? "Click map to set location" : "Manually set location"}
             </button>
+          </div>
+          <div className="d-flex gap-2 mb-2 flex-grow-1 justify-content-center">
             <input
-              className="form-control form-control-sm"
+              className="form-control form-control-xl bg-card-inner"
               placeholder="Search room (e.g., B500)"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") searchRoom();
               }}
-              style={{ maxWidth: 180 }}
             />
-            <button className="btn btn-primary me-4 px-4" onClick={searchRoom}>
+
+            <button
+              className="btn btn-info text-white px-3 flex-grow-1 rounded-4"
+              onClick={searchRoom}
+            >
               Search
             </button>
           </div>
         </div>
+        <div className="d-flex mb-2 w-100">
+          <button
+            className="btn btn-primary flex-grow-1 rounded-4"
+            onClick={startRoute}
+            disabled={!userPos || !dest}
+          >
+            Route
+          </button>
+        </div>
+
         {floor && (
           <div
             className="position-relative"
@@ -1458,99 +1571,181 @@ export default function UserMap() {
                 <img
                   ref={imgRef}
                   src={floor.url}
-                  alt={floor.name||'floor'}
+                  alt={floor.name || "floor"}
                   crossOrigin="anonymous"
                   onLoad={onImgLoad}
-                  style={{ width: '100%', height: '100%', display:'block', userSelect:'none', pointerEvents:'none' }}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    display: "block",
+                    userSelect: "none",
+                    pointerEvents: "none",
+                  }}
                 />
 
-                {userPos && (()=>{ const pos = toPx(userPos.x, userPos.y); const size=22; const angle = displayHeading || 0; return (
-                  <div
-                    key="user"
-                    className="position-absolute"
-                    style={{ left: pos.x-size/2, top: pos.y-size/2, width:size, height:size, pointerEvents:'none', zIndex:5 }}
-                    title="You"
-                  >
+                {userPos &&
+                  (() => {
+                    const pos = toPx(userPos.x, userPos.y);
+                    const size = 22;
+                    const angle = displayHeading || 0;
+                    return (
+                      <div
+                        key="user"
+                        className="position-absolute"
+                        style={{
+                          left: pos.x - size / 2,
+                          top: pos.y - size / 2,
+                          width: size,
+                          height: size,
+                          pointerEvents: "none",
+                          zIndex: 5,
+                        }}
+                        title="You"
+                      >
+                        <div
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            borderRadius: "50%",
+                            background: "#ff3366",
+                            border: "3px solid #fff",
+                            boxShadow: "0 0 0 4px rgba(255,51,102,0.35)",
+                          }}
+                        />
+                        <div
+                          style={{
+                            position: "absolute",
+                            left: "50%",
+                            top: "50%",
+                            width: size,
+                            height: size,
+                            transform: `translate(-50%,-50%) rotate(${angle}deg)`,
+                            transformOrigin: "50% 50%",
+                          }}
+                        >
+                          <div
+                            style={{
+                              position: "absolute",
+                              left: "50%",
+                              top: 2,
+                              width: 0,
+                              height: 0,
+                              borderLeft: "6px solid transparent",
+                              borderRight: "6px solid transparent",
+                              borderBottom: "12px solid #fff",
+                              transform: "translateX(-50%)",
+                            }}
+                          />
+                          <div
+                            style={{
+                              position: "absolute",
+                              left: "50%",
+                              top: "12px",
+                              width: 2,
+                              height: size / 2.4,
+                              background: "#fff",
+                              borderRadius: 2,
+                              transform: "translateX(-50%)",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                {(Array.isArray(floor.points) ? floor.points : []).map((p) => {
+                  const pos = toPx(p.x, p.y);
+                  const size = 8;
+                  const isDest = dest && dest.id === p.id;
+                  return (
                     <div
+                      key={p.id}
+                      className={`position-absolute rounded-circle ${markerClass(
+                        p.kind
+                      )} ${isDest ? "border border-light" : ""}`}
                       style={{
-                        position:'absolute',
-                        inset:0,
-                        borderRadius:'50%',
-                        background:'#ff3366',
-                        border:'3px solid #fff',
-                        boxShadow:'0 0 0 4px rgba(255,51,102,0.35)',
+                        left: pos.x - size / 2,
+                        top: pos.y - size / 2,
+                        width: size,
+                        height: size,
+                        cursor: "pointer",
+                      }}
+                      title={
+                        (p.roomNumber ? `#${p.roomNumber} ` : "") +
+                        (p.name || p.poiType || p.kind)
+                      }
+                      onClick={() => setDest({ url: selUrl, id: p.id })}
+                    />
+                  );
+                })}
+
+                {waypoints && waypoints.length > 0 && (
+                  <div
+                    className="position-absolute"
+                    style={{
+                      left: 0,
+                      top: 0,
+                      width: natSize.w,
+                      height: natSize.h,
+                      pointerEvents: "none",
+                    }}
+                  >
+                    {waypoints.map((pt, idx) => {
+                      const pos = toPx(pt.x, pt.y);
+                      const size = 4;
+                      return (
+                        <div
+                          key={`wp-${idx}`}
+                          style={{
+                            position: "absolute",
+                            left: pos.x - size / 2,
+                            top: pos.y - size / 2,
+                            width: size,
+                            height: size,
+                            borderRadius: "50%",
+                            background: "rgba(0,123,255,0.15)",
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+
+                {routePts && routePts.length > 1 && (
+                  <svg
+                    className="position-absolute"
+                    width={natSize.w}
+                    height={natSize.h}
+                    style={{ left: 0, top: 0, pointerEvents: "none" }}
+                  >
+                    <polyline
+                      points={routePts
+                        .map((p) => `${p.x * natSize.w},${p.y * natSize.h}`)
+                        .join(" ")}
+                      fill="none"
+                      stroke="#00D1FF"
+                      strokeWidth={3}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeDasharray="8 10"
+                      style={{ animation: "routeDash 1.5s linear infinite" }}
+                    />
+                    <polyline
+                      points={routePts
+                        .map((p) => `${p.x * natSize.w},${p.y * natSize.h}`)
+                        .join(" ")}
+                      fill="none"
+                      stroke="rgba(0,209,255,0.35)"
+                      strokeWidth={7}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeDasharray="12 14"
+                      style={{
+                        filter: "blur(1px)",
+                        animation: "routeDash 1.5s linear infinite",
                       }}
                     />
-                    <div
-                      style={{
-                        position:'absolute',
-                        left:'50%',
-                        top:'50%',
-                        width:size,
-                        height:size,
-                        transform:`translate(-50%,-50%) rotate(${angle}deg)`,
-                        transformOrigin:'50% 50%',
-                      }}
-                    >
-                      <div
-                        style={{
-                          position:'absolute',
-                          left:'50%',
-                          top:2,
-                          width:0,
-                          height:0,
-                          borderLeft:'6px solid transparent',
-                          borderRight:'6px solid transparent',
-                          borderBottom:'12px solid #fff',
-                          transform:'translateX(-50%)',
-                        }}
-                      />
-                      <div
-                        style={{
-                          position:'absolute',
-                          left:'50%',
-                          top:'12px',
-                          width:2,
-                          height:size/2.4,
-                          background:'#fff',
-                          borderRadius:2,
-                          transform:'translateX(-50%)',
-                        }}
-                      />
-                    </div>
-                  </div>
-                );})()}
-
-        {(Array.isArray(floor.points)?floor.points:[]).map(p=>{ const pos=toPx(p.x,p.y); const size=8; const isDest = dest && dest.id===p.id; return (
-          <div key={p.id}
-            className={`position-absolute rounded-circle ${markerClass(p.kind)} ${isDest?'border border-light':''}`}
-            style={{ left: pos.x-size/2, top: pos.y-size/2, width:size, height:size, cursor:'pointer' }}
-            title={(p.roomNumber?`#${p.roomNumber} `:'') + (p.name||p.poiType||p.kind)}
-            onClick={()=> setDest({ url: selUrl, id: p.id })}
-          />
-        );})}
-
-        {waypoints && waypoints.length>0 && (
-          <div className="position-absolute" style={{ left:0, top:0, width: natSize.w, height: natSize.h, pointerEvents:'none' }}>
-            {waypoints.map((pt, idx)=>{ const pos=toPx(pt.x, pt.y); const size=4; return (
-              <div key={`wp-${idx}`} style={{
-                position:'absolute',
-                left: pos.x-size/2,
-                top: pos.y-size/2,
-                width:size,
-                height:size,
-                borderRadius:'50%',
-                background:'rgba(0,123,255,0.15)',
-              }} />
-            );})}
-          </div>
-        )}
-
-        {routePts && routePts.length>1 && (
-          <svg className="position-absolute" width={natSize.w} height={natSize.h} style={{ left:0, top:0, pointerEvents:'none' }}>
-            <polyline points={routePts.map(p=>`${p.x*natSize.w},${p.y*natSize.h}`).join(' ')} fill="none" stroke="#00D1FF" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="8 10" style={{ animation:'routeDash 1.5s linear infinite' }} />
-            <polyline points={routePts.map(p=>`${p.x*natSize.w},${p.y*natSize.h}`).join(' ')} fill="none" stroke="rgba(0,209,255,0.35)" strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="12 14" style={{ filter:'blur(1px)', animation:'routeDash 1.5s linear infinite' }} />
-          </svg>
+                  </svg>
                 )}
               </div>
             </div>
@@ -1560,13 +1755,6 @@ export default function UserMap() {
           <div className="text-muted">No published floors available yet.</div>
         )}
         <div className="d-flex align-items-center gap-2 mt-2 flex-wrap">
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={startRoute}
-            disabled={!userPos || !dest}
-          >
-            Route
-          </button>
           <button
             className="btn btn-outline-secondary btn-sm"
             onClick={clearRoute}
@@ -1581,7 +1769,9 @@ export default function UserMap() {
             Auto warp: {autoWarp ? "On" : "Off"}
           </button>
           <button
-            className={`btn btn-${accessibleMode ? "secondary" : "outline-secondary"} btn-sm`}
+            className={`btn btn-${
+              accessibleMode ? "secondary" : "outline-secondary"
+            } btn-sm`}
             onClick={() => {
               setAccessibleMode((v) => !v);
               // Clear current plan so the next route rebuild honors the mode
@@ -1594,7 +1784,9 @@ export default function UserMap() {
             Accessibility: {accessibleMode ? "Elevator" : "Any"}
           </button>
           <button
-            className={`btn btn-${sensorTracking ? "danger" : "success"} btn-sm`}
+            className={`btn btn-${
+              sensorTracking ? "danger" : "success"
+            } btn-sm`}
             onClick={sensorTracking ? stopSensorTracking : startSensorTracking}
             disabled={!sensorTracking && !userPos}
           >
@@ -1638,4 +1830,3 @@ export default function UserMap() {
     </div>
   );
 }
-
