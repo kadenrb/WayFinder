@@ -73,7 +73,7 @@ export default function UserMap() {
   }, [routePts]);
   const [autoWarp, setAutoWarp] = useState(true);
   const [accessibleMode, setAccessibleMode] = useState(false); // prefer elevators when crossing floors
-  const [gapCells, setGapCells] = useState(1);
+  const [gapCells, setGapCells] = useState(0);
   const [warpProximity, setWarpProximity] = useState(0.02); // normalized distance
   const [plan, setPlan] = useState(null); // { steps:[{ url, kind:'warp'|'dest', key?, target:{x,y} }], index }
   const dragRef = useRef(null);
@@ -410,9 +410,13 @@ export default function UserMap() {
     // Build/capture walkable grid for this floor
     const f = floors.find((fl) => fl.url === selUrl);
     if (f) {
-      Promise.resolve(
-        buildGrid(e.target, f.walkable?.color, f.walkable?.tolerance, 4)
-      )
+      const colors = [
+        hexToRgb(f.walkable?.color || "#9F9383"),
+        ...(Array.isArray(f.walkable?.extraColors)
+          ? f.walkable.extraColors.map((c) => hexToRgb(normHex(c)))
+          : []),
+      ];
+      Promise.resolve(buildGrid(e.target, colors, f.walkable?.tolerance, 4))
         .then((g) => {
           gridRef.current = g;
         })
@@ -763,7 +767,8 @@ export default function UserMap() {
       parseInt(h.slice(5, 7), 16),
     ];
   };
-  const buildGrid = async (imgEl, color, tol, step = 4) => {
+  // Build a walkable grid using one or more colors. Colors is [[r,g,b], ...].
+  const buildGrid = async (imgEl, colors, tol, step = 4) => {
     const w = imgEl.naturalWidth || imgEl.width,
       h = imgEl.naturalHeight || imgEl.height;
     const c = document.createElement("canvas");
@@ -773,7 +778,6 @@ export default function UserMap() {
     ctx.drawImage(imgEl, 0, 0, w, h);
     const id = ctx.getImageData(0, 0, w, h);
     const data = id.data;
-    const [tr, tg, tb] = hexToRgb(color || "#9F9383");
     const gw = Math.max(1, Math.floor(w / step)),
       gh = Math.max(1, Math.floor(h / step));
     const grid = new Uint8Array(gw * gh);
@@ -786,11 +790,18 @@ export default function UserMap() {
         const r = data[idx],
           g = data[idx + 1],
           b = data[idx + 2];
-        const dr = r - tr,
-          dg = g - tg,
-          db = b - tb;
-        const dist = Math.sqrt(dr * dr + dg * dg + db * db);
-        grid[gy * gw + gx] = dist <= tolv ? 1 : 0;
+        let pass = 0;
+        for (const [tr, tg, tb] of colors) {
+          const dr = r - tr,
+            dg = g - tg,
+            db = b - tb;
+          const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+          if (dist <= tolv) {
+            pass = 1;
+            break;
+          }
+        }
+        grid[gy * gw + gx] = pass;
       }
     }
     return { grid, gw, gh, step, w, h };
@@ -912,6 +923,68 @@ export default function UserMap() {
     return out;
   };
 
+  // Simplify a polyline using Ramer-Douglas-Peucker and colinear collapse to reduce zig-zags from the grid path
+  const simplifyRoute = (pts, epsilon = 0.003) => {
+    if (!pts || pts.length < 3) return pts || [];
+    const sq = (v) => v * v;
+    const distSqToSegment = (p, a, b) => {
+      const abx = b.x - a.x;
+      const aby = b.y - a.y;
+      const apx = p.x - a.x;
+      const apy = p.y - a.y;
+      const abLenSq = abx * abx + aby * aby || 1e-9;
+      let t = (apx * abx + apy * aby) / abLenSq;
+      t = Math.max(0, Math.min(1, t));
+      const projx = a.x + t * abx;
+      const projy = a.y + t * aby;
+      return sq(p.x - projx) + sq(p.y - projy);
+    };
+    const rdp = (arr) => {
+      if (arr.length < 3) return arr;
+      let maxIdx = 0;
+      let maxDistSq = 0;
+      const start = arr[0];
+      const end = arr[arr.length - 1];
+      for (let i = 1; i < arr.length - 1; i++) {
+        const d = distSqToSegment(arr[i], start, end);
+        if (d > maxDistSq) {
+          maxDistSq = d;
+          maxIdx = i;
+        }
+      }
+      if (Math.sqrt(maxDistSq) <= epsilon) {
+        return [start, end];
+      }
+      const left = rdp(arr.slice(0, maxIdx + 1));
+      const right = rdp(arr.slice(maxIdx));
+      return left.slice(0, -1).concat(right);
+    };
+    // First RDP
+    let simplified = rdp(pts);
+    // Then collapse nearly-colinear points (angle change below threshold)
+    const angle = (a, b, c) => {
+      const abx = b.x - a.x, aby = b.y - a.y;
+      const bcx = c.x - b.x, bcy = c.y - b.y;
+      const dot = abx * bcx + aby * bcy;
+      const mag1 = Math.hypot(abx, aby) || 1e-9;
+      const mag2 = Math.hypot(bcx, bcy) || 1e-9;
+      const cos = dot / (mag1 * mag2);
+      return Math.acos(Math.max(-1, Math.min(1, cos)));
+    };
+    const collapsed = [simplified[0]];
+    for (let i = 1; i < simplified.length - 1; i++) {
+      const a = collapsed[collapsed.length - 1];
+      const b = simplified[i];
+      const c = simplified[i + 1];
+      const ang = angle(a, b, c);
+      if (ang > (5 * Math.PI) / 180) {
+        collapsed.push(b);
+      }
+    }
+    collapsed.push(simplified[simplified.length - 1]);
+    return collapsed;
+  };
+
   const routeDirection = () => {
     return null;
   };
@@ -1029,48 +1102,44 @@ export default function UserMap() {
   const computeRouteForStep = async (
     step,
     startPosOverride = null,
-    planArg = null
+    planArg = null,
+    fallbackUsed = false,
+    gapOverride = null
   ) => {
-    const curFloor = floors.find((f) => f.url === selUrl);
-    if (!curFloor) return;
-    const img = imgRef.current;
-    if (!img || !img.naturalWidth) {
-      setSensorMsg("Image not ready for routing.");
-      return;
+    const curFloor = floors.find(f=>f.url===selUrl); if (!curFloor) return;
+    const img = imgRef.current; if (!img || !img.naturalWidth) { setSensorMsg("Image not ready for routing."); return; }
+    const baseColors = [hexToRgb(curFloor.walkable?.color || "#9F9383")];
+    const extraColors = Array.isArray(curFloor.walkable?.extraColors)
+      ? curFloor.walkable.extraColors.map((c) => hexToRgb(normHex(c)))
+      : [];
+    const tol = curFloor.walkable?.tolerance;
+
+    const buildGridTry = async (useExtra) => {
+      const cols = useExtra ? baseColors.concat(extraColors) : baseColors;
+      return buildGrid(img, cols, tol, 4);
+    };
+
+    const tryBuild = async (useExtra) => {
+      const obj = await buildGridTry(useExtra);
+      const { grid, gw, gh, step: stp, w, h } = obj;
+      const startPos = startPosOverride || userPos;
+      if (!startPos) return { obj, sCell: null, w, h, stp, gw, gh };
+      const ux = Math.max(0, Math.min(gw - 1, Math.round((startPos.x * w) / stp)));
+      const uy = Math.max(0, Math.min(gh - 1, Math.round((startPos.y * h) / stp)));
+      const sCell = nearestWalkable(grid, gw, gh, ux, uy);
+      return { obj, sCell, w, h, stp, gw, gh };
+    };
+
+    let attempt = await tryBuild(false);
+    if (!attempt.sCell && extraColors.length) {
+      attempt = await tryBuild(true);
     }
-    let gridObj;
-    try {
-      gridObj = await buildGrid(
-        img,
-        curFloor.walkable?.color,
-        curFloor.walkable?.tolerance,
-        4
-      );
-    } catch (err) {
-      console.error("Failed to build walkable grid", err);
-      setSensorMsg("Routing failed (image/CORS).");
+    if (!attempt.sCell) {
       setRoutePts([]);
       return;
     }
-    const { grid, gw, gh, step: stp, w, h } = gridObj;
-    const startPos = startPosOverride || userPos;
-    if (!startPos) {
-      setRoutePts([]);
-      return;
-    }
-    const ux = Math.max(
-      0,
-      Math.min(gw - 1, Math.round((startPos.x * w) / stp))
-    );
-    const uy = Math.max(
-      0,
-      Math.min(gh - 1, Math.round((startPos.y * h) / stp))
-    );
-    const sCell = nearestWalkable(grid, gw, gh, ux, uy);
-    if (!sCell) {
-      setRoutePts([]);
-      return;
-    }
+
+    const { obj: gridObj, sCell, w, h, stp, gw, gh } = attempt;
     let target = null;
     if (step.kind === "dest") {
       const destFloor = floors.find((f) =>
@@ -1175,33 +1244,29 @@ export default function UserMap() {
       step.key = normalizeKey(best.warpKey);
       step.target = target;
     }
-    const tx = Math.max(0, Math.min(gw - 1, Math.round((target.x * w) / stp)));
-    const ty = Math.max(0, Math.min(gh - 1, Math.round((target.y * h) / stp)));
-    const tCell = nearestWalkable(grid, gw, gh, tx, ty);
+    const tx=Math.max(0,Math.min(gw-1,Math.round((target.x*w)/stp))); const ty=Math.max(0,Math.min(gh-1,Math.round((target.y*h)/stp)));
+    const tCell = nearestWalkable(gridObj.grid, gw, gh, tx, ty);
     if (!tCell) {
       setRoutePts([]);
       return;
     }
-    const path = bfs(
-      grid,
-      gw,
-      gh,
-      sCell,
-      tCell,
-      Math.max(0, Math.floor(gapCells))
-    );
-    if (!path || path.length < 2) {
-      setRoutePts([]);
+    const gapVal = Math.max(0, Math.floor(gapOverride ?? gapCells ?? 0));
+    const path = bfs(gridObj.grid,gw,gh,sCell,tCell, gapVal);
+    if (!path || path.length<2) {
+      if (!fallbackUsed && gapVal === 0) {
+        await computeRouteForStep(step, startPosOverride, planArg, true, 1);
+      } else {
+        setRoutePts([]);
+      }
       return;
     }
-    const out = path.map(([gx, gy]) => ({
-      x: (gx * stp + stp / 2) / w,
-      y: (gy * stp + stp / 2) / h,
-    }));
-    routePtsRef.current = out;
+    const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
+    const simpTol = 0.003 + gapVal * 0.003; // higher gap -> allow more smoothing
+    const simplified = simplifyRoute(out, simpTol);
+    routePtsRef.current = simplified;
     // Only (re)build waypoints and reset index if waypointIdxRef is at 0 (initial build)
     if (waypointIdxRef.current === 0) {
-      let wp = buildWaypoints(out);
+      let wp = buildWaypoints(simplified);
       const startPt = wp[0];
       const endPt = wp[wp.length - 1];
       const userPt = userPos || startPt;
@@ -1221,7 +1286,7 @@ export default function UserMap() {
         `Route ready: ${out.length} points, waypoints: ${wp.length}`
       );
     }
-    setRoutePts(out);
+    setRoutePts(simplified);
   };
 
   const startRouteInternal = async (startPos, targetDest) => {
@@ -1697,22 +1762,6 @@ export default function UserMap() {
           >
             Clear
           </button>
-          <div
-            className="d-flex align-items-center small text-muted"
-            style={{ gap: 8 }}
-          >
-            <span>Gap</span>
-            <input
-              type="range"
-              min="0"
-              max="5"
-              step="1"
-              value={gapCells}
-              onChange={(e) => setGapCells(parseInt(e.target.value) || 0)}
-              style={{ width: 80 }}
-            />
-            <span>{gapCells}</span>
-          </div>
           <button
             className={`btn btn-${autoWarp ? "info" : "outline-info"} btn-sm`}
             onClick={() => setAutoWarp((v) => !v)}
