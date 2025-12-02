@@ -62,6 +62,7 @@ export default function MapEditor({ imageSrc }) {
   const spacerRef = useRef(null); // scaled box
   const contentRef = useRef(null); // unscaled content (scaled via CSS transform)
   const imgRef = useRef(null);
+  const pointItemRefs = useRef(new Map());
   // ===============================
   // SECTION: Pins & Core Editor State
   // ===============================
@@ -76,6 +77,7 @@ export default function MapEditor({ imageSrc }) {
   const [busy, setBusy] = useState("");
   const [pulseId, setPulseId] = useState(null);
   const cancelScanRef = useRef(false);
+  const [extraColorDraft, setExtraColorDraft] = useState("#000000");
   // Sort pins nicely (numbers in order). Collator is a fancy sorter.
   const collator = useMemo(
     () => new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }),
@@ -103,6 +105,7 @@ export default function MapEditor({ imageSrc }) {
   const [dbForceCh, setDbForceCh] = useState("auto"); // internal only
   const [dbSoftmax, setDbSoftmax] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [pointsLocked, setPointsLocked] = useState(false); // toggle to prevent accidental moves
 
   // ===============================
   // SECTION: Inline List Editing (quick fixes)
@@ -124,7 +127,7 @@ export default function MapEditor({ imageSrc }) {
   // ===============================
   // SECTION: Walkable Path Color (admin)
   // ===============================
-  const [walkable, setWalkable] = useState({ color: '#9F9383', tolerance: 12 });
+  const [walkable, setWalkable] = useState({ color: '#9F9383', tolerance: 12, extraColors: [] });
   const [northOffset, setNorthOffset] = useState(0);
   // Routing overlay (dev tool): path from user to selected point, constrained to walkable color
   const [routePts, setRoutePts] = useState([]); // [{x,y}] in normalized coords
@@ -346,6 +349,14 @@ export default function MapEditor({ imageSrc }) {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const data = JSON.parse(raw);
+        if (
+          typeof data?.imageWidth === "number" &&
+          typeof data?.imageHeight === "number" &&
+          data.imageWidth > 0 &&
+          data.imageHeight > 0
+        ) {
+          setNatSize({ w: data.imageWidth, h: data.imageHeight });
+        }
         if (Array.isArray(data?.points)) setPoints(data.points);
         if (Array.isArray(data?.dbBoxes)) setDbBoxes(data.dbBoxes);
         if (
@@ -372,9 +383,12 @@ export default function MapEditor({ imageSrc }) {
           setWalkable({
             color: (data.walkable.color || "#9F9383").toUpperCase(),
             tolerance: tol,
+            extraColors: Array.isArray(data.walkable.extraColors)
+              ? data.walkable.extraColors.map((c) => normHex(c))
+              : [],
           });
         } else {
-          setWalkable({ color: "#9F9383", tolerance: 12 });
+          setWalkable({ color: "#9F9383", tolerance: 12, extraColors: [] });
         }
         if (typeof data?.northOffset === 'number' && Number.isFinite(data.northOffset)) {
           setNorthOffset(data.northOffset);
@@ -385,7 +399,7 @@ export default function MapEditor({ imageSrc }) {
         setPoints([]);
         setDbBoxes([]);
         setUserPos(null);
-        setWalkable({ color: '#9F9383', tolerance: 12 });
+        setWalkable({ color: '#9F9383', tolerance: 12, extraColors: [] });
         setNorthOffset(0);
       }
     } catch {}
@@ -406,10 +420,18 @@ export default function MapEditor({ imageSrc }) {
     try {
       localStorage.setItem(
         storageKey,
-        JSON.stringify({ points, dbBoxes, userPos, walkable, northOffset })
+        JSON.stringify({
+          points,
+          dbBoxes,
+          userPos,
+          walkable,
+          northOffset,
+          imageWidth: natSize.w,
+          imageHeight: natSize.h,
+        })
       );
     } catch { }
-  }, [points, dbBoxes, userPos, walkable, northOffset, storageKey]);
+  }, [points, dbBoxes, userPos, walkable, northOffset, storageKey, natSize.w, natSize.h]);
 
   // Must declare hooks before any early returns
   /*
@@ -495,7 +517,12 @@ export default function MapEditor({ imageSrc }) {
     ctx.drawImage(img, 0, 0, w, h);
     const id = ctx.getImageData(0, 0, w, h);
     const data = id.data;
-    const [tr, tg, tb] = hexToRgb(walkable.color || "#9F9383");
+    const colors = [
+      hexToRgb(walkable.color || "#9F9383"),
+      ...(Array.isArray(walkable.extraColors)
+        ? walkable.extraColors.map((c) => hexToRgb(normHex(c)))
+        : []),
+    ];
     const tol = Math.max(0, Math.min(255, +walkable.tolerance || 0));
     const gw = Math.max(1, Math.floor(w / step));
     const gh = Math.max(1, Math.floor(h / step));
@@ -508,11 +535,18 @@ export default function MapEditor({ imageSrc }) {
         const r = data[idx],
           g = data[idx + 1],
           b = data[idx + 2];
-        const dr = r - tr,
-          dg = g - tg,
-          db = b - tb;
-        const dist = Math.sqrt(dr * dr + dg * dg + db * db);
-        grid[gy * gw + gx] = dist <= tol ? 1 : 0;
+        let pass = 0;
+        for (const [tr, tg, tb] of colors) {
+          const dr = r - tr,
+            dg = g - tg,
+            db = b - tb;
+          const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+          if (dist <= tol) {
+            pass = 1;
+            break;
+          }
+        }
+        grid[gy * gw + gx] = pass;
       }
     }
     return { grid, gw, gh, step, w, h };
@@ -1743,13 +1777,12 @@ export default function MapEditor({ imageSrc }) {
   const toNorm = (clientX, clientY) => {
     const el = spacerRef.current; // use scaled box for pointer math
     const rect = el?.getBoundingClientRect();
-    if (!rect || !el || !natSize.w || !natSize.h) return { x: 0, y: 0 };
+    if (!rect || !el || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
     const sx = clientX - rect.left;
     const sy = clientY - rect.top;
-    const ux = sx / zoom; // unscaled px
-    const uy = sy / zoom;
-    const x = clamp01(ux / natSize.w);
-    const y = clamp01(uy / natSize.h);
+    // rect already reflects the scaled size; divide by rect dims to get normalized coords
+    const x = clamp01(sx / rect.width);
+    const y = clamp01(sy / rect.height);
     return { x, y };
   };
 
@@ -1759,9 +1792,12 @@ export default function MapEditor({ imageSrc }) {
     - Helpful for placing absolute overlays precisely on the content layer.
   */
   const toPx = (x, y) => {
-    if (!natSize.w || !natSize.h) return { x: 0, y: 0 };
-    // return UN-SCALED px for content layer
-    return { x: x * natSize.w, y: y * natSize.h };
+    const rect = spacerRef.current?.getBoundingClientRect();
+    const w = rect?.width || natSize.w;
+    const h = rect?.height || natSize.h;
+    if (!w || !h) return { x: 0, y: 0 };
+    // return UN-SCALED px for content layer using rendered box dimensions
+    return { x: x * w, y: y * h };
   };
 
   /*
@@ -1822,6 +1858,7 @@ export default function MapEditor({ imageSrc }) {
   const onMarkerMouseDown = (e, id) => {
     e.stopPropagation();
     if (selectMode !== "none") return; // disable dragging while selection tool is active
+    if (pointsLocked) return; // locking prevents accidental drags
     setDrag({ id });
     setSelectedId(id);
   };
@@ -1990,20 +2027,53 @@ export default function MapEditor({ imageSrc }) {
       const text = await f.text();
       const data = JSON.parse(text);
       const applyState = (state) => {
-        if (Array.isArray(state?.points)) setPoints(state.points);
+        const w = typeof state?.imageWidth === "number" && state.imageWidth > 0 ? state.imageWidth : null;
+        const h = typeof state?.imageHeight === "number" && state.imageHeight > 0 ? state.imageHeight : null;
+
+        // If the JSON carries image dimensions, seed natSize so overlays match
+        if (w && h) setNatSize({ w, h });
+
+        // Normalize points that might be stored in pixels (older exports)
+        const normalizePoint = (p) => {
+          let { x, y } = p || {};
+          if (w && typeof x === "number" && x > 1) x = x / w;
+          if (h && typeof y === "number" && y > 1) y = y / h;
+          return { ...p, x, y };
+        };
+
+        if (Array.isArray(state?.points)) {
+          setPoints(state.points.map(normalizePoint));
+        }
         if (Array.isArray(state?.dbBoxes)) setDbBoxes(state.dbBoxes);
         if (
           state &&
-          typeof state.userPos === 'object' &&
+          typeof state.userPos === "object" &&
           state.userPos &&
-          typeof state.userPos.x === 'number' &&
-          typeof state.userPos.y === 'number'
+          typeof state.userPos.x === "number" &&
+          typeof state.userPos.y === "number"
         ) {
-          setUserPos({ x: state.userPos.x, y: state.userPos.y });
+          let { x, y } = state.userPos;
+          if (w && x > 1) x = x / w;
+          if (h && y > 1) y = y / h;
+          setUserPos({ x, y });
         }
-        if (state && typeof state.walkable === 'object' && state.walkable && typeof state.walkable.color === 'string') {
-          const tol = typeof state.walkable.tolerance === 'number' ? state.walkable.tolerance : 12;
-          setWalkable({ color: normHex(state.walkable.color), tolerance: tol });
+        if (
+          state &&
+          typeof state.walkable === "object" &&
+          state.walkable &&
+          typeof state.walkable.color === "string"
+        ) {
+          const tol =
+            typeof state.walkable.tolerance === "number"
+              ? state.walkable.tolerance
+              : 12;
+          setWalkable({
+            color: normHex(state.walkable.color),
+            tolerance: tol,
+            extraColors: Array.isArray(state.walkable.extraColors)
+              ? state.walkable.extraColors.map((c) => normHex(c))
+              : [],
+          });
         }
       };
 
@@ -2186,6 +2256,8 @@ export default function MapEditor({ imageSrc }) {
         const top = Math.max(0, targetY - sc.clientHeight / 2);
         sc.scrollTo({ left, top, behavior: "smooth" });
       }
+      const li = pointItemRefs.current.get(p.id);
+      li?.scrollIntoView({ behavior: "smooth", block: "center" });
       rootRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       setPulseId(p.id);
       setTimeout(() => setPulseId(null), 3000);
@@ -2253,6 +2325,13 @@ export default function MapEditor({ imageSrc }) {
                     ? "Hide Advanced Settings"
                     : "Advanced Settings"}
                 </button>
+                <button
+                  className={`btn ${pointsLocked ? "btn-outline-danger" : "btn-danger"}`}
+                  title="Lock pins to prevent dragging"
+                  onClick={() => setPointsLocked((v) => !v)}
+                >
+                  {pointsLocked ? "Unlock dots" : "Lock dots"}
+                </button>
               </div>
               <div className="gap-3 d-flex flex-wrap">
                 <button
@@ -2307,6 +2386,46 @@ export default function MapEditor({ imageSrc }) {
                 placeholder="#9F9383"
               />
               <button className="btn btn-sm btn-outline-secondary" onClick={pickWalkableFromScreen}>Pick</button>
+              <div className="d-flex align-items-center gap-2">
+                <span>Extra colours:</span>
+                <input
+                  type="color"
+                  value={extraColorDraft}
+                  onChange={(e) => setExtraColorDraft(normHex(e.target.value))}
+                  title="Add an additional walkable colour"
+                />
+                <button
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={() => {
+                    const next = Array.from(
+                      new Set([...(walkable.extraColors || []), normHex(extraColorDraft)])
+                    );
+                    setWalkable((w) => ({ ...w, extraColors: next }));
+                  }}
+                >
+                  Add
+                </button>
+                {Array.isArray(walkable.extraColors) && walkable.extraColors.length > 0 && (
+                  <div className="d-flex align-items-center gap-1 flex-wrap">
+                    {walkable.extraColors.map((c) => (
+                      <span key={c} className="badge text-bg-light">
+                        {c.toUpperCase()}{" "}
+                        <button
+                          className="btn btn-sm btn-link p-0"
+                          onClick={() =>
+                            setWalkable((w) => ({
+                              ...w,
+                              extraColors: (w.extraColors || []).filter((x) => x !== c),
+                            }))
+                          }
+                        >
+                          x
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
               <span>North offset</span>
               <input
                 type="number"
@@ -2635,6 +2754,7 @@ export default function MapEditor({ imageSrc }) {
                     <div
                       key="user"
                       data-marker
+                      onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => {
                         e.stopPropagation();
                         if (selectMode !== "none") return;
@@ -2669,7 +2789,11 @@ export default function MapEditor({ imageSrc }) {
                     key={p.id}
                     data-marker
                     onMouseDown={(e) => onMarkerMouseDown(e, p.id)}
-                    onDoubleClick={() => beginEdit(p)}
+                    onClick={(e) => e.stopPropagation()}
+                    onDoubleClick={() => {
+                      focusPoint(p);
+                      beginEdit(p);
+                    }}
                     className={`position-absolute rounded-circle marker ${markerClass(
                       p.kind
                     )} ${isSel ? "border border-light" : ""} ${
@@ -2680,9 +2804,13 @@ export default function MapEditor({ imageSrc }) {
                       top: pos.y - size / 2,
                       width: size,
                       height: size,
-                      cursor: selectMode === "none" ? "grab" : "crosshair",
+                      cursor:
+                        pointsLocked || selectMode !== "none"
+                          ? "not-allowed"
+                          : "grab",
                       transformOrigin: "center",
-                      pointerEvents: selectMode === "none" ? "auto" : "none",
+                      pointerEvents:
+                        pointsLocked || selectMode !== "none" ? "auto" : "auto",
                     }}
                     title={
                       (p.roomNumber ? `#${p.roomNumber} ` : "") +
@@ -3134,6 +3262,10 @@ export default function MapEditor({ imageSrc }) {
                 .map((p) => (
                   <li
                     key={p.id}
+                    ref={(el) => {
+                      if (el) pointItemRefs.current.set(p.id, el);
+                      else pointItemRefs.current.delete(p.id);
+                    }}
                     className={`list-group-item ${
                       selectedId === p.id ? "active" : ""
                     }`}
