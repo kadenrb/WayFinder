@@ -89,6 +89,7 @@ export default function UserMap() {
   const [recordDuration, setRecordDuration] = useState(10);
   const [recordMsg, setRecordMsg] = useState("");
   const shareStartRef = useRef(false);
+  const shareRetryTimerRef = useRef(null);
   const [debugData, setDebugData] = useState({
     heading: 0,
     compassHeading: 0,
@@ -1435,19 +1436,6 @@ export default function UserMap() {
     await startRouteInternal(startPos, targetDest);
   };
 
-  // Kick off routing automatically after applying a shared link
-  useEffect(() => {
-    if (!shareStartRef.current) return;
-    const targetDest = dest || destRef.current;
-    if (!userPos || !targetDest) return;
-    const maybeFinish = () => {
-      if (!pendingRouteRef.current) {
-        shareStartRef.current = false;
-      }
-    };
-    startRoute().finally(maybeFinish);
-  }, [userPos, dest, selUrl]);
-
   const clearRoute = () => {
     setRoutePts([]);
     setPlan(null);
@@ -1530,30 +1518,50 @@ export default function UserMap() {
     startRoute();
   }, [selUrl]);
 
-  // Retry auto-start once core routing prerequisites are ready; keep retrying until success
+  // Robust retry: keep attempting to auto-start shared routes until a plan is built
   useEffect(() => {
-    const retryTimerRef = { current: null };
-    const tryStart = () => {
+    if (!shareStartRef.current) return;
+
+    const hasPlan = () => {
+      const p = planRef.current;
+      return p && Array.isArray(p.steps) && p.steps.length > 0;
+    };
+
+    const schedule = () => {
+      if (shareRetryTimerRef.current) clearTimeout(shareRetryTimerRef.current);
+      shareRetryTimerRef.current = setTimeout(tick, 600);
+    };
+
+    const tick = () => {
       if (!shareStartRef.current) return;
-      if (!userPos) return;
       const targetDest = dest || destRef.current;
-      if (!targetDest) return;
-      startRoute().finally(() => {
-        const activePlan = planRef.current;
-        const hasRoute =
-          activePlan && Array.isArray(activePlan.steps) && activePlan.steps.length;
-        if (!hasRoute && shareStartRef.current) {
-          retryTimerRef.current = setTimeout(tryStart, 600);
-        } else {
-          shareStartRef.current = false;
-        }
-      });
+      const curFloor = floors.find((f) => f.url === selUrl);
+      const imgReady = imgRef.current && imgRef.current.naturalWidth;
+      if (!targetDest || !userPos || !curFloor || !imgReady) {
+        schedule();
+        return;
+      }
+      startRoute()
+        .then(() => {
+          if (!hasPlan() && shareStartRef.current) {
+            schedule();
+          } else {
+            shareStartRef.current = false;
+            if (shareRetryTimerRef.current)
+              clearTimeout(shareRetryTimerRef.current);
+          }
+        })
+        .catch(() => {
+          if (shareStartRef.current) schedule();
+        });
     };
-    tryStart();
+
+    tick();
+
     return () => {
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      if (shareRetryTimerRef.current) clearTimeout(shareRetryTimerRef.current);
     };
-  }, [userPos, dest, natSize]);
+  }, [floors, selUrl, userPos, dest, natSize]);
 
   // Recompute route when floor switches within an active plan
   // Recompute route when floor switches within an active plan (but not on userPos changes)
