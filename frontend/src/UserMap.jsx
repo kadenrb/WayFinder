@@ -110,6 +110,9 @@ export default function UserMap() {
 
   // ---------------------------------------------------------------------------
   // SHARE URL ENCODING/DECODING (for QR handoff)
+  // We keep the payload small: start floor URL, user position, dest id, accessibility.
+  // Encode: JSON -> URI-escaped -> base64, so it fits cleanly in a query param.
+  // Decode: base64 -> URI-unescape -> JSON.
   // ---------------------------------------------------------------------------
   const encodeShareState = (payload) => {
     try {
@@ -474,6 +477,7 @@ export default function UserMap() {
     if (!token) return;
     const data = decodeShareState(token);
     if (!data) return;
+    // Seed UI from shared payload
     if (typeof data.accessibleMode === "boolean") {
       setAccessibleMode(data.accessibleMode);
     }
@@ -1353,6 +1357,9 @@ export default function UserMap() {
   }, [selUrl, userPos, dest, accessibleMode]);
 
   const shareUrl = useMemo(() => {
+    // Build a shareable URL with the current state encoded into ?share=
+    // Note: keeping everything client-side (no backend token) so tablets/phones
+    // can swap routes without touching the server.
     if (!sharePayload) return "";
     const token = encodeShareState(sharePayload);
     if (!token) return "";
@@ -1518,7 +1525,13 @@ export default function UserMap() {
     startRoute();
   }, [selUrl]);
 
-  // Robust retry: keep attempting to auto-start shared routes until a plan is built
+  // Robust retry for shared links:
+  // Keep calling startRoute() on a timer until we have everything we need:
+  //   - a floor loaded (floors/selUrl)
+  //   - the floor image is ready (imgRef.naturalWidth)
+  //   - a user position and destination
+  //   - a route plan actually exists (planRef has steps)
+  // This avoids “tap Route again” after scanning a QR.
   useEffect(() => {
     if (!shareStartRef.current) return;
 
