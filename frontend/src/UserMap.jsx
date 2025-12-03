@@ -2384,9 +2384,8 @@ export default function UserMap() {
       // points — continues after this snippet. We’re leaving the code itself
       // untouched and just documenting what’s here.)
     }
-  };
 
-  // ---------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------
   // WARP TARGET SELECTION + GRID ROUTE BUILD
   //
   // We’re in the middle of `computeRouteForStep` here, specifically the
