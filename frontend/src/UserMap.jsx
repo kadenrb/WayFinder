@@ -64,19 +64,12 @@ export default function UserMap() {
   useEffect(() => {
     routePtsRef.current = Array.isArray(routePts) ? routePts : [];
   }, [routePts]);
-  useEffect(() => {
-    userPosRef.current = userPos;
-  }, [userPos]);
   const [displayHeading, setDisplayHeading] = useState(0);
-  useEffect(() => {
-    routePtsRef.current = Array.isArray(routePts) ? routePts : [];
-  }, [routePts]);
   const [autoWarp, setAutoWarp] = useState(true);
   const [accessibleMode, setAccessibleMode] = useState(false); // prefer elevators when crossing floors
   const [gapCells, setGapCells] = useState(0);
   const [warpProximity, setWarpProximity] = useState(0.02); // normalized distance
   const [plan, setPlan] = useState(null); // { steps:[{ url, kind:'warp'|'dest', key?, target:{x,y} }], index }
-  const dragRef = useRef(null);
   const [moveStep, setMoveStep] = useState(0.01); // normalized delta per arrow key press
   const [searchText, setSearchText] = useState("");
   const [searchMsg, setSearchMsg] = useState("");
@@ -87,6 +80,11 @@ export default function UserMap() {
   const [recording, setRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(10);
   const [recordMsg, setRecordMsg] = useState("");
+
+  const handleMoveStepChange = (e) => {
+    const next = parseFloat(e.target.value);
+    setMoveStep(Number.isFinite(next) ? next : 0.01);
+  };
   const [debugData, setDebugData] = useState({
     heading: 0,
     compassHeading: 0,
@@ -360,21 +358,11 @@ export default function UserMap() {
       setLastUser({ url: selUrl, pos: userPos });
     }
   }, [userPos, selUrl]);
-  useEffect(() => {
-    setDebugData((prev) => ({ ...prev, sensorMsg }));
-  }, [sensorMsg]);
 
   const floor = useMemo(
     () => floors.find((f) => f.url === selUrl) || null,
     [floors, selUrl]
   );
-  useEffect(() => {
-    northOffsetRef.current =
-      typeof floor?.northOffset === "number" &&
-      Number.isFinite(floor.northOffset)
-        ? floor.northOffset
-        : 0;
-  }, [floor]);
   useEffect(() => {
     northOffsetRef.current =
       typeof floor?.northOffset === "number" &&
@@ -985,15 +973,6 @@ export default function UserMap() {
     return collapsed;
   };
 
-  const routeDirection = () => {
-    return null;
-  };
-
-  const routeHeadingDeg = () => {
-    // Route-locked mode uses waypoint progression; heading is updated when stepping.
-    return headingRef.current || 0;
-  };
-
   const waypointStride = 2; // advance this many waypoints per detected step/click
 
   async function stepWaypoint() {
@@ -1289,7 +1268,7 @@ export default function UserMap() {
     setRoutePts(simplified);
   };
 
-  const startRouteInternal = async (startPos, targetDest) => {
+  const buildRouteInternal = async (startPos, targetDest) => {
     const floor = floors.find((f) => f.url === selUrl);
     if (!floor || !startPos || !targetDest) return;
     const destFloor = floors.find((f) =>
@@ -1358,7 +1337,7 @@ export default function UserMap() {
       return;
     }
 
-    await startRouteInternal(startPos, targetDest);
+    await buildRouteInternal(startPos, targetDest);
   };
 
   const clearRoute = () => {
@@ -1413,7 +1392,7 @@ export default function UserMap() {
         routeResumeRef.current = () => {
           const tgt = targetDest || (destId && { id: destId });
           if (tgt) destRef.current = tgt;
-          startRouteInternal(landing, tgt);
+          buildRouteInternal(landing, tgt);
         };
         setSelUrl(nextFloor.url);
         setPlan((p) => {
@@ -1459,7 +1438,7 @@ export default function UserMap() {
           destRef.current = targetDest;
           // wait for the image to load before rerouting; hook into onImgLoad
           routeResumeRef.current = () =>
-            startRouteInternal(startPos, targetDest);
+            buildRouteInternal(startPos, targetDest);
           // fallback timer in case onImgLoad never fires
           setTimeout(() => {
             if (routeResumeRef.current) {
@@ -1481,6 +1460,280 @@ export default function UserMap() {
   // RENDER
   // Everything below handles layout, map interactions, and debug UI.
   // ---------------------------------------------------------------------------
+  const renderFloor = floor ? (
+    <div
+      className="position-relative"
+      ref={scrollRef}
+      style={{ overflow: "auto", maxHeight: 600, borderRadius: 10 }}
+    >
+      <div
+        ref={spacerRef}
+        className="position-relative"
+        style={{ width: natSize.w, height: natSize.h }}
+      >
+        <div
+          ref={contentRef}
+          className="position-absolute"
+          style={{
+            left: 0,
+            top: 0,
+            width: natSize.w,
+            height: natSize.h,
+            cursor: placing ? "crosshair" : "default",
+          }}
+          onClick={(e) => {
+            if (!placing) return;
+            const raw = toNorm(e.clientX, e.clientY);
+            const p = snapToWalkable(raw.x, raw.y);
+            setUserPos(p);
+            saveUserPos(selUrl, p);
+            setPlacing(false);
+          }}
+        >
+          <style>{`@keyframes routeDash { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }`}</style>
+          <img
+            ref={imgRef}
+            src={floor.url}
+            alt={floor.name || "floor"}
+            crossOrigin="anonymous"
+            onLoad={onImgLoad}
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "block",
+              userSelect: "none",
+              pointerEvents: "none",
+            }}
+          />
+
+          {userPos &&
+            (() => {
+              const pos = toPx(userPos.x, userPos.y);
+              const size = 22;
+              const angle = displayHeading || 0;
+              return (
+                <div
+                  key="user"
+                  className="position-absolute"
+                  style={{
+                    left: pos.x - size / 2,
+                    top: pos.y - size / 2,
+                    width: size,
+                    height: size,
+                    pointerEvents: "none",
+                    zIndex: 5,
+                  }}
+                  title="You"
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      borderRadius: "50%",
+                      background: "#ff3366",
+                      border: "3px solid #fff",
+                      boxShadow: "0 0 0 4px rgba(255,51,102,0.35)",
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: "50%",
+                      top: "50%",
+                      width: size,
+                      height: size,
+                      transform: `translate(-50%,-50%) rotate(${angle}deg)`,
+                      transformOrigin: "50% 50%",
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: "50%",
+                        top: 2,
+                        width: 0,
+                        height: 0,
+                        borderLeft: "6px solid transparent",
+                        borderRight: "6px solid transparent",
+                        borderBottom: "12px solid #fff",
+                        transform: "translateX(-50%)",
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: "50%",
+                        top: "12px",
+                        width: 2,
+                        height: size / 2.4,
+                        background: "#fff",
+                        borderRadius: 2,
+                        transform: "translateX(-50%)",
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+
+          {(Array.isArray(floor.points) ? floor.points : []).map((p) => {
+            const pos = toPx(p.x, p.y);
+            const size = 8;
+            const isDest = dest && dest.id === p.id;
+            return (
+              <div
+                key={p.id}
+                className={`position-absolute rounded-circle ${markerClass(
+                  p.kind
+                )} ${isDest ? "border border-light" : ""}`}
+                style={{
+                  left: pos.x - size / 2,
+                  top: pos.y - size / 2,
+                  width: size,
+                  height: size,
+                  cursor: "pointer",
+                }}
+                title={
+                  (p.roomNumber ? `#${p.roomNumber} ` : "") +
+                  (p.name || p.poiType || p.kind)
+                }
+                onClick={() => setDest({ url: selUrl, id: p.id })}
+              />
+            );
+          })}
+
+          {waypoints && waypoints.length > 0 && (
+            <div
+              className="position-absolute"
+              style={{
+                left: 0,
+                top: 0,
+                width: natSize.w,
+                height: natSize.h,
+                pointerEvents: "none",
+              }}
+            >
+              {waypoints.map((pt, idx) => {
+                const pos = toPx(pt.x, pt.y);
+                const size = 4;
+                return (
+                  <div
+                    key={`wp-${idx}`}
+                    style={{
+                      position: "absolute",
+                      left: pos.x - size / 2,
+                      top: pos.y - size / 2,
+                      width: size,
+                      height: size,
+                      borderRadius: "50%",
+                      background: "rgba(0,123,255,0.15)",
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
+
+          {routePts && routePts.length > 1 && (
+            <svg
+              className="position-absolute"
+              width={natSize.w}
+              height={natSize.h}
+              style={{ left: 0, top: 0, pointerEvents: "none" }}
+            >
+              <polyline
+                points={routePts
+                  .map((p) => `${p.x * natSize.w},${p.y * natSize.h}`)
+                  .join(" ")}
+                fill="none"
+                stroke="#00D1FF"
+                strokeWidth={3}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray="8 10"
+                style={{ animation: "routeDash 1.5s linear infinite" }}
+              />
+              <polyline
+                points={routePts
+                  .map((p) => `${p.x * natSize.w},${p.y * natSize.h}`)
+                  .join(" ")}
+                fill="none"
+                stroke="rgba(0,209,255,0.35)"
+                strokeWidth={7}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray="12 14"
+                style={{
+                  filter: "blur(1px)",
+                  animation: "routeDash 1.5s linear infinite",
+                }}
+              />
+            </svg>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : (
+    <div className="text-muted">No published floors available yet.</div>
+  );
+
+  const renderControls = (
+    <div className="d-flex align-items-center gap-2 mt-2 flex-wrap">
+      <button
+        className="btn btn-outline-secondary btn-sm"
+        onClick={clearRoute}
+        disabled={!routePts.length}
+      >
+        Clear
+      </button>
+      <button
+        className={`btn btn-${autoWarp ? "info" : "outline-info"} btn-sm`}
+        onClick={() => setAutoWarp((v) => !v)}
+      >
+        Auto warp: {autoWarp ? "On" : "Off"}
+      </button>
+      <button
+        className={`btn btn-${
+          accessibleMode ? "secondary" : "outline-secondary"
+        } btn-sm`}
+        onClick={() => {
+          setAccessibleMode((v) => !v);
+          // Clear current plan so the next route rebuild honors the mode
+          setPlan(null);
+          setRoutePts([]);
+          waypointPtsRef.current = [];
+          waypointIdxRef.current = 0;
+        }}
+      >
+        Accessibility: {accessibleMode ? "Elevator" : "Any"}
+      </button>
+      <button
+        className={`btn btn-${sensorTracking ? "danger" : "success"} btn-sm`}
+        onClick={sensorTracking ? stopSensorTracking : startSensorTracking}
+        disabled={!sensorTracking && !userPos}
+      >
+        {sensorTracking ? "Stop tracking" : "Start tracking"}
+      </button>
+      <div
+        className="d-flex align-items-center small text-muted"
+        style={{ gap: 8 }}
+      >
+        <span>Step</span>
+        <input
+          type="range"
+          min="0.002"
+          max="0.03"
+          step="0.001"
+          value={moveStep}
+          onChange={handleMoveStepChange}
+          style={{ width: 120 }}
+        />
+        <span>{Number.isFinite(moveStep) ? moveStep.toFixed(3) : "0.000"}</span>
+      </div>
+      {searchMsg && <span className="small text-muted">{searchMsg}</span>}
+      {routeMsg && <span className="small text-muted">{routeMsg}</span>}
+    </div>
+  );
   return (
     <div className="card shadow-sm bg-card">
       <div className="card-body">
@@ -1537,280 +1790,8 @@ export default function UserMap() {
           </button>
         </div>
 
-        {floor && (
-          <div
-            className="position-relative"
-            ref={scrollRef}
-            style={{ overflow: "auto", maxHeight: 600, borderRadius: 10 }}
-          >
-            <div
-              ref={spacerRef}
-              className="position-relative"
-              style={{ width: natSize.w, height: natSize.h }}
-            >
-              <div
-                ref={contentRef}
-                className="position-absolute"
-                style={{
-                  left: 0,
-                  top: 0,
-                  width: natSize.w,
-                  height: natSize.h,
-                  cursor: placing ? "crosshair" : "default",
-                }}
-                onClick={(e) => {
-                  if (!placing) return;
-                  const raw = toNorm(e.clientX, e.clientY);
-                  const p = snapToWalkable(raw.x, raw.y);
-                  setUserPos(p);
-                  saveUserPos(selUrl, p);
-                  setPlacing(false);
-                }}
-              >
-                <style>{`@keyframes routeDash { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }`}</style>
-                <img
-                  ref={imgRef}
-                  src={floor.url}
-                  alt={floor.name || "floor"}
-                  crossOrigin="anonymous"
-                  onLoad={onImgLoad}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    display: "block",
-                    userSelect: "none",
-                    pointerEvents: "none",
-                  }}
-                />
-
-                {userPos &&
-                  (() => {
-                    const pos = toPx(userPos.x, userPos.y);
-                    const size = 22;
-                    const angle = displayHeading || 0;
-                    return (
-                      <div
-                        key="user"
-                        className="position-absolute"
-                        style={{
-                          left: pos.x - size / 2,
-                          top: pos.y - size / 2,
-                          width: size,
-                          height: size,
-                          pointerEvents: "none",
-                          zIndex: 5,
-                        }}
-                        title="You"
-                      >
-                        <div
-                          style={{
-                            position: "absolute",
-                            inset: 0,
-                            borderRadius: "50%",
-                            background: "#ff3366",
-                            border: "3px solid #fff",
-                            boxShadow: "0 0 0 4px rgba(255,51,102,0.35)",
-                          }}
-                        />
-                        <div
-                          style={{
-                            position: "absolute",
-                            left: "50%",
-                            top: "50%",
-                            width: size,
-                            height: size,
-                            transform: `translate(-50%,-50%) rotate(${angle}deg)`,
-                            transformOrigin: "50% 50%",
-                          }}
-                        >
-                          <div
-                            style={{
-                              position: "absolute",
-                              left: "50%",
-                              top: 2,
-                              width: 0,
-                              height: 0,
-                              borderLeft: "6px solid transparent",
-                              borderRight: "6px solid transparent",
-                              borderBottom: "12px solid #fff",
-                              transform: "translateX(-50%)",
-                            }}
-                          />
-                          <div
-                            style={{
-                              position: "absolute",
-                              left: "50%",
-                              top: "12px",
-                              width: 2,
-                              height: size / 2.4,
-                              background: "#fff",
-                              borderRadius: 2,
-                              transform: "translateX(-50%)",
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                {(Array.isArray(floor.points) ? floor.points : []).map((p) => {
-                  const pos = toPx(p.x, p.y);
-                  const size = 8;
-                  const isDest = dest && dest.id === p.id;
-                  return (
-                    <div
-                      key={p.id}
-                      className={`position-absolute rounded-circle ${markerClass(
-                        p.kind
-                      )} ${isDest ? "border border-light" : ""}`}
-                      style={{
-                        left: pos.x - size / 2,
-                        top: pos.y - size / 2,
-                        width: size,
-                        height: size,
-                        cursor: "pointer",
-                      }}
-                      title={
-                        (p.roomNumber ? `#${p.roomNumber} ` : "") +
-                        (p.name || p.poiType || p.kind)
-                      }
-                      onClick={() => setDest({ url: selUrl, id: p.id })}
-                    />
-                  );
-                })}
-
-                {waypoints && waypoints.length > 0 && (
-                  <div
-                    className="position-absolute"
-                    style={{
-                      left: 0,
-                      top: 0,
-                      width: natSize.w,
-                      height: natSize.h,
-                      pointerEvents: "none",
-                    }}
-                  >
-                    {waypoints.map((pt, idx) => {
-                      const pos = toPx(pt.x, pt.y);
-                      const size = 4;
-                      return (
-                        <div
-                          key={`wp-${idx}`}
-                          style={{
-                            position: "absolute",
-                            left: pos.x - size / 2,
-                            top: pos.y - size / 2,
-                            width: size,
-                            height: size,
-                            borderRadius: "50%",
-                            background: "rgba(0,123,255,0.15)",
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-
-                {routePts && routePts.length > 1 && (
-                  <svg
-                    className="position-absolute"
-                    width={natSize.w}
-                    height={natSize.h}
-                    style={{ left: 0, top: 0, pointerEvents: "none" }}
-                  >
-                    <polyline
-                      points={routePts
-                        .map((p) => `${p.x * natSize.w},${p.y * natSize.h}`)
-                        .join(" ")}
-                      fill="none"
-                      stroke="#00D1FF"
-                      strokeWidth={3}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeDasharray="8 10"
-                      style={{ animation: "routeDash 1.5s linear infinite" }}
-                    />
-                    <polyline
-                      points={routePts
-                        .map((p) => `${p.x * natSize.w},${p.y * natSize.h}`)
-                        .join(" ")}
-                      fill="none"
-                      stroke="rgba(0,209,255,0.35)"
-                      strokeWidth={7}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeDasharray="12 14"
-                      style={{
-                        filter: "blur(1px)",
-                        animation: "routeDash 1.5s linear infinite",
-                      }}
-                    />
-                  </svg>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-        {!floor && (
-          <div className="text-muted">No published floors available yet.</div>
-        )}
-        <div className="d-flex align-items-center gap-2 mt-2 flex-wrap">
-          <button
-            className="btn btn-outline-secondary btn-sm"
-            onClick={clearRoute}
-            disabled={!routePts.length}
-          >
-            Clear
-          </button>
-          <button
-            className={`btn btn-${autoWarp ? "info" : "outline-info"} btn-sm`}
-            onClick={() => setAutoWarp((v) => !v)}
-          >
-            Auto warp: {autoWarp ? "On" : "Off"}
-          </button>
-          <button
-            className={`btn btn-${
-              accessibleMode ? "secondary" : "outline-secondary"
-            } btn-sm`}
-            onClick={() => {
-              setAccessibleMode((v) => !v);
-              // Clear current plan so the next route rebuild honors the mode
-              setPlan(null);
-              setRoutePts([]);
-              waypointPtsRef.current = [];
-              waypointIdxRef.current = 0;
-            }}
-          >
-            Accessibility: {accessibleMode ? "Elevator" : "Any"}
-          </button>
-          <button
-            className={`btn btn-${
-              sensorTracking ? "danger" : "success"
-            } btn-sm`}
-            onClick={sensorTracking ? stopSensorTracking : startSensorTracking}
-            disabled={!sensorTracking && !userPos}
-          >
-            {sensorTracking ? "Stop tracking" : "Start tracking"}
-          </button>
-          <div
-            className="d-flex align-items-center small text-muted"
-            style={{ gap: 8 }}
-          >
-            <span>Step</span>
-            <input
-              type="range"
-              min="0.002"
-              max="0.03"
-              step="0.001"
-              value={moveStep}
-              onChange={(e) => setMoveStep(parseFloat(e.target.value) || 0.01)}
-              style={{ width: 120 }}
-            />
-            <span>{moveStep.toFixed(3)}</span>
-          </div>
-          {searchMsg && <span className="small text-muted">{searchMsg}</span>}
-          {routeMsg && <span className="small text-muted">{routeMsg}</span>}
-        </div>
+        {renderFloor}
+        {renderControls}
         {sensorMsg && <div className="small text-muted mt-2">{sensorMsg}</div>}
         <DebuggerPanel
           visible={debugVisible}
