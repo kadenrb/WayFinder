@@ -1436,8 +1436,12 @@ export default function UserMap() {
     if (!shareStartRef.current) return;
     const targetDest = dest || destRef.current;
     if (!userPos || !targetDest) return;
-    shareStartRef.current = false;
-    startRoute();
+    const maybeFinish = () => {
+      if (!pendingRouteRef.current) {
+        shareStartRef.current = false;
+      }
+    };
+    startRoute().finally(maybeFinish);
   }, [userPos, dest, selUrl]);
 
   const clearRoute = () => {
@@ -1513,6 +1517,14 @@ export default function UserMap() {
       }
     }
   }, [autoWarp, userPos, plan, floors, selUrl, warpProximity]);
+
+  // If a shared route switched floors, retry starting once we're on that floor
+  useEffect(() => {
+    if (!shareStartRef.current) return;
+    if (!pendingRouteRef.current) return;
+    if (pendingRouteRef.current.startUrl !== selUrl) return;
+    startRoute();
+  }, [selUrl]);
 
   // Recompute route when floor switches within an active plan
   // Recompute route when floor switches within an active plan (but not on userPos changes)
