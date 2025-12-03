@@ -426,6 +426,10 @@ export default function UserMap() {
     const w = e.target.naturalWidth;
     const h = e.target.naturalHeight;
     setNatSize({ w, h });
+    if (shareStartRef.current) {
+      // Kick routing after image is ready when loading from a shared link
+      startRoute();
+    }
     // Cache this image size for reuse to avoid waiting on naturalWidth after a warp
     if (selUrl) {
       imageCacheRef.current.set(selUrl, { img: e.target, w, h });
@@ -1525,6 +1529,31 @@ export default function UserMap() {
     if (pendingRouteRef.current.startUrl !== selUrl) return;
     startRoute();
   }, [selUrl]);
+
+  // Retry auto-start once core routing prerequisites are ready; keep retrying until success
+  useEffect(() => {
+    const retryTimerRef = { current: null };
+    const tryStart = () => {
+      if (!shareStartRef.current) return;
+      if (!userPos) return;
+      const targetDest = dest || destRef.current;
+      if (!targetDest) return;
+      startRoute().finally(() => {
+        const activePlan = planRef.current;
+        const hasRoute =
+          activePlan && Array.isArray(activePlan.steps) && activePlan.steps.length;
+        if (!hasRoute && shareStartRef.current) {
+          retryTimerRef.current = setTimeout(tryStart, 600);
+        } else {
+          shareStartRef.current = false;
+        }
+      });
+    };
+    tryStart();
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+  }, [userPos, dest, natSize]);
 
   // Recompute route when floor switches within an active plan
   // Recompute route when floor switches within an active plan (but not on userPos changes)
