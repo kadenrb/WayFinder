@@ -2232,77 +2232,49 @@ export default function UserMap() {
   //       fails because of small holes in the mask. (Used later in this
   //       function when we adjust BFS gap behaviour.)
   // ---------------------------------------------------------------------------
-  const computeRouteForStep = async (
+    const computeRouteForStep = async (
     step,
     startPosOverride = null,
     planArg = null,
     fallbackUsed = false,
     gapOverride = null
   ) => {
-    const curFloor = floors.find(f => f.url === selUrl);
-    if (!curFloor) return;
-
-    const img = imgRef.current;
-    if (!img || !img.naturalWidth) {
-      setSensorMsg("Image not ready for routing.");
-      return;
-    }
-
-    // Walkable colour configuration:
-    //   - baseColors: the main mask colour for this floor.
-    //   - extraColors: optional additional mask colours (e.g. multi-colour
-    //     corridors) normalised via normHex → hexToRgb.
+    const curFloor = floors.find(f=>f.url===selUrl); if (!curFloor) return;
+    const img = imgRef.current; if (!img || !img.naturalWidth) { setSensorMsg("Image not ready for routing."); return; }
     const baseColors = [hexToRgb(curFloor.walkable?.color || "#9F9383")];
     const extraColors = Array.isArray(curFloor.walkable?.extraColors)
       ? curFloor.walkable.extraColors.map((c) => hexToRgb(normHex(c)))
       : [];
     const tol = curFloor.walkable?.tolerance;
 
-    // Helper that actually invokes buildGrid with or without the extra colours.
     const buildGridTry = async (useExtra) => {
       const cols = useExtra ? baseColors.concat(extraColors) : baseColors;
       return buildGrid(img, cols, tol, 4);
     };
 
-    // Wraps grid build + “figure out our starting grid cell”.
-    // Returns both the grid object and the snapped start cell (sCell).
     const tryBuild = async (useExtra) => {
       const obj = await buildGridTry(useExtra);
       const { grid, gw, gh, step: stp, w, h } = obj;
-
       const startPos = startPosOverride || userPos;
       if (!startPos) return { obj, sCell: null, w, h, stp, gw, gh };
-
       const ux = Math.max(0, Math.min(gw - 1, Math.round((startPos.x * w) / stp)));
       const uy = Math.max(0, Math.min(gh - 1, Math.round((startPos.y * h) / stp)));
       const sCell = nearestWalkable(grid, gw, gh, ux, uy);
-
       return { obj, sCell, w, h, stp, gw, gh };
     };
 
-    // First attempt: only the base walkable colour.
     let attempt = await tryBuild(false);
-
-    // If we couldn't find a walkable start cell *and* we have extra colours,
-    // retry including the extra colours in the grid building.
     if (!attempt.sCell && extraColors.length) {
       attempt = await tryBuild(true);
     }
-
-    // Still no valid start cell? We give up on this route.
     if (!attempt.sCell) {
       setRoutePts([]);
       return;
     }
 
     const { obj: gridObj, sCell, w, h, stp, gw, gh } = attempt;
-
     let target = null;
-
     if (step.kind === "dest") {
-      // Destination step:
-      //   Find the floor that actually owns the destination point (dest.id),
-      //   and only accept it if that floor matches the currently selected URL.
       const destFloor = floors.find((f) =>
         f.points?.some((p) => p.id === dest?.id)
       );
@@ -2310,48 +2282,22 @@ export default function UserMap() {
         destFloor && destFloor.url === selUrl
           ? destFloor.points.find((p) => p.id === dest.id)
           : null;
-
       if (!dp) {
         setRoutePts([]);
         return;
       }
-
       target = { x: dp.x, y: dp.y };
     } else {
-      // ---------------------------------------------------------------------
-      // WARP STEP: PICK NEAREST VALID STAIRS/ELEVATOR
-      //
-      // When step.kind === "warp", we’re not trying to hit the final room
-      // yet. We’re trying to move the user to the correct stairs/elevator
-      // that will connect this floor to the *next* floor in the plan.
-      //
-      // Strategy:
-      //   1) Look at the next plan step (plan.steps[index + 1]) to grab its
-      //      URL. That’s our “other side” floor.
-      //   2) Compute the shared warp keys between this floor and that floor.
-      //   3) Filter current floor points down to just those POIs that:
-      //         - are stairs or elevator
-      //         - have a warpKey
-      //         - that warpKey is one of the shared ones from step 2
-      //   4) If accessibleMode is on, prefer elevators. If there are any
-      //      elevators in the candidates list, we only consider those.
-      //   5) Later (in the remaining part of this function), we’ll pick the
-      //      nearest candidate to the user and route toward it.
-      // ---------------------------------------------------------------------
-      // step.kind==='warp': pick nearest shared warp to user among keys shared with next floor
       const nextUrl =
         plan && plan.steps[plan.index + 1]
           ? plan.steps[plan.index + 1].url
           : null;
-
       const shared = sharedWarpKeys(
         curFloor,
         floors.find((f) => f.url === nextUrl) || {}
       );
-
       let best = null,
         bestD = Infinity;
-
       const candidates = (curFloor.points || []).filter(
         (p) =>
           p?.kind === "poi" &&
@@ -2359,34 +2305,118 @@ export default function UserMap() {
           p.warpKey &&
           shared.includes(normalizeKey(p.warpKey))
       );
-
       if (!candidates.length) {
         setRouteMsg("No shared warp keys between these floors.");
         setSensorMsg("No shared warp keys between these floors.");
         setRoutePts([]);
         return;
       }
-
       const elevators = accessibleMode
         ? candidates.filter((p) => p.poiType === "elevator")
         : [];
       const pool = elevators.length ? elevators : candidates;
-
       if (!pool.length) {
         setRouteMsg("No usable warps on this floor.");
         setSensorMsg("No usable warps on this floor.");
         setRoutePts([]);
         return;
       }
+      const nextUrl2 =
+        planArg && planArg.steps ? planArg.steps[planArg.index + 1]?.url : null;
+      const nextFloor = nextUrl2
+        ? floors.find((f) => f.url === nextUrl2)
+        : null;
+      const destId = dest?.id || destRef.current?.id;
+      const destPoint =
+        destId && nextFloor
+          ? (nextFloor.points || []).find((p) => p.id === destId)
+          : null;
 
-      // (The remaining logic in this function — picking the nearest candidate,
-      // running BFS, handling gapOverride/fallbackUsed, building final route
-      // points — continues after this snippet. We’re leaving the code itself
-      // untouched and just documenting what’s here.)
+      let bestKey = null;
+      let bestDestDist = Infinity;
+      if (destPoint && nextFloor) {
+        for (const p of pool) {
+          const matches = (nextFloor.points || []).filter(
+            (np) =>
+              np?.kind === "poi" &&
+              (np.poiType === "stairs" || np.poiType === "elevator") &&
+              np.warpKey &&
+              normalizeKey(np.warpKey) === normalizeKey(p.warpKey)
+          );
+          if (!matches.length) continue;
+          const dist = Math.min(
+            ...matches.map((m) =>
+              Math.hypot(m.x - destPoint.x, m.y - destPoint.y)
+            )
+          );
+          if (dist < bestDestDist) {
+            bestDestDist = dist;
+            bestKey = normalizeKey(p.warpKey);
+          }
+        }
+      }
+
+      for (const p of pool) {
+        const keyNorm = normalizeKey(p.warpKey);
+        if (bestKey && keyNorm !== bestKey) continue;
+        const distUser = Math.hypot(p.x - userPos.x, p.y - userPos.y);
+        if (distUser < bestD) {
+          bestD = distUser;
+          best = p;
+        }
+      }
+      if (!best) {
+        setRoutePts([]);
+        return;
+      }
+      target = { x: best.x, y: best.y };
+      step.key = normalizeKey(best.warpKey);
+      step.target = target;
     }
-
-    // ---------------------------------------------------------------------------
-  // WARP TARGET SELECTION + GRID ROUTE BUILD
+    const tx=Math.max(0,Math.min(gw-1,Math.round((target.x*w)/stp))); const ty=Math.max(0,Math.min(gh-1,Math.round((target.y*h)/stp)));
+    const tCell = nearestWalkable(gridObj.grid, gw, gh, tx, ty);
+    if (!tCell) {
+      setRoutePts([]);
+      return;
+    }
+    const gapVal = Math.max(0, Math.floor(gapOverride ?? gapCells ?? 0));
+    const path = bfs(gridObj.grid,gw,gh,sCell,tCell, gapVal);
+    if (!path || path.length<2) {
+      if (!fallbackUsed && gapVal === 0) {
+        await computeRouteForStep(step, startPosOverride, planArg, true, 1);
+      } else {
+        setRoutePts([]);
+      }
+      return;
+    }
+    const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
+    const simpTol = 0.003 + gapVal * 0.003; // higher gap -> allow more smoothing
+    const simplified = simplifyRoute(out, simpTol);
+    routePtsRef.current = simplified;
+    if (waypointIdxRef.current === 0) {
+      let wp = buildWaypoints(simplified);
+      const startPt = wp[0];
+      const endPt = wp[wp.length - 1];
+      const userPt = userPos || startPt;
+      const dStart = Math.hypot(
+        (startPt?.x || 0) - (userPt?.x || 0),
+        (startPt?.y || 0) - (userPt?.y || 0)
+      );
+      const dEnd = Math.hypot(
+        (endPt?.x || 0) - (userPt?.x || 0),
+        (endPt?.y || 0) - (userPt?.y || 0)
+      );
+      if (dEnd < dStart) wp = [...wp].reverse();
+      waypointIdxRef.current = 0; // start at beginning of path (user side)
+      waypointPtsRef.current = wp;
+      setWaypoints(wp);
+      setSensorMsg(
+        `Route ready: ${out.length} points, waypoints: ${wp.length}`
+      );
+    }
+    setRoutePts(simplified);
+  };
+// WARP TARGET SELECTION + GRID ROUTE BUILD
   //
   // We’re in the middle of `computeRouteForStep` here, specifically the
   // “warp step” branch where we already:
@@ -2593,7 +2623,7 @@ if (waypointIdxRef.current === 0) {
 }
 
 setRoutePts(simplified);
-  };
+
 
 // ---------------------------------------------------------------------------
 // HIGH-LEVEL ROUTE STARTER + PREFETCH + START/CLEAR
@@ -3325,6 +3355,45 @@ return (
             - Accessibility mode: bias towards elevators when choosing warps.
               (Button continues below this snippet.)
         */}
+      {/* ROUTE / SENSOR CONTROLS + DEBUG PANEL
+          This bottom cluster is the “control strip” for everything around the
+          route and sensors:
+
+          - Clear button:
+              Wipes the current route, waypoints, and plan so you can start fresh.
+
+          - Auto warp toggle:
+              Lets you turn automatic stair/elevator warping on or off. When ON,
+              getting close enough to a matching warp key auto-jumps you to the
+              paired floor and resumes the route there.
+
+          - Accessibility mode toggle:
+              Flips between:
+                * Any   → stairs OR elevators are fair game for cross-floor warps.
+                * Elevator → prefer elevator warps for accessibility.
+              When this is toggled we also clear the current plan/route so the
+              next route rebuild respects the new mode.
+
+          - Sensor tracking toggle:
+              Starts or stops the motion/orientation tracking pipeline. We disable
+              the “Start tracking” option until a user position exists, because
+              there’s no point in tracking movement if the marker isn’t placed yet.
+
+          - Step slider:
+              Desktop-only helper that tweaks how big each Arrow-key nudge is
+              in normalised map space. Handy when testing long routes with a
+              keyboard.
+
+          - searchMsg / routeMsg:
+              Small inline text feedback for search successes/failures and
+              routing issues.
+
+          - sensorMsg + DebuggerPanel:
+              High-level “what the sensor loop is doing” string and a fully
+              nerdy debug dashboard (raw heading, accel magnitude, calibration
+              status, recording state, etc.) that only shows when debugVisible
+              is true.
+      */}
       <div className="d-flex align-items-center gap-2 mt-2 flex-wrap">
         <button
           className="btn btn-outline-secondary btn-sm"
@@ -3333,103 +3402,69 @@ return (
         >
           Clear
         </button>
+
         <button
           className={`btn btn-${autoWarp ? "info" : "outline-info"} btn-sm`}
           onClick={() => setAutoWarp((v) => !v)}
         >
           Auto warp: {autoWarp ? "On" : "Off"}
         </button>
+
         <button
           className={`btn btn-${accessibleMode ? "secondary" : "outline-secondary"
             } btn-sm`}
           onClick={() => {
+            // Flip the accessibility preference…
             setAccessibleMode((v) => !v);
+            // …and blow away the current plan so the *next* route rebuild
+            // re-evaluates warp choices under the new mode.
+            setPlan(null);
+            setRoutePts([]);
+            waypointPtsRef.current = [];
+            waypointIdxRef.current = 0;
+          }}
+        >
+          Accessibility: {accessibleMode ? "Elevator" : "Any"}
+        </button>
 
-            {/* ACCESSIBILITY + SENSOR CONTROLS + STEP TUNING
-              - Accessibility button:
-                  * Toggles between “Any” warp (stairs or elevator) and
-                    “Elevator-only” routing hints.
-                  * When toggled, we clear the current plan/route/waypoints so
-                    the *next* route rebuild re-evaluates warp choices under
-                    the new mode.
-              - Sensor tracking button:
-                  * Start tracking:
-                      - Requests motion/orientation permissions.
-                      - Hooks up devicemotion listeners and step detection.
-                  * Stop tracking:
-                      - Tears down watchers and resets calibration so the next
-                        session starts clean.
-                  * Disabled if we don’t have a userPos yet (no point in
-                    sensor movement with no starting marker).
-              - Step slider:
-                  * Adjusts `moveStep` = how far the marker jumps per Arrow
-                    key press in desktop testing.
-                  * This only affects keyboard movement, not sensor-based
-                    stepping.
-              - searchMsg / routeMsg:
-                  * Quick text feedback for search and routing.
-            */}
-            <><button
-              className={`btn btn-${accessibleMode ? "secondary" : "outline-secondary"} btn-sm`}
-              onClick={() => {
-                // Clear current plan so the next route rebuild honors the mode
-                setAccessibleMode((v) => !v);
-                setPlan(null);
-                setRoutePts([]);
-                waypointPtsRef.current = [];
-                waypointIdxRef.current = 0;
-              }}
-            >
-              Accessibility: {accessibleMode ? "Elevator" : "Any"}
-            </button><button
-              className={`btn btn-${sensorTracking ? "danger" : "success"} btn-sm`}
-              onClick={sensorTracking ? stopSensorTracking : startSensorTracking}
-              disabled={!sensorTracking && !userPos}
-            >
-                {sensorTracking ? "Stop tracking" : "Start tracking"}
-              </button><div
-                className="d-flex align-items-center small text-muted"
-                style={{ gap: 8 }}
-              >
-                <span>Step</span>
-                <input
-                  type="range"
-                  min="0.002"
-                  max="0.03"
-                  step="0.001"
-                  value={moveStep}
-                  onChange={(e) => setMoveStep(parseFloat(e.target.value) || 0.01)}
-                  style={{ width: 120 }} />
-                <span>{moveStep.toFixed(3)}</span>
-              </div></>
+        <button
+          className={`btn btn-${sensorTracking ? "danger" : "success"} btn-sm`}
+          onClick={sensorTracking ? stopSensorTracking : startSensorTracking}
+          disabled={!sensorTracking && !userPos}
+        >
+          {sensorTracking ? "Stop tracking" : "Start tracking"}
+        </button>
 
-            { searchMsg && <span className="small text-muted">{searchMsg}</span> }
-            { routeMsg && <span className="small text-muted">{routeMsg}</span> }
+        <div
+          className="d-flex align-items-center small text-muted"
+          style={{ gap: 8 }}
+        >
+          <span>Step</span>
+          <input
+            type="range"
+            min="0.002"
+            max="0.03"
+            step="0.001"
+            value={moveStep}
+            onChange={(e) =>
+              setMoveStep(parseFloat(e.target.value) || 0.01)
+            }
+            style={{ width: 120 }}
+          />
+          <span>{moveStep.toFixed(3)}</span>
         </div>
 
-      {/* SENSOR STATUS + DEBUG PANEL
-            - sensorMsg:
-                * High-level human-readable status string about what the
-                  sensor pipeline is doing right now:
-                    - “Calibrating sensors…”
-                    - “Tracking paused.”
-                    - Error messages when permissions fail, etc.
-            - DebuggerPanel:
-                * Developer-only dashboard with raw heading/gyro/accel data.
-                * Uses the `debugVisible` flag (toggled elsewhere) to show/hide.
-                * Shows:
-                    - raw heading vs displayHeading
-                    - compassHeading and yaw
-                    - accelMagnitude + baseline sample count
-                    - whether baseline calibration is ready
-                    - the current sensorMsg
-                    - current headingOffset
-                    - whether we’re recording sensor samples to JSON and the
-                      last recordMsg.
-              This makes it much easier to sanity-check sensor behaviour on
-              real hardware without drowning the UI in raw numbers.
-        */}
-      {sensorMsg && <div className="small text-muted mt-2">{sensorMsg}</div>}
+        {searchMsg && (
+          <span className="small text-muted">{searchMsg}</span>
+        )}
+        {routeMsg && (
+          <span className="small text-muted">{routeMsg}</span>
+        )}
+      </div>
+
+      {sensorMsg && (
+        <div className="small text-muted mt-2">{sensorMsg}</div>
+      )}
 
       <DebuggerPanel
         visible={debugVisible}
@@ -3445,6 +3480,7 @@ return (
         recording={recording}
         recordMsg={recordMsg}
       />
+
     </div>
   </div>
 );
