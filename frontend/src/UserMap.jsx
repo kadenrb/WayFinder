@@ -18,6 +18,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StepDetector } from "./stepDetector";
 import DebuggerPanel from "./DebuggerPanel";
+import ShareRouteQRCode from "./ShareRouteQRCode";
 
 // ---------------------------------------------------------------------------
 // STATE AND REFS
@@ -87,6 +88,7 @@ export default function UserMap() {
   const [recording, setRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(10);
   const [recordMsg, setRecordMsg] = useState("");
+  const shareStartRef = useRef(false);
   const [debugData, setDebugData] = useState({
     heading: 0,
     compassHeading: 0,
@@ -104,6 +106,27 @@ export default function UserMap() {
   useEffect(() => {
     patchDebug({ sensorMsg });
   }, [sensorMsg]);
+
+  // ---------------------------------------------------------------------------
+  // SHARE URL ENCODING/DECODING (for QR handoff)
+  // ---------------------------------------------------------------------------
+  const encodeShareState = (payload) => {
+    try {
+      const json = JSON.stringify(payload);
+      const b64 = btoa(encodeURIComponent(json));
+      return b64;
+    } catch {
+      return null;
+    }
+  };
+  const decodeShareState = (token) => {
+    try {
+      const json = decodeURIComponent(atob(token));
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  };
   const getScreenOrientationAngle = () => {
     if (typeof window === "undefined") return 0;
     const orientation = window.screen && window.screen.orientation;
@@ -437,6 +460,31 @@ export default function UserMap() {
       localStorage.setItem(`wf_user_pos:${url || ""}`, JSON.stringify(p));
     } catch {}
   };
+
+  // Apply shared route state from ?share= (base64-encoded JSON) on initial load
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("share");
+    if (!token) return;
+    const data = decodeShareState(token);
+    if (!data) return;
+    if (typeof data.accessibleMode === "boolean") {
+      setAccessibleMode(data.accessibleMode);
+    }
+    if (data.startUrl) {
+      setSelUrl(data.startUrl);
+    }
+    if (data.startPos) {
+      setUserPos(data.startPos);
+      saveUserPos(data.startUrl || selUrl, data.startPos);
+    }
+    if (data.destId) {
+      destRef.current = { id: data.destId };
+      setDest({ url: data.startUrl || selUrl, id: data.destId });
+    }
+    shareStartRef.current = true;
+  }, []);
 
   // Snap a normalized position to nearest walkable cell center (using cached grid)
   const snapToWalkable = (nx, ny) => {
@@ -1289,6 +1337,28 @@ export default function UserMap() {
     setRoutePts(simplified);
   };
 
+  const sharePayload = useMemo(() => {
+    if (!selUrl || !userPos || !dest?.id) return null;
+    return {
+      startUrl: selUrl,
+      startPos: userPos,
+      destId: dest.id,
+      accessibleMode,
+    };
+  }, [selUrl, userPos, dest, accessibleMode]);
+
+  const shareUrl = useMemo(() => {
+    if (!sharePayload) return "";
+    const token = encodeShareState(sharePayload);
+    if (!token) return "";
+    if (typeof window === "undefined") return "";
+    const base =
+      (window.location && window.location.origin) ||
+      `${window.location.protocol}//${window.location.host}`;
+    const path = window.location ? window.location.pathname : "";
+    return `${base}${path}?share=${token}`;
+  }, [sharePayload]);
+
   const startRouteInternal = async (startPos, targetDest) => {
     const floor = floors.find((f) => f.url === selUrl);
     if (!floor || !startPos || !targetDest) return;
@@ -1360,6 +1430,15 @@ export default function UserMap() {
 
     await startRouteInternal(startPos, targetDest);
   };
+
+  // Kick off routing automatically after applying a shared link
+  useEffect(() => {
+    if (!shareStartRef.current) return;
+    const targetDest = dest || destRef.current;
+    if (!userPos || !targetDest) return;
+    shareStartRef.current = false;
+    startRoute();
+  }, [userPos, dest, selUrl]);
 
   const clearRoute = () => {
     setRoutePts([]);
@@ -1811,6 +1890,7 @@ export default function UserMap() {
           {searchMsg && <span className="small text-muted">{searchMsg}</span>}
           {routeMsg && <span className="small text-muted">{routeMsg}</span>}
         </div>
+        <ShareRouteQRCode shareUrl={shareUrl} hasRoute={!!(userPos && dest)} />
         {sensorMsg && <div className="small text-muted mt-2">{sensorMsg}</div>}
         <DebuggerPanel
           visible={debugVisible}
