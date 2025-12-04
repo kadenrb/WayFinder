@@ -1,4 +1,26 @@
-/* Drag & Drop map box */
+/*
+  WayFinder UI skin – global look & feel for the editor + landing:
+  - :root brand tokens: future-facing color variables if we ever decide
+    to stop hard-coding hex everywhere.
+  - Drag-and-drop box: makes the map uploader feel like a proper widget
+    instead of a naked input.
+  - POI card text scaling: stops the labels from becoming unreadable on
+    smaller screens (tablet/laptop) without going full “mobile redesign”.
+  - Button and brand overrides: forces Bootstrap to match the orange/blue
+    WayFinder palette instead of default primary blue.
+  - Map editor / body backgrounds: gradient “app shell” behind the cards.
+  - Marker pulse: draws the user’s eye to the current marker once, then
+    calms down instead of strobing constantly.
+  - Misc tweaks: range slider thumb color, subtle text-shadow, etc., to
+    make the whole thing feel like one intentional design, not Franken-Bootstrap.
+*/
+
+
+/* Drag & Drop map box – visuals for the map uploader component:
+   - Neutral dashed box by default.
+   - Slightly brighter on hover/focus.
+   - Blue-tinted highlight when a file is dragged over the area.
+   - When an image is present we hide the helper text and show the preview. */
 .map-dropzone {
   border: 2px dashed #a09e9e;
   border-radius: 14px;
@@ -68,7 +90,12 @@
   margin-top: 10px;
 }
 
-/* attempt to make the POI Card responsive font sizes, works ish but they just need to use laptop */
+/*
+  POI card sizing – tries to keep the form usable on various laptop sizes:
+  - clamp(...) keeps text from becoming microscopic on small screens, but
+    also stops it from ballooning if someone opens this on a TV.
+  - Select width is “shrink to content” but capped so it never overflows.
+*/
 .poi-card .form-label {
   font-size: clamp(0.7rem, 2vw, 1rem);
 }
@@ -76,13 +103,19 @@
 .poi-card {
   font-size: clamp(0.75rem, 2vw, 1rem);
 }
+
 .poi-card select.form-select {
   font-size: clamp(0.7rem, 2vw, 1rem);
-  width: auto; /* shrink to fit content */
-  max-width: 100%; /* never overflow parent */
+  width: auto;
+  /* shrink to fit content */
+  max-width: 100%;
+  /* never overflow parent */
   display: inline-block;
 }
 
+/* Generic map button + status helpers:
+   - Disabled: visually muted and no “clickable” cursor.
+   - Status line: small, quiet text for showing messages under buttons. */
 .map-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -93,6 +126,12 @@
   font-size: 0.95rem;
 }
 
+/*
+  Card and content theming – gives everything that “WayFinder card” look:
+  - bg-card: darker textured background for the card shell.
+  - bg-card-inner: lighter inner fill so form controls stand out.
+  - text-card: light, slightly blue-tinted text over dark card backgrounds.
+*/
 .bg-card {
   background-color: #3d4549;
   background-image: repeating-linear-gradient(
@@ -100,15 +139,12 @@
       rgba(255, 255, 255, 0.02),
       rgba(255, 255, 255, 0.02) 1px,
       transparent 1px,
-      transparent 4px
-    ),
-    repeating-linear-gradient(
-      -45deg,
+      transparent 4px),
+    repeating-linear-gradient(-45deg,
       rgba(255, 255, 255, 0.02),
       rgba(255, 255, 255, 0.02) 1px,
       transparent 1px,
-      transparent 4px
-    );
+      transparent 4px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
@@ -151,14 +187,19 @@
 }
 
 .bg-card-inner {
-  background-color: #ebf4f6; /* lighter blue-gray for card inner bg*/
+  background-color: #ebf4f6;
+  /* lighter blue-gray for card inner bg*/
 }
 
 .text-card {
-  color: #e5f2f3; /* white faint blue text for cards */
+  color: #e5f2f3;
+  /* white faint blue text for cards */
 }
 
-/* Custom Bootstrap Primary Button, needs to be flagged as important */
+/*
+  Primary / outline button overrides – forces Bootstrap to line up with the
+  orange “brand” color, including hover, focus ring, and active states.
+*/
 .btn-primary {
   background-color: #c76c2f !important;
   border-color: #aa5c28 !important;
@@ -190,6 +231,7 @@
   color: #fff !important;
 }
 
+/* Utility border colors used for quick visual grouping in admin tools. */
 .border-orange {
   border-color: #a26218a0 !important;
 }
@@ -206,9 +248,14 @@
   border-bottom: 3px solid #439bd98e !important;
 }
 
+/*
+  Header + content backgrounds:
+  - bg-head: top header bar gradient (behind logo + nav).
+  - bg-content: main content card background for modals / sections.
+  - background-clip is set so rounded corners affect the gradient properly.
+*/
 .bg-head {
   background: linear-gradient(120deg, #1a4a5a 0%, #37525f 30%, #453e33 90%);
-  /*Allows rounded corners to apply to background*/
   -webkit-background-clip: padding-box;
   background-clip: padding-box;
 }
@@ -237,7 +284,12 @@
   font-size: 0.7rem;
   opacity: 0.75;
 }
-/* CSS responsiveness for mobile */
+/*
+  Map editor layout + mobile tweaks:
+  - On narrow screens we reduce side padding so the editor isn’t crammed.
+  - container is set to full width and hides horizontal overflow so users
+    don’t get surprise scrollbars from wide content.
+*/
 @media (max-width: 768px) {
   .map-editor-container {
     max-width: 100%;
@@ -256,90 +308,115 @@
   overflow-x: hidden;
 }
 
+/*
+  Global body background:
+  - Fixed gradient “wallpaper” behind everything.
+  - Meant to give the app a “desktop app” vibe instead of plain white. */
 body {
-  background: linear-gradient(
-    100deg,
-    rgb(28, 49, 59) 0%,
-    rgb(47, 56, 63) 50%,
-    rgb(73, 63, 50) 100%
-  );
-
+  background: linear-gradient(100deg,
+      rgb(28, 49, 59) 0%,
+      rgb(47, 56, 63) 50%,
+      rgb(73, 63, 50) 100%);
   background-attachment: fixed;
 }
 
 .bg-content {
   overflow: hidden;
-  background: linear-gradient(
-    120deg,
-    rgba(25, 70, 90, 1) 0%,
-    rgba(45, 65, 75, 1) 49%,
-    rgba(90, 75, 60, 1) 100%
-  );
-
-  /*Allows rounded corners to apply to background*/
+  background: linear-gradient(120deg,
+      rgba(25, 70, 90, 1) 0%,
+      rgba(45, 65, 75, 1) 49%,
+      rgba(90, 75, 60, 1) 100%);
   -webkit-background-clip: padding-box;
   background-clip: padding-box;
 }
 
+/*
+  Toast + title styling:
+  - text-bg-primary: aligns toast background with our custom primary.
+  - title / btn shadows: subtle text-shadow to keep text readable on
+    busy gradients without looking like a meme generator.
+*/
 .text-bg-primary {
   background-color: #c76c2f !important;
 }
+
 .text-bg-primary:hover {
   background-color: #aa5c28 !important;
 }
+
 .title,
 .btn {
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
 }
 
-/* MapEditor marker pulse */
+/*
+  Marker pulse animation:
+  - marker: sets transform origin so scaling happens from the center.
+  - wf-pulse: multi-step scale/box-shadow animation to “ping” the current
+    marker a few times over 5 seconds, then rest.
+*/
 .marker {
   transform-origin: center center;
 }
+
 @keyframes wf-pulse {
   0% {
     transform: scale(1);
     box-shadow: 0 0 0 0 rgba(199, 108, 47, 0);
     filter: brightness(1);
   }
+
   15% {
     transform: scale(2.8);
     box-shadow: 0 0 0 6px rgba(199, 108, 47, 0.35);
     filter: brightness(1.2);
   }
+
   30% {
     transform: scale(1.3);
     box-shadow: 0 0 0 0 rgba(199, 108, 47, 0);
     filter: brightness(1);
   }
+
   45% {
     transform: scale(3.2);
     box-shadow: 0 0 0 8px rgba(199, 108, 47, 0.45);
     filter: brightness(1.25);
   }
+
   60% {
     transform: scale(1.4);
     box-shadow: 0 0 0 0 rgba(199, 108, 47, 0);
     filter: brightness(1);
   }
+
   75% {
     transform: scale(3);
     box-shadow: 0 0 0 6px rgba(199, 108, 47, 0.35);
     filter: brightness(1.2);
   }
+
   100% {
     transform: scale(1);
     box-shadow: 0 0 0 0 rgba(199, 108, 47, 0);
     filter: brightness(1);
   }
 }
+
 .marker--pulse {
   animation: wf-pulse 5000ms ease-out;
 }
 
+/*
+  Small UX polish:
+  - Range slider thumb recolored to match the “info”/sensor vibe.
+  - Text-shadow variants and brand color helpers for headings.
+*/
 .form-range::-webkit-slider-thumb {
-  background-color: #17a2b8; /* Bootstrap info color */
+  background-color: #17a2b8;
+  /* Bootstrap info color */
 }
+
 .form-range::-moz-range-thumb {
   background-color: #17a2b8;
 }

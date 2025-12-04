@@ -1,5 +1,50 @@
-// LANDING PAGE — concise overview
-// Hosts the Map Editor and a small sidebar. Left: upload and edit. Right: account info and a public map URL.
+/*
+  LANDING PAGE – Authenticated admin workspace for map management.
+  - Mental model: this is the “control room” for WayFinder admins.
+    If the public homepage is the lobby, this is the back-office where
+    the actual magic (and chaos) happens.
+  - Main responsibilities:
+      • Verify the admin is actually logged in:
+          - Reads a JWT token from localStorage.
+          - Calls /admin/me to pull the admin profile.
+          - If anything smells wrong, it punts them back to "/" and nukes the token.
+      • Manage a multi-floor editing session in memory:
+          - You can add multiple floor images (files) and flip between them.
+          - Each image becomes a “floor” with its own editor state, tracked
+            in localStorage under wf_map_editor_state:<imageUrl>.
+          - Supports selecting, removing, and clearing all images.
+      • Resume existing published floors:
+          - Pulls the S3 manifest via REACT_APP_MANIFEST_URL.
+          - For each floor in that manifest, rehydrates editor state
+            (points, walkable config, northOffset, dimensions).
+          - This makes it possible to fix paths later without re-uploading.
+      • Publish floors to the public viewer:
+          - For each floor image, uploads it to the backend (/storage/floors).
+          - Reads the editor state from localStorage and builds a “floors” payload.
+          - Saves it both locally (wf_public_floors) and remotely via
+            PUT /storage/floors/manifest so UserMap can read from S3.
+      • Manage “Public Map (Homepage)” image:
+          - Lets the admin set a single URL that the public homepage uses
+            for a simple preview image.
+          - Persisted via localStorage under wf_public_map_url.
+      • Display admin info:
+          - Shows the logged-in admin’s email and “tags” (the locations
+            they manage) in a nice little welcome card.
+      • Basic QoL helpers:
+          - Prev / Next buttons to cycle through floor images.
+          - Delete published floor handler that calls DELETE /floors/:id.
+          - Small status messages for publish/resume actions.
+  - Key assumptions / gotchas:
+      • This component expects a valid REACT_APP_API_URL and MANIFEST_URL
+        in the environment when deployed.
+      • All the editor-heavy state (points, walkable, etc.) lives in MapEditor
+        and localStorage, not here. LandingPage just orchestrates which floor
+        is being edited and how those floors get shoved to S3/the backend.
+      • If maps “randomly vanish”, first suspects are:
+          - LocalStorage keys (wf_map_editor_state:..., wf_public_floors)
+          - The floors manifest in S3 not updating correctly.
+*/
+
 import React, { useEffect } from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -79,7 +124,7 @@ export default function LandingPage({ user }) {
       if (idx === -1) return prev;
       try {
         URL.revokeObjectURL(prev[idx].url);
-      } catch {}
+      } catch { }
       const next = prev.slice(0, idx).concat(prev.slice(idx + 1));
       // Adjust selection
       if (selectedImageId === id) {
@@ -96,7 +141,7 @@ export default function LandingPage({ user }) {
       prev.forEach((i) => {
         try {
           if (i.url) URL.revokeObjectURL(i.url);
-        } catch {}
+        } catch { }
       });
       return [];
     });
@@ -149,7 +194,7 @@ export default function LandingPage({ user }) {
   const savePublicMapUrl = () => {
     try {
       localStorage.setItem("wf_public_map_url", publicMapUrl);
-    } catch {}
+    } catch { }
     alert("Public map URL saved for homepage preview");
   };
 
@@ -247,7 +292,7 @@ export default function LandingPage({ user }) {
               : undefined,
           northOffset:
             typeof floor.northOffset === "number" &&
-            Number.isFinite(floor.northOffset)
+              Number.isFinite(floor.northOffset)
               ? floor.northOffset
               : 0,
         };
@@ -256,7 +301,7 @@ export default function LandingPage({ user }) {
             `wf_map_editor_state:${floor.url || ""}`,
             JSON.stringify(state)
           );
-        } catch {}
+        } catch { }
       });
       // Rehydrate images list for the editor
       setImages(
@@ -292,7 +337,8 @@ export default function LandingPage({ user }) {
     setSelectedImageId(images[ni].id);
   };
 
-  const selectedImage = images.find((i) => i.id === selectedImageId) || null;
+  const selectedImage =
+    images.find((i) => i.id === selectedImageId) || null;
 
   // Build a warp registry and suggest a cross-floor route plan
   // Removed: dev-only cross-floor helpers (now user-side only)
@@ -330,7 +376,7 @@ export default function LandingPage({ user }) {
       const data = raw ? JSON.parse(raw) : {};
       data.userPos = { x: pos.x, y: pos.y };
       localStorage.setItem(key, JSON.stringify(data));
-    } catch {}
+    } catch { }
   }
 
   // Debounced proximity watcher to auto-switch floors when reaching a warp
@@ -368,7 +414,7 @@ export default function LandingPage({ user }) {
               : undefined,
           northOffset:
             typeof state?.northOffset === "number" &&
-            Number.isFinite(state.northOffset)
+              Number.isFinite(state.northOffset)
               ? state.northOffset
               : 0,
         });
@@ -397,7 +443,7 @@ export default function LandingPage({ user }) {
   const handleSignOut = () => {
     try {
       localStorage.removeItem("token");
-    } catch {}
+    } catch { }
     navigate("/");
   };
 
