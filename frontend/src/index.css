@@ -15,20 +15,6 @@
     make the whole thing feel like one intentional design, not Franken-Bootstrap.
 */
 
-/* Brand color tokens (currently not wired into the rules below, but kept as a
-   central palette in case we refactor away from hard-coded hex values later). */
-:root {
-  --brand-primary: #2a91c9;
-  /* blue */
-  --brand-accent: #c89154;
-  /* orange/bronze */
-  --brand-bg: #e9f4f9;
-  /* light tint */
-  --surface: #ffffff;
-  --text: #1b1b1d;
-  --muted: #6b7280;
-  --border: #e6e8ec;
-}
 
 /* Drag & Drop map box – visuals for the map uploader component:
    - Neutral dashed box by default.
@@ -147,8 +133,9 @@
   - text-card: light, slightly blue-tinted text over dark card backgrounds.
 */
 .bg-card {
-  background-color: #5a6b70;
-  background-image: repeating-linear-gradient(45deg,
+  background-color: #3d4549;
+  background-image: repeating-linear-gradient(
+      45deg,
       rgba(255, 255, 255, 0.02),
       rgba(255, 255, 255, 0.02) 1px,
       transparent 1px,
@@ -158,6 +145,44 @@
       rgba(255, 255, 255, 0.02) 1px,
       transparent 1px,
       transparent 4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.bg-card-blue {
+  background-color: #3c4a4f;
+  background-image: repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.02),
+      rgba(255, 255, 255, 0.02) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.02),
+      rgba(255, 255, 255, 0.02) 1px,
+      transparent 1px,
+      transparent 4px
+    );
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.bg-card-orange {
+  background-color: #6c3a17;
+  background-image: repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.03),
+      rgba(255, 255, 255, 0.03) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.03),
+      rgba(255, 255, 255, 0.03) 1px,
+      transparent 1px,
+      transparent 4px
+    );
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
@@ -211,8 +236,16 @@
   border-color: #a26218a0 !important;
 }
 
+.border-top-orange {
+  border-top: 3px solid #a26218a0 !important;
+}
+
 .border-blue {
   border-color: #439bd98e !important;
+}
+
+.border-bottom-blue {
+  border-bottom: 3px solid #439bd98e !important;
 }
 
 /*
@@ -232,6 +265,25 @@
   height: auto;
 }
 
+.fancy-font {
+  font-family: "Lobster", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.size-title {
+  font-size: 3.4rem;
+}
+.way-shift {
+  position: relative;
+  top: 0.3rem; /* moves it down */
+  display: inline-block; /* ensures it respects vertical positioning */
+}
+
+.slogan {
+  font-size: 0.7rem;
+  opacity: 0.75;
+}
 /*
   Map editor layout + mobile tweaks:
   - On narrow screens we reduce side padding so the editor isn’t crammed.
@@ -242,6 +294,11 @@
   .map-editor-container {
     max-width: 100%;
     padding: 0 0.5rem;
+  }
+
+  .logo-img {
+    width: auto;
+    height: 15vh;
   }
 }
 
@@ -371,6 +428,10 @@ body {
 
 .text-shadow-sm {
   text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+}
+
+.no-shadow {
+  text-shadow: none !important;
 }
 
 .btn {

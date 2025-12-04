@@ -20,7 +20,6 @@ import React, { useState, useEffect, useMemo } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./index.css";
 import logo from "./images/logo.png";
-import MapPreview from "./MapPreview";
 import UserMap from "./UserMap";
 import { Link } from "react-router-dom";
 import Select from "react-select";
@@ -188,7 +187,11 @@ function App() {
       setLocation([]);
     } catch (err) {
       console.error(err);
-      setToastMessage(`Error: ${err.message}`);
+      if (err.message === "User not found") {
+        setToastMessage(`Sorry, email ${userEmail} not found in our records.`);
+      } else {
+        setToastMessage(`Error: ${err.message}`);
+      }
       setShowToast(true);
     }
   };
@@ -307,42 +310,41 @@ function App() {
           </div>
         )}
       </div>
-
       {/*
         HEADER:
         - Big WayFinder brand with logo.
         - "Own a business?" button that routes to /admin/sign-in.
         - "Get notified" button that flips on the email/location modal.
       */}
-      <div className="bg-head p-3 rounded border-bottom">
-        <header
-          className="d-flex flex-column flex-md-row justify-content-between 
-              align-items-center mb-3 text-center"
-        >
-          <div
-            className="display-3 fw-bold text-shadow mb-3 d-flex align-items-center 
-                justify-content-center justify-content-start"
-          >
-            <img src={logo} alt="WayFinder Logo" className="me-2 logo-img" />
-            <span className="text-blue">Way</span>
-            <span className="text-orange">Finder</span>
+      <div className="bg-head rounded">
+        <header>
+          <div className="fw-bold d-flex align-items-center justify-content-center">
+            <img src={logo} alt="WayFinder Logo" className="logo-img" />
+            <div>
+              <div className="text-shadow size-title">
+                <span className="text-blue fancy-font way-shift">Way</span>
+                <span className="text-orange fancy-font">Finder</span>
+              </div>
+              <div className="text-light slogan fancy-font text-end">
+                Find your way, your way
+              </div>
+            </div>
           </div>
-
-          <nav className="d-flex flex-column flex-sm-row gap-2">
-            <Link
-              className="btn btn-outline-primary fw-bold"
-              to="/admin/sign-in"
-            >
-              Own a business?
-            </Link>
-            <button
-              className="btn btn-primary fw-bold"
-              onClick={() => setPromptEmail(true)}
-            >
-              Get notified
-            </button>
-          </nav>
         </header>
+      </div>
+
+      <div class="bg-card py-3 border-bottom-blue border-top-orange rounded">
+        <nav className="d-flex justify-content-between align-items-center mx-2">
+          <Link className="btn btn-outline-primary fw-bold" to="/admin/sign-in">
+            Own a business?
+          </Link>
+          <button
+            className="btn btn-primary fw-bold"
+            onClick={() => setPromptEmail(true)}
+          >
+            Get notified
+          </button>
+        </nav>
       </div>
 
       {/*
@@ -362,6 +364,7 @@ function App() {
           aria-modal="true"
           role="dialog"
           style={{
+            // default settings for a popup modal
             position: "fixed",
             inset: 0,
             zIndex: 1050,
@@ -387,7 +390,7 @@ function App() {
           >
             {/* Modal header */}
             <div
-              className="modal-header bg-head"
+              className="modal-header bg-card-blue text-center p-2"
               style={{ padding: "0.75rem 1rem" }}
             >
               <h5 className="modal-title text-white" style={{ margin: 0 }}>
@@ -395,7 +398,7 @@ function App() {
               </h5>
               <button
                 type="button"
-                className="btn-close"
+                className="btn-close p-2"
                 onClick={() => setPromptEmail(false)}
               />
             </div>
@@ -428,7 +431,7 @@ function App() {
             </div>
 
             {/* Modal footer */}
-            <div className="modal-footer bg-content d-flex flex-column gap-3">
+            <div className="modal-footer bg-card-blue d-flex flex-column gap-3">
               {/* Primary actions */}
               <div className="d-flex flex-column gap-2 w-75 mt-3 mx-3">
                 <button
@@ -469,7 +472,7 @@ function App() {
         - The interactive piece that shows the actual building map/routing.
         - All the heavy lifting is inside <UserMap />; we just drop it in here.
       */}
-      <div className="mt-4">
+      <div>
         <UserMap />
       </div>
 
@@ -508,22 +511,19 @@ function App() {
             }}
           >
             {/* Modal header */}
-            <div
-              className="modal-header bg-head"
-              style={{ padding: "0.75rem 1rem" }}
-            >
+            <div className="modal-header bg-head text-center p-2">
               <h5 className="modal-title text-white" style={{ margin: 0 }}>
                 Enter Your Email to Unsubscribe
               </h5>
               <button
                 type="button"
-                className="btn-close-white ms-4 px-2"
+                className="btn-close ms-4 px-2"
                 onClick={() => setDeleteEmail(false)}
               />
             </div>
 
             {/* Modal body */}
-            <div className="modal-body bg-head">
+            <div className="modal-body bg-head p-2">
               <input
                 type="text"
                 className="form-control bg-card-inner"
@@ -534,20 +534,16 @@ function App() {
             </div>
 
             {/* Modal footer */}
-            <div
-              className="modal-footer bg-content"
-              style={{ padding: "0.75rem", display: "flex", gap: 8 }}
-            >
+            <div className="modal-footer bg-content py-3 px-1 d-flex gap-2">
               <button
-                className="btn btn-outline-primary"
+                className="btn btn-outline-primary flex-grow-1"
                 onClick={() => setDeleteEmail(false)}
-                style={{ flex: 1 }}
               >
                 Cancel
               </button>
 
               <button
-                className="btn btn-danger"
+                className="btn btn-danger flex-grow-1"
                 onClick={validateEmail(userEmail) ? deleteUser : undefined}
                 disabled={!validateEmail(userEmail)}
                 style={{ flex: 1 }}
@@ -567,14 +563,12 @@ function App() {
             - Error message if the manifest fetch failed.
             - A floor selector dropdown if there’s more than one floor.
       */}
-      <div className="mt-4">
+      {/* <div className="mt-4">
         <MapPreview imageUrl={selectedFloor?.url} />
 
         <div className="mt-2">
           {manifestStatus === "loading" && (
-            <span className="text-muted small">
-              Loading published floors…
-            </span>
+            <span className="text-muted small">Loading published floors…</span>
           )}
 
           {manifestStatus === "error" && (
@@ -604,7 +598,7 @@ function App() {
             </div>
           )}
         </div>
-      </div>
+      </div> */}
     </>
   );
 }
