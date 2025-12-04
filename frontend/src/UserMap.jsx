@@ -2,20 +2,21 @@
   ===============================================
   USER MAP VIEWER (Public Landing Page Experience)
   ===============================================
-  ReadΓÇæonly, multiΓÇæfloor wayfinding viewer used by endΓÇæusers.
+  Read only, multi floor wayfinding viewer used by end users.
   Key capabilities:
   - Load published floors (images + points + walkable settings)
   - Let the user set their current location ("I'm here")
   - Search for a room (supports aliases/ranges)
   - Draw a route on the current floor using the walkable color mask
-  - AutoΓÇæwarp between floors via stairs/elevator POIs with the same Warp Key
+  - Auto warp between floors via stairs/elevator POIs with the same Warp Key
   - Keyboard movement with arrow keys (snaps to walkable color)
 
   Important: This viewer reads from localStorage (wf_public_floors). In a SaaS
-  deployment, this would fetch floors.json from a hosted location on the clientΓÇÖs
+  deployment, this would fetch floors.json from a hosted location on the clients
   website.
 */
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { StepDetector } from "./stepDetector";
 import DebuggerPanel from "./DebuggerPanel";
 import ShareRouteQRCode from "./ShareRouteQRCode";
@@ -1641,15 +1642,25 @@ export default function UserMap() {
   // ---------------------------------------------------------------------------
   return (
     <div className="card shadow-sm bg-card ">
-      <div className="position-relative mb-3 text-center">
-        <h1 className="card-title display-1 fancy-font text-card text-shadow-sm mb-0">
+      <div className="d-flex align-items-center justify-content-between position-relative mb-3">
+        {/* QR code button */}
+        <div className="ms-2">
+          <ShareRouteQRCode
+            shareUrl={shareUrl}
+            hasRoute={!!(userPos && dest)}
+          />
+        </div>
+
+        {/* Title */}
+        <h1 className="card-title display-1 fancy-font text-card text-shadow-sm mb-0 text-center">
           <span className="text-orange">Public </span>
           <span className="text-blue">Map</span>
         </h1>
-        {/* Accessible mode toggle */}
+
+        {/* Accessibility button */}
         <button
-          className={`btn position-absolute top-50 end-0 translate-middle-y me-2 no-shadow ${
-            accessibleMode ? "btn-light" : "btn-outline-light"
+          className={`btn btn-sm ms-3 me-2 no-shadow ${
+            accessibleMode ? "btn-light" : "btn-outline-secondary text-white"
           }`}
           onClick={() => {
             setAccessibleMode((v) => !v);
@@ -1659,7 +1670,7 @@ export default function UserMap() {
             waypointIdxRef.current = 0;
           }}
         >
-          <i className="bi bi-person-wheelchair me-1 text-primary"></i>
+          <i className="bi bi-person-wheelchair me-1 text-primary fs-3"></i>
           {accessibleMode ? "On" : "Off"}
         </button>
       </div>
@@ -1668,8 +1679,11 @@ export default function UserMap() {
         <div className="d-flex flex-column flex-md-row flex-wrap align-items-center gap-2 mb-2">
           {/* Floor select */}
           <div className="d-flex align-items-center gap-1">
-            <label htmlFor="floorSelect" className="mb-0 text-card me-2">
-              Floor:
+            <label
+              htmlFor="floorSelect"
+              className="flex-shrink-0 mb-0 text-card me-2"
+            >
+              Select Floor:
             </label>
             <select
               id="floorSelect"
@@ -1688,12 +1702,12 @@ export default function UserMap() {
           {/* Placing toggle */}
           <div className="d-flex align-items-center gap-1 my-2 flex-shrink-0">
             <label htmlFor="placingBtn" className="mb-0 text-card me-2">
-              Your location:
+              Press to set your location:
             </label>
             <button
               id="placingBtn"
               className={`btn btn-sm rounded-pill ${
-                placing ? "btn-dark" : "btn-outline-dark text-white"
+                placing ? "btn-success" : "btn-outline-info text-white"
               }`}
               onClick={() => setPlacing((p) => !p)}
             >
@@ -1730,7 +1744,7 @@ export default function UserMap() {
             Route
           </button>
           <button
-            className="btn btn-outline-secondary btn-sm rounded-4 ms-2"
+            className="btn btn-outline-danger text-white no-shadow btn-sm rounded-4 ms-2"
             onClick={clearRoute}
             disabled={!routePts.length}
           >
@@ -1955,7 +1969,7 @@ export default function UserMap() {
         {!floor && (
           <div className="text-muted">No published floors available yet.</div>
         )}
-        <div className="d-flex align-items-center gap-2 mt-2 flex-wrap">
+        {/* <div className="d-flex align-items-center gap-2 mt-2 flex-wrap">
           <button
             className={`btn btn-${autoWarp ? "info" : "outline-info"} btn-sm`}
             onClick={() => setAutoWarp((v) => !v)}
@@ -1989,8 +2003,7 @@ export default function UserMap() {
           </div>
           {searchMsg && <span className="small text-muted">{searchMsg}</span>}
           {routeMsg && <span className="small text-muted">{routeMsg}</span>}
-        </div>
-        <ShareRouteQRCode shareUrl={shareUrl} hasRoute={!!(userPos && dest)} />
+        </div> */}
         {sensorMsg && <div className="small text-muted mt-2">{sensorMsg}</div>}
         <DebuggerPanel
           visible={debugVisible}

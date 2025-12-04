@@ -10,27 +10,21 @@ export default function ShareRouteQRCode({ shareUrl, hasRoute }) {
   return (
     <div className="mt-2">
       <button
-        className="btn btn-outline-info btn-sm"
+        className="btn btn-outline-info btn-sm mt-3"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
       >
-        {open ? "Hide QR" : "Share to phone"}
+        <i class="bi bi-qr-code-scan text-white fs-1"></i>
       </button>
       {open && url && (
-        <div className="mt-2 p-2 bg-dark rounded-3 d-inline-block">
-          <div className="text-white small mb-2">
-            Scan to load this route on your phone
-          </div>
+        <div className="p-3 bg-dark mt-2 d-flex justify-content-center rounded-3">
           <QRCode value={url} size={152} bgColor="#0d1117" fgColor="#e8f6ff" />
-          <div className="text-muted small mt-2" style={{ maxWidth: 180 }}>
-            {url}
-          </div>
         </div>
       )}
-      {disabled && (
-        <div className="text-muted small mt-1">
-          Build a route first to share it.
-        </div>
+      {disabled ? (
+        <div className="text-card mt-1 fst-italic slogan">Need a route</div>
+      ) : (
+        <div className="text-card mt-1 fst-italic slogan">Route ready</div>
       )}
     </div>
   );
