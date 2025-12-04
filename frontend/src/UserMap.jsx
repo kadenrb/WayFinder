@@ -512,6 +512,40 @@ export default function UserMap() {
     };
   };
 
+  // Snap a landing point (on another floor) to that floor's walkable mask using cached images
+  const snapLandingToWalkable = async (floorObj, pt) => {
+    if (!floorObj || !pt) return pt;
+    const cached = imageCacheRef.current.get(floorObj.url);
+    const img =
+      cached?.img ||
+      (floorObj.url === selUrl && imgRef.current ? imgRef.current : null);
+    if (!img || !img.naturalWidth) return pt;
+    const colors = [
+      hexToRgb(floorObj.walkable?.color || "#9F9383"),
+      ...(Array.isArray(floorObj.walkable?.extraColors)
+        ? floorObj.walkable.extraColors.map((c) => hexToRgb(normHex(c)))
+        : []),
+    ];
+    try {
+      const { grid, gw, gh, step: stp, w, h } = await buildGrid(
+        img,
+        colors,
+        floorObj.walkable?.tolerance,
+        4
+      );
+      const tx = Math.max(0, Math.min(gw - 1, Math.round((pt.x * w) / stp)));
+      const ty = Math.max(0, Math.min(gh - 1, Math.round((pt.y * h) / stp)));
+      const tCell = nearestWalkable(grid, gw, gh, tx, ty);
+      if (!tCell) return pt;
+      return {
+        x: ((tCell[0] * stp) + (stp / 2)) / w,
+        y: ((tCell[1] * stp) + (stp / 2)) / h,
+      };
+    } catch {
+      return pt;
+    }
+  };
+
   // -------- Room search helpers (roomNumber and aliases/ranges) --------
   const normCode = (s) =>
     (s || "")
@@ -1473,66 +1507,69 @@ export default function UserMap() {
 
   // Auto-warp when near target warp
   useEffect(() => {
-    if (!autoWarp) return;
-    if (!plan || !plan.steps || plan.index >= plan.steps.length) return;
-    const step = plan.steps[plan.index];
-    if (step.kind !== "warp" || !step.target) return;
-    if (!userPos) return;
-    const d = Math.hypot(userPos.x - step.target.x, userPos.y - step.target.y);
-    if (d <= warpProximity) {
-      // Switch to next floor and place user at matching warp
-      const planObj = planRef.current || plan;
-      const next =
-        planObj && planObj.steps ? planObj.steps[planObj.index + 1] : null;
-      if (!next) return;
-      const curFloor = floors.find((f) => f.url === selUrl);
-      const nextFloor = floors.find((f) => f.url === next.url);
-      const match = (nextFloor?.points || []).find(
-        (p) =>
-          p?.kind === "poi" &&
-          (p.poiType === "stairs" || p.poiType === "elevator") &&
-          p.warpKey &&
-          normalizeKey(p.warpKey) === step.key
-      );
-      if (match) {
-        const landing = { x: match.x, y: match.y };
-        saveUserPos(nextFloor.url, landing);
-        const destId = dest?.id || destRef.current?.id || null;
-        const targetDest =
-          dest ||
-          destRef.current ||
-          floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
-          null;
-        // Schedule resume once next image loads; do not route immediately because image/pos may not be ready yet
-        pendingRouteRef.current = {
-          startPos: landing,
-          startUrl: nextFloor.url,
-          destId,
-        };
-        routeResumeRef.current = () => {
-          const tgt = targetDest || (destId && { id: destId });
-          if (tgt) destRef.current = tgt;
-          startRouteInternal(landing, tgt);
-        };
-        setSelUrl(nextFloor.url);
-        setPlan((p) => {
-          if (!p) return p;
-          const updated = { ...p, index: p.index + 1 };
-          planRef.current = updated;
-          return updated;
-        });
-        setRoutePts([]);
-        // Fallback timer in case onImgLoad does not fire
-        setTimeout(() => {
-          if (routeResumeRef.current) {
-            const resume = routeResumeRef.current;
-            routeResumeRef.current = null;
-            resume();
-          }
-        }, 2500);
+    (async () => {
+      if (!autoWarp) return;
+      if (!plan || !plan.steps || plan.index >= plan.steps.length) return;
+      const step = plan.steps[plan.index];
+      if (step.kind !== "warp" || !step.target) return;
+      if (!userPos) return;
+      const d = Math.hypot(userPos.x - step.target.x, userPos.y - step.target.y);
+      if (d <= warpProximity) {
+        // Switch to next floor and place user at matching warp
+        const planObj = planRef.current || plan;
+        const next =
+          planObj && planObj.steps ? planObj.steps[planObj.index + 1] : null;
+        if (!next) return;
+        const curFloor = floors.find((f) => f.url === selUrl);
+        const nextFloor = floors.find((f) => f.url === next.url);
+        const match = (nextFloor?.points || []).find(
+          (p) =>
+            p?.kind === "poi" &&
+            (p.poiType === "stairs" || p.poiType === "elevator") &&
+            p.warpKey &&
+            normalizeKey(p.warpKey) === step.key
+        );
+        if (match) {
+          const landingRaw = { x: match.x, y: match.y };
+          const landing = await snapLandingToWalkable(nextFloor, landingRaw);
+          saveUserPos(nextFloor.url, landing);
+          const destId = dest?.id || destRef.current?.id || null;
+          const targetDest =
+            dest ||
+            destRef.current ||
+            floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
+            null;
+          // Schedule resume once next image loads; do not route immediately because image/pos may not be ready yet
+          pendingRouteRef.current = {
+            startPos: landing,
+            startUrl: nextFloor.url,
+            destId,
+          };
+          routeResumeRef.current = () => {
+            const tgt = targetDest || (destId && { id: destId });
+            if (tgt) destRef.current = tgt;
+            startRouteInternal(landing, tgt);
+          };
+          setSelUrl(nextFloor.url);
+          setPlan((p) => {
+            if (!p) return p;
+            const updated = { ...p, index: p.index + 1 };
+            planRef.current = updated;
+            return updated;
+          });
+          setRoutePts([]);
+          // Fallback timer in case onImgLoad does not fire
+          setTimeout(() => {
+            if (routeResumeRef.current) {
+              const resume = routeResumeRef.current;
+              routeResumeRef.current = null;
+              resume();
+            }
+          }, 2500);
+        }
       }
-    }
-  }, [autoWarp, userPos, plan, floors, selUrl, warpProximity]);
+    })();
+  }, [autoWarp, userPos, plan, floors, selUrl, warpProximity, snapLandingToWalkable]);
 
   // If a shared route switched floors, retry starting once we're on that floor
   useEffect(() => {
