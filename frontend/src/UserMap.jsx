@@ -1020,8 +1020,10 @@ export default function UserMap() {
     let simplified = rdp(pts);
     // Then collapse nearly-colinear points (angle change below threshold)
     const angle = (a, b, c) => {
-      const abx = b.x - a.x, aby = b.y - a.y;
-      const bcx = c.x - b.x, bcy = c.y - b.y;
+      const abx = b.x - a.x,
+        aby = b.y - a.y;
+      const bcx = c.x - b.x,
+        bcy = c.y - b.y;
       const dot = abx * bcx + aby * bcy;
       const mag1 = Math.hypot(abx, aby) || 1e-9;
       const mag2 = Math.hypot(bcx, bcy) || 1e-9;
@@ -1163,8 +1165,13 @@ export default function UserMap() {
     fallbackUsed = false,
     gapOverride = null
   ) => {
-    const curFloor = floors.find(f=>f.url===selUrl); if (!curFloor) return;
-    const img = imgRef.current; if (!img || !img.naturalWidth) { setSensorMsg("Image not ready for routing."); return; }
+    const curFloor = floors.find((f) => f.url === selUrl);
+    if (!curFloor) return;
+    const img = imgRef.current;
+    if (!img || !img.naturalWidth) {
+      setSensorMsg("Image not ready for routing.");
+      return;
+    }
     const baseColors = [hexToRgb(curFloor.walkable?.color || "#9F9383")];
     const extraColors = Array.isArray(curFloor.walkable?.extraColors)
       ? curFloor.walkable.extraColors.map((c) => hexToRgb(normHex(c)))
@@ -1181,8 +1188,14 @@ export default function UserMap() {
       const { grid, gw, gh, step: stp, w, h } = obj;
       const startPos = startPosOverride || userPos;
       if (!startPos) return { obj, sCell: null, w, h, stp, gw, gh };
-      const ux = Math.max(0, Math.min(gw - 1, Math.round((startPos.x * w) / stp)));
-      const uy = Math.max(0, Math.min(gh - 1, Math.round((startPos.y * h) / stp)));
+      const ux = Math.max(
+        0,
+        Math.min(gw - 1, Math.round((startPos.x * w) / stp))
+      );
+      const uy = Math.max(
+        0,
+        Math.min(gh - 1, Math.round((startPos.y * h) / stp))
+      );
       const sCell = nearestWalkable(grid, gw, gh, ux, uy);
       return { obj, sCell, w, h, stp, gw, gh };
     };
@@ -1301,15 +1314,16 @@ export default function UserMap() {
       step.key = normalizeKey(best.warpKey);
       step.target = target;
     }
-    const tx=Math.max(0,Math.min(gw-1,Math.round((target.x*w)/stp))); const ty=Math.max(0,Math.min(gh-1,Math.round((target.y*h)/stp)));
+    const tx = Math.max(0, Math.min(gw - 1, Math.round((target.x * w) / stp)));
+    const ty = Math.max(0, Math.min(gh - 1, Math.round((target.y * h) / stp)));
     const tCell = nearestWalkable(gridObj.grid, gw, gh, tx, ty);
     if (!tCell) {
       setRoutePts([]);
       return;
     }
     const gapVal = Math.max(0, Math.floor(gapOverride ?? gapCells ?? 0));
-    const path = bfs(gridObj.grid,gw,gh,sCell,tCell, gapVal);
-    if (!path || path.length<2) {
+    const path = bfs(gridObj.grid, gw, gh, sCell, tCell, gapVal);
+    if (!path || path.length < 2) {
       if (!fallbackUsed && gapVal === 0) {
         await computeRouteForStep(step, startPosOverride, planArg, true, 1);
       } else {
@@ -1317,7 +1331,10 @@ export default function UserMap() {
       }
       return;
     }
-    const out = path.map(([gx,gy])=> ({ x: ((gx*stp)+(stp/2))/w, y: ((gy*stp)+(stp/2))/h }));
+    const out = path.map(([gx, gy]) => ({
+      x: (gx * stp + stp / 2) / w,
+      y: (gy * stp + stp / 2) / h,
+    }));
     const simpTol = 0.003 + gapVal * 0.003; // higher gap -> allow more smoothing
     const simplified = simplifyRoute(out, simpTol);
     routePtsRef.current = simplified;
@@ -1623,13 +1640,40 @@ export default function UserMap() {
   // Everything below handles layout, map interactions, and debug UI.
   // ---------------------------------------------------------------------------
   return (
-    <div className="card shadow-sm bg-card">
+    <div className="card shadow-sm bg-card ">
+      <div className="position-relative mb-3 text-center">
+        <h1 className="card-title display-1 fancy-font text-card text-shadow-sm mb-0">
+          <span className="text-orange">Public </span>
+          <span className="text-blue">Map</span>
+        </h1>
+        {/* Accessible mode toggle */}
+        <button
+          className={`btn position-absolute top-50 end-0 translate-middle-y me-2 no-shadow ${
+            accessibleMode ? "btn-light" : "btn-outline-light"
+          }`}
+          onClick={() => {
+            setAccessibleMode((v) => !v);
+            setPlan(null);
+            setRoutePts([]);
+            waypointPtsRef.current = [];
+            waypointIdxRef.current = 0;
+          }}
+        >
+          <i className="bi bi-person-wheelchair me-1 text-primary"></i>
+          {accessibleMode ? "On" : "Off"}
+        </button>
+      </div>
+
       <div className="card-body">
-        <h5 className="card-title text-card h1 mb-3 text-center">Public Map</h5>
-        <div className="d-flex flex-wrap">
-          <div className="flex-grow-1 d-flex align-items-center gap-3 mb-4">
+        <div className="d-flex flex-column flex-md-row flex-wrap align-items-center gap-2 mb-2">
+          {/* Floor select */}
+          <div className="d-flex align-items-center gap-1">
+            <label htmlFor="floorSelect" className="mb-0 text-card me-2">
+              Floor:
+            </label>
             <select
-              className="form-select form-select-sm bg-card-inner"
+              id="floorSelect"
+              className="form-select form-select-sm"
               value={selUrl}
               onChange={(e) => setSelUrl(e.target.value)}
             >
@@ -1639,17 +1683,26 @@ export default function UserMap() {
                 </option>
               ))}
             </select>
+          </div>
 
+          {/* Placing toggle */}
+          <div className="d-flex align-items-center gap-1 my-2 flex-shrink-0">
+            <label htmlFor="placingBtn" className="mb-0 text-card me-2">
+              Your location:
+            </label>
             <button
-              className={`btn p-2 btn-sm rounded-pill ${
+              id="placingBtn"
+              className={`btn btn-sm rounded-pill ${
                 placing ? "btn-dark" : "btn-outline-dark text-white"
               }`}
               onClick={() => setPlacing((p) => !p)}
             >
-              {placing ? "Click map to set location" : "Manually set location"}
+              {placing ? "I am here" : "You are here"}
             </button>
           </div>
-          <div className="d-flex gap-2 mb-2 flex-grow-1 justify-content-center">
+
+          {/* Search input and button */}
+          <div className="d-flex gap-2 flex-grow-1 mb-2">
             <input
               className="form-control form-control-xl bg-card-inner"
               placeholder="Search room (e.g., B500)"
@@ -1659,15 +1712,15 @@ export default function UserMap() {
                 if (e.key === "Enter") searchRoom();
               }}
             />
-
             <button
-              className="btn btn-info text-white px-3 flex-grow-1 rounded-4"
+              className="btn btn-info text-white px-3 rounded-4"
               onClick={searchRoom}
             >
               Search
             </button>
           </div>
         </div>
+
         <div className="d-flex mb-2 w-100">
           <button
             className="btn btn-primary flex-grow-1 rounded-4"
@@ -1675,6 +1728,13 @@ export default function UserMap() {
             disabled={!userPos || !dest}
           >
             Route
+          </button>
+          <button
+            className="btn btn-outline-secondary btn-sm rounded-4 ms-2"
+            onClick={clearRoute}
+            disabled={!routePts.length}
+          >
+            Clear route
           </button>
         </div>
 
@@ -1897,32 +1957,10 @@ export default function UserMap() {
         )}
         <div className="d-flex align-items-center gap-2 mt-2 flex-wrap">
           <button
-            className="btn btn-outline-secondary btn-sm"
-            onClick={clearRoute}
-            disabled={!routePts.length}
-          >
-            Clear
-          </button>
-          <button
             className={`btn btn-${autoWarp ? "info" : "outline-info"} btn-sm`}
             onClick={() => setAutoWarp((v) => !v)}
           >
             Auto warp: {autoWarp ? "On" : "Off"}
-          </button>
-          <button
-            className={`btn btn-${
-              accessibleMode ? "secondary" : "outline-secondary"
-            } btn-sm`}
-            onClick={() => {
-              setAccessibleMode((v) => !v);
-              // Clear current plan so the next route rebuild honors the mode
-              setPlan(null);
-              setRoutePts([]);
-              waypointPtsRef.current = [];
-              waypointIdxRef.current = 0;
-            }}
-          >
-            Accessibility: {accessibleMode ? "Elevator" : "Any"}
           </button>
           <button
             className={`btn btn-${
