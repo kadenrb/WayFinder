@@ -310,7 +310,7 @@ function App() {
           </div>
         )}
       </div>
-{/*
+      {/*
         HEADER:
         - Big WayFinder brand with logo.
         - "Own a business?" button that routes to /admin/sign-in.
@@ -431,7 +431,7 @@ function App() {
             </div>
 
             {/* Modal footer */}
-              <div className="modal-footer bg-card-blue d-flex flex-column gap-3">
+            <div className="modal-footer bg-card-blue d-flex flex-column gap-3">
               {/* Primary actions */}
               <div className="d-flex flex-column gap-2 w-75 mt-3 mx-3">
                 <button
@@ -510,7 +510,7 @@ function App() {
               flexDirection: "column",
             }}
           >
-{/* Modal header */}
+            {/* Modal header */}
             <div className="modal-header bg-head text-center p-2">
               <h5 className="modal-title text-white" style={{ margin: 0 }}>
                 Enter Your Email to Unsubscribe
@@ -533,7 +533,7 @@ function App() {
               />
             </div>
 
-{/* Modal footer */}
+            {/* Modal footer */}
             <div className="modal-footer bg-content py-3 px-1 d-flex gap-2">
               <button
                 className="btn btn-outline-primary flex-grow-1"
@@ -563,7 +563,7 @@ function App() {
             - Error message if the manifest fetch failed.
             - A floor selector dropdown if there’s more than one floor.
       */}
-      <div className="mt-4">
+      {/* <div className="mt-4">
         <MapPreview imageUrl={selectedFloor?.url} />
 
         <div className="mt-2">
