@@ -1,23 +1,24 @@
-/*
+﻿/*
   ===============================================
   USER MAP VIEWER (Public Landing Page Experience)
   ===============================================
-  Read‑only, multi‑floor wayfinding viewer used by end‑users.
+  ReadΓÇæonly, multiΓÇæfloor wayfinding viewer used by endΓÇæusers.
   Key capabilities:
   - Load published floors (images + points + walkable settings)
   - Let the user set their current location ("I'm here")
   - Search for a room (supports aliases/ranges)
   - Draw a route on the current floor using the walkable color mask
-  - Auto‑warp between floors via stairs/elevator POIs with the same Warp Key
+  - AutoΓÇæwarp between floors via stairs/elevator POIs with the same Warp Key
   - Keyboard movement with arrow keys (snaps to walkable color)
 
   Important: This viewer reads from localStorage (wf_public_floors). In a SaaS
-  deployment, this would fetch floors.json from a hosted location on the client’s
+  deployment, this would fetch floors.json from a hosted location on the clientΓÇÖs
   website.
 */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StepDetector } from "./stepDetector";
 import DebuggerPanel from "./DebuggerPanel";
+import ShareRouteQRCode from "./ShareRouteQRCode";
 
 // ---------------------------------------------------------------------------
 // STATE AND REFS
@@ -87,6 +88,8 @@ export default function UserMap() {
   const [recording, setRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(10);
   const [recordMsg, setRecordMsg] = useState("");
+  const shareStartRef = useRef(false);
+  const shareRetryTimerRef = useRef(null);
   const [debugData, setDebugData] = useState({
     heading: 0,
     compassHeading: 0,
@@ -104,6 +107,30 @@ export default function UserMap() {
   useEffect(() => {
     patchDebug({ sensorMsg });
   }, [sensorMsg]);
+
+  // ---------------------------------------------------------------------------
+  // SHARE URL ENCODING/DECODING (for QR handoff)
+  // We keep the payload small: start floor URL, user position, dest id, accessibility.
+  // Encode: JSON -> URI-escaped -> base64, so it fits cleanly in a query param.
+  // Decode: base64 -> URI-unescape -> JSON.
+  // ---------------------------------------------------------------------------
+  const encodeShareState = (payload) => {
+    try {
+      const json = JSON.stringify(payload);
+      const b64 = btoa(encodeURIComponent(json));
+      return b64;
+    } catch {
+      return null;
+    }
+  };
+  const decodeShareState = (token) => {
+    try {
+      const json = decodeURIComponent(atob(token));
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  };
   const getScreenOrientationAngle = () => {
     if (typeof window === "undefined") return 0;
     const orientation = window.screen && window.screen.orientation;
@@ -403,6 +430,10 @@ export default function UserMap() {
     const w = e.target.naturalWidth;
     const h = e.target.naturalHeight;
     setNatSize({ w, h });
+    if (shareStartRef.current) {
+      // Kick routing after image is ready when loading from a shared link
+      startRoute();
+    }
     // Cache this image size for reuse to avoid waiting on naturalWidth after a warp
     if (selUrl) {
       imageCacheRef.current.set(selUrl, { img: e.target, w, h });
@@ -437,6 +468,32 @@ export default function UserMap() {
       localStorage.setItem(`wf_user_pos:${url || ""}`, JSON.stringify(p));
     } catch {}
   };
+
+  // Apply shared route state from ?share= (base64-encoded JSON) on initial load
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("share");
+    if (!token) return;
+    const data = decodeShareState(token);
+    if (!data) return;
+    // Seed UI from shared payload
+    if (typeof data.accessibleMode === "boolean") {
+      setAccessibleMode(data.accessibleMode);
+    }
+    if (data.startUrl) {
+      setSelUrl(data.startUrl);
+    }
+    if (data.startPos) {
+      setUserPos(data.startPos);
+      saveUserPos(data.startUrl || selUrl, data.startPos);
+    }
+    if (data.destId) {
+      destRef.current = { id: data.destId };
+      setDest({ url: data.startUrl || selUrl, id: data.destId });
+    }
+    shareStartRef.current = true;
+  }, []);
 
   // Snap a normalized position to nearest walkable cell center (using cached grid)
   const snapToWalkable = (nx, ny) => {
@@ -1289,6 +1346,31 @@ export default function UserMap() {
     setRoutePts(simplified);
   };
 
+  const sharePayload = useMemo(() => {
+    if (!selUrl || !userPos || !dest?.id) return null;
+    return {
+      startUrl: selUrl,
+      startPos: userPos,
+      destId: dest.id,
+      accessibleMode,
+    };
+  }, [selUrl, userPos, dest, accessibleMode]);
+
+  const shareUrl = useMemo(() => {
+    // Build a shareable URL with the current state encoded into ?share=
+    // Note: keeping everything client-side (no backend token) so tablets/phones
+    // can swap routes without touching the server.
+    if (!sharePayload) return "";
+    const token = encodeShareState(sharePayload);
+    if (!token) return "";
+    if (typeof window === "undefined") return "";
+    const base =
+      (window.location && window.location.origin) ||
+      `${window.location.protocol}//${window.location.host}`;
+    const path = window.location ? window.location.pathname : "";
+    return `${base}${path}?share=${token}`;
+  }, [sharePayload]);
+
   const startRouteInternal = async (startPos, targetDest) => {
     const floor = floors.find((f) => f.url === selUrl);
     if (!floor || !startPos || !targetDest) return;
@@ -1434,6 +1516,65 @@ export default function UserMap() {
       }
     }
   }, [autoWarp, userPos, plan, floors, selUrl, warpProximity]);
+
+  // If a shared route switched floors, retry starting once we're on that floor
+  useEffect(() => {
+    if (!shareStartRef.current) return;
+    if (!pendingRouteRef.current) return;
+    if (pendingRouteRef.current.startUrl !== selUrl) return;
+    startRoute();
+  }, [selUrl]);
+
+  // Robust retry for shared links:
+  // Keep calling startRoute() on a timer until we have everything we need:
+  //   - a floor loaded (floors/selUrl)
+  //   - the floor image is ready (imgRef.naturalWidth)
+  //   - a user position and destination
+  //   - a route plan actually exists (planRef has steps)
+  // This avoids “tap Route again” after scanning a QR.
+  useEffect(() => {
+    if (!shareStartRef.current) return;
+
+    const hasPlan = () => {
+      const p = planRef.current;
+      return p && Array.isArray(p.steps) && p.steps.length > 0;
+    };
+
+    const schedule = () => {
+      if (shareRetryTimerRef.current) clearTimeout(shareRetryTimerRef.current);
+      shareRetryTimerRef.current = setTimeout(tick, 600);
+    };
+
+    const tick = () => {
+      if (!shareStartRef.current) return;
+      const targetDest = dest || destRef.current;
+      const curFloor = floors.find((f) => f.url === selUrl);
+      const imgReady = imgRef.current && imgRef.current.naturalWidth;
+      if (!targetDest || !userPos || !curFloor || !imgReady) {
+        schedule();
+        return;
+      }
+      startRoute()
+        .then(() => {
+          if (!hasPlan() && shareStartRef.current) {
+            schedule();
+          } else {
+            shareStartRef.current = false;
+            if (shareRetryTimerRef.current)
+              clearTimeout(shareRetryTimerRef.current);
+          }
+        })
+        .catch(() => {
+          if (shareStartRef.current) schedule();
+        });
+    };
+
+    tick();
+
+    return () => {
+      if (shareRetryTimerRef.current) clearTimeout(shareRetryTimerRef.current);
+    };
+  }, [floors, selUrl, userPos, dest, natSize]);
 
   // Recompute route when floor switches within an active plan
   // Recompute route when floor switches within an active plan (but not on userPos changes)
@@ -1811,6 +1952,7 @@ export default function UserMap() {
           {searchMsg && <span className="small text-muted">{searchMsg}</span>}
           {routeMsg && <span className="small text-muted">{routeMsg}</span>}
         </div>
+        <ShareRouteQRCode shareUrl={shareUrl} hasRoute={!!(userPos && dest)} />
         {sensorMsg && <div className="small text-muted mt-2">{sensorMsg}</div>}
         <DebuggerPanel
           visible={debugVisible}
