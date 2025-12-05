@@ -431,6 +431,8 @@ export default function UserMap() {
     const w = e.target.naturalWidth;
     const h = e.target.naturalHeight;
     setNatSize({ w, h });
+    // Keep user marker on walkable after image is ready (helps on warp/mobile)
+    resnapUserToWalkable();
     if (shareStartRef.current) {
       // Kick routing after image is ready when loading from a shared link
       startRoute();
@@ -1504,6 +1506,8 @@ export default function UserMap() {
     setWaypoints([]);
     waypointIdxRef.current = 0;
     pendingRouteRef.current = null;
+    setUserPos(null);
+    userPosRef.current = null;
   };
 
   // Auto-warp when near target warp
