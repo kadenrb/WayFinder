@@ -109,6 +109,8 @@ export default function UserMap() {
     patchDebug({ sensorMsg });
   }, [sensorMsg]);
 
+  const [showBanner, setShowBanner] = useState(true);
+
   // ---------------------------------------------------------------------------
   // SHARE URL ENCODING/DECODING (for QR handoff)
   // We keep the payload small: start floor URL, user position, dest id, accessibility.
@@ -1642,6 +1644,36 @@ export default function UserMap() {
   // ---------------------------------------------------------------------------
   return (
     <div className="card shadow-sm bg-card ">
+      {/* Banner for unsupported browsers called here because we need to access the tracking data*/}
+      {showBanner && (
+        <div
+          className="alert alert-warning text-dark text-center m-0 rounded-0 w-100 position-fixed top-0 start-0 d-flex justify-content-center align-items-center"
+          style={{ zIndex: 1050 }}
+        >
+          <span className="me-2 slogan">
+            Live tracking is not fully supported in Firefox/Brave yet.
+          </span>
+
+          <button
+            className={`btn btn-sm mx-3 py-3 rounded-circle no-shadow ${
+              sensorTracking ? "btn-danger" : "btn-info"
+            }`}
+            onClick={() => {
+              sensorTracking ? stopSensorTracking() : startSensorTracking();
+              setShowBanner(false);
+            }}
+            disabled={!sensorTracking && !userPos}
+          >
+            {sensorTracking ? "Stop tracking" : "Start tracking"}
+          </button>
+
+          <button
+            className="btn-close ms-2"
+            onClick={() => setShowBanner(false)}
+            aria-label="Close"
+          ></button>
+        </div>
+      )}
       <div className="d-flex align-items-center justify-content-between position-relative mb-3">
         {/* QR code button */}
         <div className="ms-2">

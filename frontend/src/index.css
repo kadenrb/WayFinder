@@ -15,7 +15,6 @@
     make the whole thing feel like one intentional design, not Franken-Bootstrap.
 */
 
-
 /* Drag & Drop map box – visuals for the map uploader component:
    - Neutral dashed box by default.
    - Slightly brighter on hover/focus.
@@ -139,12 +138,15 @@
       rgba(255, 255, 255, 0.02),
       rgba(255, 255, 255, 0.02) 1px,
       transparent 1px,
-      transparent 4px),
-    repeating-linear-gradient(-45deg,
+      transparent 4px
+    ),
+    repeating-linear-gradient(
+      -45deg,
       rgba(255, 255, 255, 0.02),
       rgba(255, 255, 255, 0.02) 1px,
       transparent 1px,
-      transparent 4px);
+      transparent 4px
+    );
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
@@ -280,6 +282,13 @@
   display: inline-block; /* ensures it respects vertical positioning */
 }
 
+.poi-card .form-label {
+  font-size: clamp(0.7rem, 2vw, 1rem);
+}
+
+/*
+ slogan is used around the site for a smaller font
+*/
 .slogan {
   font-size: 0.7rem;
   opacity: 0.75;
@@ -313,19 +322,23 @@
   - Fixed gradient “wallpaper” behind everything.
   - Meant to give the app a “desktop app” vibe instead of plain white. */
 body {
-  background: linear-gradient(100deg,
-      rgb(28, 49, 59) 0%,
-      rgb(47, 56, 63) 50%,
-      rgb(73, 63, 50) 100%);
+  background: linear-gradient(
+    100deg,
+    rgb(28, 49, 59) 0%,
+    rgb(47, 56, 63) 50%,
+    rgb(73, 63, 50) 100%
+  );
   background-attachment: fixed;
 }
 
 .bg-content {
   overflow: hidden;
-  background: linear-gradient(120deg,
-      rgba(25, 70, 90, 1) 0%,
-      rgba(45, 65, 75, 1) 49%,
-      rgba(90, 75, 60, 1) 100%);
+  background: linear-gradient(
+    120deg,
+    rgba(25, 70, 90, 1) 0%,
+    rgba(45, 65, 75, 1) 49%,
+    rgba(90, 75, 60, 1) 100%
+  );
   -webkit-background-clip: padding-box;
   background-clip: padding-box;
 }
