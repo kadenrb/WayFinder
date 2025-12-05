@@ -1562,7 +1562,12 @@ export default function UserMap() {
             planRef.current = updated;
             return updated;
           });
+          // Clear current leg visuals/waypoints; next leg will rebuild on load
           setRoutePts([]);
+          routePtsRef.current = [];
+          waypointPtsRef.current = [];
+          setWaypoints([]);
+          waypointIdxRef.current = 0;
           // Fallback timer in case onImgLoad does not fire
           setTimeout(() => {
             if (routeResumeRef.current) {
