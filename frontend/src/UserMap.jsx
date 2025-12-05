@@ -2,20 +2,21 @@
   ===============================================
   USER MAP VIEWER (Public Landing Page Experience)
   ===============================================
-  ReadΓÇæonly, multiΓÇæfloor wayfinding viewer used by endΓÇæusers.
+  Read only, multi floor wayfinding viewer used by end users.
   Key capabilities:
   - Load published floors (images + points + walkable settings)
   - Let the user set their current location ("I'm here")
   - Search for a room (supports aliases/ranges)
   - Draw a route on the current floor using the walkable color mask
-  - AutoΓÇæwarp between floors via stairs/elevator POIs with the same Warp Key
+  - Auto warp between floors via stairs/elevator POIs with the same Warp Key
   - Keyboard movement with arrow keys (snaps to walkable color)
 
   Important: This viewer reads from localStorage (wf_public_floors). In a SaaS
-  deployment, this would fetch floors.json from a hosted location on the clientΓÇÖs
+  deployment, this would fetch floors.json from a hosted location on the clients
   website.
 */
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { StepDetector } from "./stepDetector";
 import DebuggerPanel from "./DebuggerPanel";
 import ShareRouteQRCode from "./ShareRouteQRCode";
@@ -510,6 +511,40 @@ export default function UserMap() {
       x: (near[0] * step + step / 2) / w,
       y: (near[1] * step + step / 2) / h,
     };
+  };
+
+  // Snap a landing point (on another floor) to that floor's walkable mask using cached images
+  const snapLandingToWalkable = async (floorObj, pt) => {
+    if (!floorObj || !pt) return pt;
+    const cached = imageCacheRef.current.get(floorObj.url);
+    const img =
+      cached?.img ||
+      (floorObj.url === selUrl && imgRef.current ? imgRef.current : null);
+    if (!img || !img.naturalWidth) return pt;
+    const colors = [
+      hexToRgb(floorObj.walkable?.color || "#9F9383"),
+      ...(Array.isArray(floorObj.walkable?.extraColors)
+        ? floorObj.walkable.extraColors.map((c) => hexToRgb(normHex(c)))
+        : []),
+    ];
+    try {
+      const { grid, gw, gh, step: stp, w, h } = await buildGrid(
+        img,
+        colors,
+        floorObj.walkable?.tolerance,
+        4
+      );
+      const tx = Math.max(0, Math.min(gw - 1, Math.round((pt.x * w) / stp)));
+      const ty = Math.max(0, Math.min(gh - 1, Math.round((pt.y * h) / stp)));
+      const tCell = nearestWalkable(grid, gw, gh, tx, ty);
+      if (!tCell) return pt;
+      return {
+        x: ((tCell[0] * stp) + (stp / 2)) / w,
+        y: ((tCell[1] * stp) + (stp / 2)) / h,
+      };
+    } catch {
+      return pt;
+    }
   };
 
   // -------- Room search helpers (roomNumber and aliases/ranges) --------
@@ -1473,66 +1508,69 @@ export default function UserMap() {
 
   // Auto-warp when near target warp
   useEffect(() => {
-    if (!autoWarp) return;
-    if (!plan || !plan.steps || plan.index >= plan.steps.length) return;
-    const step = plan.steps[plan.index];
-    if (step.kind !== "warp" || !step.target) return;
-    if (!userPos) return;
-    const d = Math.hypot(userPos.x - step.target.x, userPos.y - step.target.y);
-    if (d <= warpProximity) {
-      // Switch to next floor and place user at matching warp
-      const planObj = planRef.current || plan;
-      const next =
-        planObj && planObj.steps ? planObj.steps[planObj.index + 1] : null;
-      if (!next) return;
-      const curFloor = floors.find((f) => f.url === selUrl);
-      const nextFloor = floors.find((f) => f.url === next.url);
-      const match = (nextFloor?.points || []).find(
-        (p) =>
-          p?.kind === "poi" &&
-          (p.poiType === "stairs" || p.poiType === "elevator") &&
-          p.warpKey &&
-          normalizeKey(p.warpKey) === step.key
-      );
-      if (match) {
-        const landing = { x: match.x, y: match.y };
-        saveUserPos(nextFloor.url, landing);
-        const destId = dest?.id || destRef.current?.id || null;
-        const targetDest =
-          dest ||
-          destRef.current ||
-          floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
-          null;
-        // Schedule resume once next image loads; do not route immediately because image/pos may not be ready yet
-        pendingRouteRef.current = {
-          startPos: landing,
-          startUrl: nextFloor.url,
-          destId,
-        };
-        routeResumeRef.current = () => {
-          const tgt = targetDest || (destId && { id: destId });
-          if (tgt) destRef.current = tgt;
-          startRouteInternal(landing, tgt);
-        };
-        setSelUrl(nextFloor.url);
-        setPlan((p) => {
-          if (!p) return p;
-          const updated = { ...p, index: p.index + 1 };
-          planRef.current = updated;
-          return updated;
-        });
-        setRoutePts([]);
-        // Fallback timer in case onImgLoad does not fire
-        setTimeout(() => {
-          if (routeResumeRef.current) {
-            const resume = routeResumeRef.current;
-            routeResumeRef.current = null;
-            resume();
-          }
-        }, 2500);
+    (async () => {
+      if (!autoWarp) return;
+      if (!plan || !plan.steps || plan.index >= plan.steps.length) return;
+      const step = plan.steps[plan.index];
+      if (step.kind !== "warp" || !step.target) return;
+      if (!userPos) return;
+      const d = Math.hypot(userPos.x - step.target.x, userPos.y - step.target.y);
+      if (d <= warpProximity) {
+        // Switch to next floor and place user at matching warp
+        const planObj = planRef.current || plan;
+        const next =
+          planObj && planObj.steps ? planObj.steps[planObj.index + 1] : null;
+        if (!next) return;
+        const curFloor = floors.find((f) => f.url === selUrl);
+        const nextFloor = floors.find((f) => f.url === next.url);
+        const match = (nextFloor?.points || []).find(
+          (p) =>
+            p?.kind === "poi" &&
+            (p.poiType === "stairs" || p.poiType === "elevator") &&
+            p.warpKey &&
+            normalizeKey(p.warpKey) === step.key
+        );
+        if (match) {
+          const landingRaw = { x: match.x, y: match.y };
+          const landing = await snapLandingToWalkable(nextFloor, landingRaw);
+          saveUserPos(nextFloor.url, landing);
+          const destId = dest?.id || destRef.current?.id || null;
+          const targetDest =
+            dest ||
+            destRef.current ||
+            floors.flatMap((f) => f.points || []).find((p) => p.id === destId) ||
+            null;
+          // Schedule resume once next image loads; do not route immediately because image/pos may not be ready yet
+          pendingRouteRef.current = {
+            startPos: landing,
+            startUrl: nextFloor.url,
+            destId,
+          };
+          routeResumeRef.current = () => {
+            const tgt = targetDest || (destId && { id: destId });
+            if (tgt) destRef.current = tgt;
+            startRouteInternal(landing, tgt);
+          };
+          setSelUrl(nextFloor.url);
+          setPlan((p) => {
+            if (!p) return p;
+            const updated = { ...p, index: p.index + 1 };
+            planRef.current = updated;
+            return updated;
+          });
+          setRoutePts([]);
+          // Fallback timer in case onImgLoad does not fire
+          setTimeout(() => {
+            if (routeResumeRef.current) {
+              const resume = routeResumeRef.current;
+              routeResumeRef.current = null;
+              resume();
+            }
+          }, 2500);
+        }
       }
-    }
-  }, [autoWarp, userPos, plan, floors, selUrl, warpProximity]);
+    })();
+  }, [autoWarp, userPos, plan, floors, selUrl, warpProximity, snapLandingToWalkable]);
 
   // If a shared route switched floors, retry starting once we're on that floor
   useEffect(() => {
@@ -1641,15 +1679,25 @@ export default function UserMap() {
   // ---------------------------------------------------------------------------
   return (
     <div className="card shadow-sm bg-card ">
-      <div className="position-relative mb-3 text-center">
-        <h1 className="card-title display-1 fancy-font text-card text-shadow-sm mb-0">
+      <div className="d-flex align-items-center justify-content-between position-relative mb-3">
+        {/* QR code button */}
+        <div className="ms-2">
+          <ShareRouteQRCode
+            shareUrl={shareUrl}
+            hasRoute={!!(userPos && dest)}
+          />
+        </div>
+
+        {/* Title */}
+        <h1 className="card-title display-1 fancy-font text-card text-shadow-sm mb-0 text-center">
           <span className="text-orange">Public </span>
           <span className="text-blue">Map</span>
         </h1>
-        {/* Accessible mode toggle */}
+
+        {/* Accessibility button */}
         <button
-          className={`btn position-absolute top-50 end-0 translate-middle-y me-2 no-shadow ${
-            accessibleMode ? "btn-light" : "btn-outline-light"
+          className={`btn btn-sm ms-3 me-2 no-shadow ${
+            accessibleMode ? "btn-light" : "btn-outline-secondary text-white"
           }`}
           onClick={() => {
             setAccessibleMode((v) => !v);
@@ -1659,7 +1707,7 @@ export default function UserMap() {
             waypointIdxRef.current = 0;
           }}
         >
-          <i className="bi bi-person-wheelchair me-1 text-primary"></i>
+          <i className="bi bi-person-wheelchair me-1 text-primary fs-3"></i>
           {accessibleMode ? "On" : "Off"}
         </button>
       </div>
@@ -1668,8 +1716,11 @@ export default function UserMap() {
         <div className="d-flex flex-column flex-md-row flex-wrap align-items-center gap-2 mb-2">
           {/* Floor select */}
           <div className="d-flex align-items-center gap-1">
-            <label htmlFor="floorSelect" className="mb-0 text-card me-2">
-              Floor:
+            <label
+              htmlFor="floorSelect"
+              className="flex-shrink-0 mb-0 text-card me-2"
+            >
+              Select Floor:
             </label>
             <select
               id="floorSelect"
@@ -1688,12 +1739,12 @@ export default function UserMap() {
           {/* Placing toggle */}
           <div className="d-flex align-items-center gap-1 my-2 flex-shrink-0">
             <label htmlFor="placingBtn" className="mb-0 text-card me-2">
-              Your location:
+              Press to set your location:
             </label>
             <button
               id="placingBtn"
               className={`btn btn-sm rounded-pill ${
-                placing ? "btn-dark" : "btn-outline-dark text-white"
+                placing ? "btn-success" : "btn-outline-info text-white"
               }`}
               onClick={() => setPlacing((p) => !p)}
             >
@@ -1730,7 +1781,7 @@ export default function UserMap() {
             Route
           </button>
           <button
-            className="btn btn-outline-secondary btn-sm rounded-4 ms-2"
+            className="btn btn-outline-danger text-white no-shadow btn-sm rounded-4 ms-2"
             onClick={clearRoute}
             disabled={!routePts.length}
           >
@@ -1955,13 +2006,16 @@ export default function UserMap() {
         {!floor && (
           <div className="text-muted">No published floors available yet.</div>
         )}
-        <div className="d-flex align-items-center gap-2 mt-2 flex-wrap">
-          <button
+        <div className="d-flex align-items-center justify-content-center gap-2 mt-2">
+          {/* <button
             className={`btn btn-${autoWarp ? "info" : "outline-info"} btn-sm`}
             onClick={() => setAutoWarp((v) => !v)}
           >
             Auto warp: {autoWarp ? "On" : "Off"}
-          </button>
+          </button> */}
+          <label className="mb-0 flex-shrink-0 text-card slogan">
+            Sensor tracking debug for Safari:
+          </label>
           <button
             className={`btn btn-${
               sensorTracking ? "danger" : "success"
@@ -1971,7 +2025,7 @@ export default function UserMap() {
           >
             {sensorTracking ? "Stop tracking" : "Start tracking"}
           </button>
-          <div
+          {/* <div
             className="d-flex align-items-center small text-muted"
             style={{ gap: 8 }}
           >
@@ -1988,9 +2042,8 @@ export default function UserMap() {
             <span>{moveStep.toFixed(3)}</span>
           </div>
           {searchMsg && <span className="small text-muted">{searchMsg}</span>}
-          {routeMsg && <span className="small text-muted">{routeMsg}</span>}
+          {routeMsg && <span className="small text-muted">{routeMsg}</span>} */}
         </div>
-        <ShareRouteQRCode shareUrl={shareUrl} hasRoute={!!(userPos && dest)} />
         {sensorMsg && <div className="small text-muted mt-2">{sensorMsg}</div>}
         <DebuggerPanel
           visible={debugVisible}
