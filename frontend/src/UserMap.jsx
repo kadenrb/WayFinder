@@ -2002,13 +2002,14 @@ export default function UserMap() {
           <div className="text-muted">No published floors available yet.</div>
         )}
         <div className="d-flex align-items-center justify-content-center gap-2 mt-2">
+          {/* old debug tools we used to help in development */}
           {/* <button
             className={`btn btn-${autoWarp ? "info" : "outline-info"} btn-sm`}
             onClick={() => setAutoWarp((v) => !v)}
           >
             Auto warp: {autoWarp ? "On" : "Off"}
           </button> */}
-          <label className="mb-0 flex-shrink-0 text-card slogan">
+          {/* <label className="mb-0 flex-shrink-0 text-card slogan">
             Sensor tracking debug for Safari:
           </label>
           <button
@@ -2019,7 +2020,7 @@ export default function UserMap() {
             disabled={!sensorTracking && !userPos}
           >
             {sensorTracking ? "Stop tracking" : "Start tracking"}
-          </button>
+          </button> */}
           {/* <div
             className="d-flex align-items-center small text-muted"
             style={{ gap: 8 }}
