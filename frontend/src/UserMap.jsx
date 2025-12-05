@@ -1772,6 +1772,7 @@ export default function UserMap() {
           </div>
         </div>
 
+        {/* Route actions: build or clear the current route */}
         <div className="d-flex mb-2 w-100">
           <button
             className="btn btn-primary flex-grow-1 rounded-4"
@@ -1790,6 +1791,7 @@ export default function UserMap() {
         </div>
 
         {floor && (
+          /* Scrollable map viewport with image + all overlays */
           <div
             className="position-relative"
             ref={scrollRef}
@@ -1800,6 +1802,7 @@ export default function UserMap() {
               className="position-relative"
               style={{ width: natSize.w, height: natSize.h }}
             >
+              {/* Overlay layer for clicks and drawings */}
               <div
                 ref={contentRef}
                 className="position-absolute"
@@ -1819,6 +1822,7 @@ export default function UserMap() {
                   setPlacing(false);
                 }}
               >
+                {/* Route dash animation used by the SVG polylines below */}
                 <style>{`@keyframes routeDash { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }`}</style>
                 <img
                   ref={imgRef}
@@ -1905,6 +1909,7 @@ export default function UserMap() {
                     );
                   })()}
 
+                {/* Floor points (rooms/POIs); clicking sets the destination */}
                 {(Array.isArray(floor.points) ? floor.points : []).map((p) => {
                   const pos = toPx(p.x, p.y);
                   const size = 8;
@@ -1931,6 +1936,7 @@ export default function UserMap() {
                   );
                 })}
 
+                {/* Route waypoints (debug/progression markers) */}
                 {waypoints && waypoints.length > 0 && (
                   <div
                     className="position-absolute"
@@ -1963,6 +1969,7 @@ export default function UserMap() {
                   </div>
                 )}
 
+                {/* Route polylines: main dash + glow */}
                 {routePts && routePts.length > 1 && (
                   <svg
                     className="position-absolute"

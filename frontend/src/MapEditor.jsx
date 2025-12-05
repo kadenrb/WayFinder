@@ -29,6 +29,7 @@ const POI_TYPES = [
   "ramp",
   "atm",
   "vending",
+  "food",
   "parking",
 ];
 
