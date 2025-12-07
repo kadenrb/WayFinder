@@ -530,11 +530,15 @@ export default function UserMap() {
         : []),
     ];
     try {
-      const { grid, gw, gh, step: stp, w, h } = await buildGrid(
+      const base = await buildGrid(
         img,
         colors,
         floorObj.walkable?.tolerance,
         4
+      );
+      const { grid, gw, gh, step: stp, w, h } = applyBlockedAreas(
+        base,
+        floorObj.blockedAreas || []
       );
       const tx = Math.max(0, Math.min(gw - 1, Math.round((pt.x * w) / stp)));
       const ty = Math.max(0, Math.min(gh - 1, Math.round((pt.y * h) / stp)));
@@ -900,6 +904,26 @@ export default function UserMap() {
     }
     return { grid, gw, gh, step, w, h };
   };
+  // Mask out blocked rectangles (normalized coords) on the current grid
+  const applyBlockedAreas = (gridObj, blocked = []) => {
+    if (!gridObj || !Array.isArray(blocked) || !blocked.length) return gridObj;
+    const base = gridObj.obj || gridObj;
+    const { grid, gw, gh, step, w, h } = base;
+    blocked
+      .filter((b) => b && b.active !== false)
+      .forEach((b) => {
+        const x0 = Math.max(0, Math.floor((b.x || 0) * w / step));
+        const y0 = Math.max(0, Math.floor((b.y || 0) * h / step));
+        const x1 = Math.min(gw - 1, Math.ceil(((b.x || 0) + (b.w || 0)) * w / step));
+        const y1 = Math.min(gh - 1, Math.ceil(((b.y || 0) + (b.h || 0)) * h / step));
+        for (let gy = y0; gy <= y1; gy++) {
+          for (let gx = x0; gx <= x1; gx++) {
+            grid[gy * gw + gx] = 0; // mark blocked
+          }
+        }
+      });
+    return gridObj;
+  };
   const nearestWalkable = (grid, gw, gh, sx, sy) => {
     const inb = (x, y) => x >= 0 && y >= 0 && x < gw && y < gh;
     const q = [[sx, sy]];
@@ -1246,7 +1270,8 @@ export default function UserMap() {
       return;
     }
 
-    const { obj: gridObj, sCell, w, h, stp, gw, gh } = attempt;
+    const blockedObj = applyBlockedAreas(attempt, curFloor.blockedAreas || []);
+    const { obj: gridObj, sCell, w, h, stp, gw, gh } = blockedObj;
     let target = null;
     if (step.kind === "dest") {
       const destFloor = floors.find((f) =>
@@ -2015,6 +2040,31 @@ export default function UserMap() {
                     />
                   </svg>
                 )}
+                {/* Blocked areas overlay (light red) */}
+                {(floor.blockedAreas || [])
+                  .filter((b) => b && b.active !== false)
+                  .map((b) => {
+                    const x = b.x * natSize.w;
+                    const y = b.y * natSize.h;
+                    const w = b.w * natSize.w;
+                    const h = b.h * natSize.h;
+                    return (
+                      <div
+                        key={b.id || `${b.x}-${b.y}`}
+                        className="position-absolute"
+                        style={{
+                          left: x,
+                          top: y,
+                          width: w,
+                          height: h,
+                          background: "rgba(255,0,0,0.12)",
+                          border: "1px dashed rgba(255,0,0,0.4)",
+                          pointerEvents: "none",
+                        }}
+                        title={b.label || "Blocked"}
+                      />
+                    );
+                  })}
               </div>
             </div>
           </div>

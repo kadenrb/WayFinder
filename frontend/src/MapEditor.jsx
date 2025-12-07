@@ -63,6 +63,7 @@ export default function MapEditor({ imageSrc }) {
   const spacerRef = useRef(null); // scaled box
   const contentRef = useRef(null); // unscaled content (scaled via CSS transform)
   const imgRef = useRef(null);
+  const blockStartRef = useRef(null);
   const pointItemRefs = useRef(new Map());
   // ===============================
   // SECTION: Pins & Core Editor State
@@ -71,6 +72,8 @@ export default function MapEditor({ imageSrc }) {
   const [selectedId, setSelectedId] = useState(null);
   const [editing, setEditing] = useState(null); // {id?, xPx, yPx, draft}
   const [drag, setDrag] = useState(null); // {id}
+  // Admin-blocked rectangles (no-routing zones) in normalized coords
+  const [blockedAreas, setBlockedAreas] = useState([]);
   // Zoom and natural image size
   const [zoom, setZoom] = useState(1);
   const [natSize, setNatSize] = useState({ w: 0, h: 0 });
@@ -96,7 +99,7 @@ export default function MapEditor({ imageSrc }) {
   // ===============================
   // SECTION: Selection & Batch Delete Tools
   // ===============================
-  const [selectMode, setSelectMode] = useState("none"); // 'none' | 'db' | 'points'
+  const [selectMode, setSelectMode] = useState("none"); // 'none' | 'db' | 'points' | 'blocked'
   const [selectRect, setSelectRect] = useState(null); // {x0,y0,x1,y1} in normalized coords
   const [dbThresh, setDbThresh] = useState(0.12);
   const [dbNorm, setDbNorm] = useState("imagenet"); // 'imagenet' | 'raw'
@@ -360,6 +363,7 @@ export default function MapEditor({ imageSrc }) {
         }
         if (Array.isArray(data?.points)) setPoints(data.points);
         if (Array.isArray(data?.dbBoxes)) setDbBoxes(data.dbBoxes);
+        if (Array.isArray(data?.blockedAreas)) setBlockedAreas(data.blockedAreas);
         if (
           data &&
           typeof data.userPos === "object" &&
@@ -424,6 +428,7 @@ export default function MapEditor({ imageSrc }) {
         JSON.stringify({
           points,
           dbBoxes,
+          blockedAreas,
           userPos,
           walkable,
           northOffset,
@@ -432,7 +437,7 @@ export default function MapEditor({ imageSrc }) {
         })
       );
     } catch { }
-  }, [points, dbBoxes, userPos, walkable, northOffset, storageKey, natSize.w, natSize.h]);
+  }, [points, dbBoxes, blockedAreas, userPos, walkable, northOffset, storageKey, natSize.w, natSize.h]);
 
   // Must declare hooks before any early returns
   /*
@@ -2360,6 +2365,20 @@ export default function MapEditor({ imageSrc }) {
                 >
                   Delete pins
                 </button>
+
+                <button
+                  className={`btn ${
+                    selectMode === "blocked"
+                      ? "btn-outline-warning"
+                      : "btn-warning"
+                  }`}
+                  title="Draw a rectangle to block routing through an area"
+                  onClick={() =>
+                    setSelectMode((m) => (m === "blocked" ? "none" : "blocked"))
+                  }
+                >
+                  Block area
+                </button>
               </div>
             </div>
 
@@ -2549,6 +2568,38 @@ export default function MapEditor({ imageSrc }) {
                   e.target.closest("[data-editor]")
                 )
                   return;
+                // Blocked-area draw: two clicks define opposite corners
+                if (selectMode === "blocked") {
+                  const { x, y } = toNorm(e.clientX, e.clientY);
+                  if (!blockStartRef.current) {
+                    blockStartRef.current = { x, y };
+                    setSelectRect({ x0: x, y0: y, x1: x, y1: y });
+                  } else {
+                    const s = blockStartRef.current;
+                    blockStartRef.current = null;
+                    const x0 = Math.min(s.x, x);
+                    const y0 = Math.min(s.y, y);
+                    const x1 = Math.max(s.x, x);
+                    const y1 = Math.max(s.y, y);
+                    setBlockedAreas((prev) => [
+                      ...prev,
+                      {
+                        id: uid(),
+                        label: `Blocked ${prev.length + 1}`,
+                        x: x0,
+                        y: y0,
+                        w: x1 - x0,
+                        h: y1 - y0,
+                        active: true,
+                      },
+                    ]);
+                    setSelectRect(null);
+                    setSelectMode("none");
+                    setBusy("Added blocked area");
+                    setTimeout(() => setBusy(""), 800);
+                  }
+                  return;
+                }
                 const { x, y } = toNorm(e.clientX, e.clientY);
                 setSelectRect({ x0: x, y0: y, x1: x, y1: y });
                 const move = (ev) => {
@@ -2778,6 +2829,33 @@ export default function MapEditor({ imageSrc }) {
                   );
                 })()}
 
+              {/* =============================== */}
+              {/* SECTION: Overlay - Blocked areas (no-routing zones) */}
+              {blockedAreas
+                .filter((b) => b.active !== false)
+                .map((b) => {
+                  const x = b.x * natSize.w;
+                  const y = b.y * natSize.h;
+                  const w = b.w * natSize.w;
+                  const h = b.h * natSize.h;
+                  return (
+                    <div
+                      key={b.id}
+                      className="position-absolute"
+                      style={{
+                        left: x,
+                        top: y,
+                        width: w,
+                        height: h,
+                        background: "rgba(255,0,0,0.18)",
+                        border: "1px dashed rgba(255,0,0,0.6)",
+                        pointerEvents: "none",
+                        zIndex: 1,
+                      }}
+                      title={b.label || "Blocked area"}
+                    />
+                  );
+                })}
               {/* =============================== */}
               {/* SECTION: Overlay - Pins (rooms/doors/POIs) */}
               {/* =============================== */}
@@ -3412,6 +3490,50 @@ export default function MapEditor({ imageSrc }) {
                     )}
                   </li>
                 ))}
+            </ul>
+          </div>
+        )}
+
+        {/* SECTION: Sidebar - Blocked Areas */}
+        {blockedAreas.length > 0 && (
+          <div className="mt-3">
+            <h6 className="text-dark">Blocked Areas ({blockedAreas.length})</h6>
+            <ul className="list-group">
+              {blockedAreas.map((b) => (
+                <li
+                  key={b.id}
+                  className="list-group-item d-flex align-items-center justify-content-between gap-2"
+                >
+                  <div className="d-flex flex-column flex-grow-1">
+                    <strong>{b.label || "Blocked area"}</strong>
+                    <small className="text-muted">
+                      x:{b.x.toFixed(3)} y:{b.y.toFixed(3)} w:{b.w.toFixed(3)} h:{b.h.toFixed(3)}
+                    </small>
+                  </div>
+                  <div className="d-flex align-items-center gap-2">
+                    <button
+                      className={`btn btn-sm ${b.active === false ? "btn-outline-secondary" : "btn-warning"}`}
+                      onClick={() =>
+                        setBlockedAreas((prev) =>
+                          prev.map((item) =>
+                            item.id === b.id ? { ...item, active: !item.active } : item
+                          )
+                        )
+                      }
+                    >
+                      {b.active === false ? "Inactive" : "Active"}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-outline-danger"
+                      onClick={() =>
+                        setBlockedAreas((prev) => prev.filter((item) => item.id !== b.id))
+                      }
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
             </ul>
           </div>
         )}
