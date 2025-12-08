@@ -15,7 +15,6 @@
     make the whole thing feel like one intentional design, not Franken-Bootstrap.
 */
 
-
 /* Drag & Drop map box – visuals for the map uploader component:
    - Neutral dashed box by default.
    - Slightly brighter on hover/focus.
@@ -131,25 +130,12 @@
   - bg-card: darker textured background for the card shell.
   - bg-card-inner: lighter inner fill so form controls stand out.
   - text-card: light, slightly blue-tinted text over dark card backgrounds.
+  - bg-card-orange: light orange background for the card shell.
+  - bg-card-blue: darker blue background for the card shell.
+  - text-slate: dark slate text for light backgrounds.
 */
 .bg-card {
   background-color: #3d4549;
-  background-image: repeating-linear-gradient(
-      45deg,
-      rgba(255, 255, 255, 0.02),
-      rgba(255, 255, 255, 0.02) 1px,
-      transparent 1px,
-      transparent 4px),
-    repeating-linear-gradient(-45deg,
-      rgba(255, 255, 255, 0.02),
-      rgba(255, 255, 255, 0.02) 1px,
-      transparent 1px,
-      transparent 4px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.bg-card-blue {
-  background-color: #3c4a4f;
   background-image: repeating-linear-gradient(
       45deg,
       rgba(255, 255, 255, 0.02),
@@ -167,19 +153,43 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.bg-card-orange {
-  background-color: #6c3a17;
+.text-slate {
+  color: #3d4549 !important;
+}
+
+.bg-card-dark {
+  background-color: #2e2f33; /* dark, desaturated bronze */
   background-image: repeating-linear-gradient(
       45deg,
-      rgba(255, 255, 255, 0.03),
-      rgba(255, 255, 255, 0.03) 1px,
+      rgba(255, 255, 255, 0.015),
+      rgba(255, 255, 255, 0.015) 1px,
       transparent 1px,
       transparent 4px
     ),
     repeating-linear-gradient(
       -45deg,
-      rgba(255, 255, 255, 0.03),
-      rgba(255, 255, 255, 0.03) 1px,
+      rgba(255, 255, 255, 0.015),
+      rgba(255, 255, 255, 0.015) 1px,
+      transparent 1px,
+      transparent 4px
+    );
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+}
+
+.bg-card-blue {
+  background-color: #155281d7;
+  background-image: repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.02),
+      rgba(255, 255, 255, 0.02) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.02),
+      rgba(255, 255, 255, 0.02) 1px,
       transparent 1px,
       transparent 4px
     );
@@ -280,6 +290,13 @@
   display: inline-block; /* ensures it respects vertical positioning */
 }
 
+.poi-card .form-label {
+  font-size: clamp(0.7rem, 2vw, 1rem);
+}
+
+/*
+ slogan is used around the site for a smaller font
+*/
 .slogan {
   font-size: 0.7rem;
   opacity: 0.75;
@@ -313,19 +330,23 @@
   - Fixed gradient “wallpaper” behind everything.
   - Meant to give the app a “desktop app” vibe instead of plain white. */
 body {
-  background: linear-gradient(100deg,
-      rgb(28, 49, 59) 0%,
-      rgb(47, 56, 63) 50%,
-      rgb(73, 63, 50) 100%);
+  background: linear-gradient(
+    100deg,
+    rgb(28, 49, 59) 0%,
+    rgb(47, 56, 63) 50%,
+    rgb(73, 63, 50) 100%
+  );
   background-attachment: fixed;
 }
 
 .bg-content {
   overflow: hidden;
-  background: linear-gradient(120deg,
-      rgba(25, 70, 90, 1) 0%,
-      rgba(45, 65, 75, 1) 49%,
-      rgba(90, 75, 60, 1) 100%);
+  background: linear-gradient(
+    120deg,
+    rgba(25, 70, 90, 1) 0%,
+    rgba(45, 65, 75, 1) 49%,
+    rgba(90, 75, 60, 1) 100%
+  );
   -webkit-background-clip: padding-box;
   background-clip: padding-box;
 }

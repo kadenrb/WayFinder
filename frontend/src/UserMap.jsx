@@ -105,10 +105,21 @@ export default function UserMap() {
   const patchDebug = (patch) => {
     setDebugData((prev) => ({ ...prev, ...patch }));
   };
+
   useEffect(() => {
     patchDebug({ sensorMsg });
   }, [sensorMsg]);
 
+  // Show the welcome banner on first load
+  const [showBanner, setShowBanner] = useState(() => {
+    return sessionStorage.getItem("bannerHidden") !== "true";
+  });
+
+  // Close the banner and remember the choice in session storage
+  const closeBanner = () => {
+    sessionStorage.setItem("bannerHidden", "true");
+    setShowBanner(false);
+  };
   // ---------------------------------------------------------------------------
   // SHARE URL ENCODING/DECODING (for QR handoff)
   // We keep the payload small: start floor URL, user position, dest id, accessibility.
@@ -327,6 +338,7 @@ export default function UserMap() {
           url: f.url || f.imageData || "",
           points: Array.isArray(f.points) ? f.points : [],
           walkable: f.walkable || { color: "#9F9383", tolerance: 12 },
+          blockedAreas: Array.isArray(f.blockedAreas) ? f.blockedAreas : [],
           sortOrder: typeof f.sortOrder === "number" ? f.sortOrder : index,
         }))
         .filter((f) => f.url);
@@ -426,11 +438,26 @@ export default function UserMap() {
     return { x, y };
   };
   const toPx = (x, y) => ({ x: x * natSize.w, y: y * natSize.h });
+
+  // Keep the user marker on a walkable pixel by re-snapping to the nearest valid cell.
+  // Useful after warp or initial load when the stored position might land inside walls/rooms.
+  const resnapUserToWalkable = () => {
+    if (!userPos) return;
+    const snapped = snapToWalkable(userPos.x, userPos.y);
+    if (!snapped) return;
+    if (snapped.x !== userPos.x || snapped.y !== userPos.y) {
+      setUserPos(snapped);
+      saveUserPos(selUrl, snapped);
+    }
+  };
+
   // Image load: update natural size, cache it, rebuild grid, and resume any pending route after a warp
   const onImgLoad = (e) => {
     const w = e.target.naturalWidth;
     const h = e.target.naturalHeight;
     setNatSize({ w, h });
+    // Keep user marker on walkable after image is ready (helps on warp/mobile)
+    resnapUserToWalkable();
     if (shareStartRef.current) {
       // Kick routing after image is ready when loading from a shared link
       startRoute();
@@ -528,11 +555,15 @@ export default function UserMap() {
         : []),
     ];
     try {
-      const { grid, gw, gh, step: stp, w, h } = await buildGrid(
+      const base = await buildGrid(
         img,
         colors,
         floorObj.walkable?.tolerance,
         4
+      );
+      const { grid, gw, gh, step: stp, w, h } = applyBlockedAreas(
+        base,
+        floorObj.blockedAreas || []
       );
       const tx = Math.max(0, Math.min(gw - 1, Math.round((pt.x * w) / stp)));
       const ty = Math.max(0, Math.min(gh - 1, Math.round((pt.y * h) / stp)));
@@ -898,6 +929,26 @@ export default function UserMap() {
     }
     return { grid, gw, gh, step, w, h };
   };
+  // Mask out blocked rectangles (normalized coords) on the current grid
+  const applyBlockedAreas = (gridObj, blocked = []) => {
+    if (!gridObj || !Array.isArray(blocked) || !blocked.length) return gridObj;
+    const base = gridObj.obj || gridObj;
+    const { grid, gw, gh, step, w, h } = base;
+    blocked
+      .filter((b) => b && b.active !== false)
+      .forEach((b) => {
+        const x0 = Math.max(0, Math.floor((b.x || 0) * w / step));
+        const y0 = Math.max(0, Math.floor((b.y || 0) * h / step));
+        const x1 = Math.min(gw - 1, Math.ceil(((b.x || 0) + (b.w || 0)) * w / step));
+        const y1 = Math.min(gh - 1, Math.ceil(((b.y || 0) + (b.h || 0)) * h / step));
+        for (let gy = y0; gy <= y1; gy++) {
+          for (let gx = x0; gx <= x1; gx++) {
+            grid[gy * gw + gx] = 0; // mark blocked
+          }
+        }
+      });
+    return gridObj;
+  };
   const nearestWalkable = (grid, gw, gh, sx, sy) => {
     const inb = (x, y) => x >= 0 && y >= 0 && x < gw && y < gh;
     const q = [[sx, sy]];
@@ -1244,7 +1295,8 @@ export default function UserMap() {
       return;
     }
 
-    const { obj: gridObj, sCell, w, h, stp, gw, gh } = attempt;
+    const blockedObj = applyBlockedAreas(attempt, curFloor.blockedAreas || []);
+    const { obj: gridObj, sCell, w, h, stp, gw, gh } = blockedObj;
     let target = null;
     if (step.kind === "dest") {
       const destFloor = floors.find((f) =>
@@ -1504,6 +1556,8 @@ export default function UserMap() {
     setWaypoints([]);
     waypointIdxRef.current = 0;
     pendingRouteRef.current = null;
+    setUserPos(null);
+    userPosRef.current = null;
   };
 
   // Auto-warp when near target warp
@@ -1558,7 +1612,12 @@ export default function UserMap() {
             planRef.current = updated;
             return updated;
           });
+          // Clear current leg visuals/waypoints; next leg will rebuild on load
           setRoutePts([]);
+          routePtsRef.current = [];
+          waypointPtsRef.current = [];
+          setWaypoints([]);
+          waypointIdxRef.current = 0;
           // Fallback timer in case onImgLoad does not fire
           setTimeout(() => {
             if (routeResumeRef.current) {
@@ -1679,6 +1738,34 @@ export default function UserMap() {
   // ---------------------------------------------------------------------------
   return (
     <div className="card shadow-sm bg-card ">
+      {/* Banner for unsupported browsers called here because we need to access the tracking data*/}
+      {showBanner && (
+        <div
+          className="alert alert-warning text-dark text-center m-0 rounded-0 w-100 position-fixed top-0 start-0 d-flex justify-content-center align-items-center"
+          style={{ zIndex: 1050 }}
+        >
+          <button
+            className={
+              "btn rounded-pill no-shadow btn-info text-black mx-1 py-2"
+            }
+            onClick={() => {
+              sensorTracking ? stopSensorTracking() : startSensorTracking();
+              closeBanner();
+            }}
+            disabled={!sensorTracking && !userPos}
+          >
+            {sensorTracking ? "Stop navigation" : "Start live navigation"}
+          </button>
+          <span className="mx-2 slogan fst-italic">
+            Live navigation is not fully supported in Firefox/Brave yet.
+          </span>
+          <button
+            className="btn-close ms-2"
+            onClick={closeBanner}
+            aria-label="Close"
+          ></button>
+        </div>
+      )}
       <div className="d-flex align-items-center justify-content-between position-relative mb-3">
         {/* QR code button */}
         <div className="ms-2">
@@ -2006,6 +2093,31 @@ export default function UserMap() {
                     />
                   </svg>
                 )}
+                {/* Blocked areas overlay (light red) */}
+                {(floor.blockedAreas || [])
+                  .filter((b) => b && b.active !== false)
+                  .map((b) => {
+                    const x = b.x * natSize.w;
+                    const y = b.y * natSize.h;
+                    const w = b.w * natSize.w;
+                    const h = b.h * natSize.h;
+                    return (
+                      <div
+                        key={b.id || `${b.x}-${b.y}`}
+                        className="position-absolute"
+                        style={{
+                          left: x,
+                          top: y,
+                          width: w,
+                          height: h,
+                          background: "rgba(255,0,0,0.12)",
+                          border: "1px dashed rgba(255,0,0,0.4)",
+                          pointerEvents: "none",
+                        }}
+                        title={b.label || "Blocked"}
+                      />
+                    );
+                  })}
               </div>
             </div>
           </div>
@@ -2014,13 +2126,14 @@ export default function UserMap() {
           <div className="text-muted">No published floors available yet.</div>
         )}
         <div className="d-flex align-items-center justify-content-center gap-2 mt-2">
+          {/* old debug tools we used to help in development */}
           {/* <button
             className={`btn btn-${autoWarp ? "info" : "outline-info"} btn-sm`}
             onClick={() => setAutoWarp((v) => !v)}
           >
             Auto warp: {autoWarp ? "On" : "Off"}
           </button> */}
-          <label className="mb-0 flex-shrink-0 text-card slogan">
+          {/* <label className="mb-0 flex-shrink-0 text-card slogan">
             Sensor tracking debug for Safari:
           </label>
           <button
@@ -2031,7 +2144,7 @@ export default function UserMap() {
             disabled={!sensorTracking && !userPos}
           >
             {sensorTracking ? "Stop tracking" : "Start tracking"}
-          </button>
+          </button> */}
           {/* <div
             className="d-flex align-items-center small text-muted"
             style={{ gap: 8 }}
