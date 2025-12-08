@@ -22,7 +22,7 @@ export default function ShareRouteQRCode({ shareUrl, hasRoute }) {
         </div>
       )}
       {disabled ? (
-        <div className="text-card mt-1 fst-italic slogan">Need a route</div>
+        <div className="text-card mt-1 fst-italic slogan">Make a route</div>
       ) : (
         <div className="text-card mt-1 fst-italic slogan">Route ready</div>
       )}

@@ -63,6 +63,9 @@ function App() {
     - floors: list of published floors pulled from the S3 manifest.
     - selectedFloorId: which floor is currently selected in the dropdown (id or name).
     - manifestStatus / manifestError: basic loading/error state for the manifest fetch.
+    - showHelp: controls whether the "Help" modal is open.
+    - showKiosk: controls whether the "Kiosk" modal is open.
+    - showPhone: controls whether the "Phone" modal is open.
   */
   const [promptEmail, setPromptEmail] = useState(false);
   const [deleteEmail, setDeleteEmail] = useState(false);
@@ -74,6 +77,9 @@ function App() {
   const [selectedFloorId, setSelectedFloorId] = useState(null);
   const [manifestStatus, setManifestStatus] = useState("idle");
   const [manifestError, setManifestError] = useState("");
+  const [showHelp, setShowHelp] = useState(false);
+  const [showKiosk, setShowKiosk] = useState(false);
+  const [showPhone, setShowPhone] = useState(false);
 
   /*
     Static list of locations for the notification system:
@@ -334,18 +340,212 @@ function App() {
       </div>
 
       <div class="bg-card py-3 border-bottom-blue border-top-orange rounded">
-        <nav className="d-flex justify-content-between align-items-center mx-2">
-          <Link className="btn btn-outline-primary fw-bold" to="/admin/sign-in">
+        <nav className="d-flex justify-content-between align-items-center mx-2 gap-1">
+          <Link
+            className="btn btn-outline-primary btn-sm fw-bold py-2"
+            to="/admin/sign-in"
+          >
             Own a business?
           </Link>
           <button
-            className="btn btn-primary fw-bold"
+            className="btn btn-outline-info text-info btn-sm text-shadow-sm px-1 py-2 fw-bold"
+            onClick={() => setShowHelp(true)}
+          >
+            How to use
+            <i className="bi bi-info-circle-fill ms-2"></i>
+          </button>
+          <button
+            className="btn btn-outline-primary btn-sm fw-bold py-2"
             onClick={() => setPromptEmail(true)}
           >
             Get notified
           </button>
         </nav>
       </div>
+
+      {/*
+        HELP MODAL:
+        - Shows a modal with instructions for using WayFinder.
+        - Uses Bootstrap's "modal" styling but is manually controlled via React state.
+      */}
+      {showHelp && (
+        <div className="modal fade show d-block" tabIndex="-1">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content bg-card-dark text-white shadow">
+              <div className="modal-header justify-content-center align-items-center">
+                <h5 className="modal-title">
+                  <span className="ms-2 text-blue fancy-font display-3 text-shadow-sm">
+                    Way
+                  </span>
+                </h5>
+                <span className="text-orange fancy-font display-3 text-shadow-sm">
+                  Finder
+                </span>
+                <button
+                  className="btn btn-outline-danger btn-sm position-absolute top-0 end-0 m-2"
+                  onClick={() => setShowHelp(false)}
+                >
+                  X
+                </button>
+              </div>
+
+              <div className="modal-body text-center">
+                <p>What do you need help with?</p>
+
+                <button
+                  className="btn btn-primary w-100 mb-2 fw-bold"
+                  onClick={() => {
+                    setShowHelp(false);
+                    setShowKiosk(true);
+                  }}
+                >
+                  <i className="bi bi-display me-2"></i>
+                  Kiosk
+                </button>
+                <button
+                  className="btn btn-info w-100 fw-bold text-white"
+                  onClick={() => {
+                    setShowHelp(false);
+                    setShowPhone(true);
+                  }}
+                >
+                  <i className="bi bi-phone me-2 text-white"></i>
+                  Phone
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/*
+        KIOSK HELP MODAL:
+        - Shows a modal with instructions for using the kiosk.
+        - Uses Bootstrap's "modal" styling but is manually controlled via React state.
+      */}
+
+      {showKiosk && (
+        <div className="modal fade show d-block" tabIndex="-1">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content text-card bg-card-dark">
+              <div className="modal-header justify-content-center display-3 position-relative">
+                <h5 className="modal-title fancy-font display-4 text-shadow-sm text-center">
+                  <span className="text-orange">Kiosk</span>{" "}
+                  <span className="text-blue">Help</span>
+                </h5>
+                <button
+                  className="btn btn-outline-danger btn-sm position-absolute top-0 end-0 m-2"
+                  onClick={() => setShowKiosk(false)}
+                >
+                  X
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <ol className="ps-3">
+                  <li>
+                    Sign up for notifications or access different maps
+                    (optional).
+                  </li>
+                  <li>
+                    Turn on Accessibility{" "}
+                    <i className="bi bi-person-wheelchair text-primary"></i> if
+                    you have trouble going up or down stairs.
+                  </li>
+                  <li>
+                    Search for a destination by typing the room number (ex:
+                    B501) <strong>OR</strong>
+                  </li>
+                  <li>
+                    Click your destination directly on the map (make sure to
+                    choose the correct floor).
+                  </li>
+                  <li>
+                    Navigate back to the starting floor (if you changed it) and
+                    click the <strong>Route</strong> button to generate your
+                    path.
+                  </li>
+
+                  <li>
+                    Send the route to your phone by clicking the{" "}
+                    <i className="bi bi-qr-code-scan"></i> QR code icon and scan
+                    it.
+                  </li>
+                  <li>Follow the route to your destination from your phone.</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/*
+        PHONE HELP MODAL:
+        - Shows a modal with instructions for using the phone app.
+        - Uses Bootstrap's "modal" styling but is manually controlled via React state.
+      */}
+
+      {showPhone && (
+        <div className="modal fade show d-block" tabIndex="-1">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content text-card bg-card-dark">
+              <div className="modal-header justify-content-center w-100 position-relative">
+                <h5 className="modal-title fancy-font display-4 text-shadow-sm text-center">
+                  <span className="text-orange">Phone</span>{" "}
+                  <span className="text-blue">Help</span>
+                </h5>
+                <button
+                  className="btn btn-outline-danger btn-sm position-absolute top-0 end-0 m-2"
+                  onClick={() => setShowPhone(false)}
+                >
+                  X
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <ol className="ps-3">
+                  <li>Load WayFinder / scan QR code.</li>
+                  <li>
+                    If your browser is compatible, click{" "}
+                    <strong>Start Tracking</strong> on the popup menu.
+                  </li>
+                  <li>
+                    If you scanned the QR code from a kiosk, simply hit route!
+                  </li>
+                  <li>
+                    Sign up for notifications or access different maps
+                    (optional).
+                  </li>
+                  <li>
+                    Turn on Accessibility{" "}
+                    <i className="bi bi-person-wheelchair text-primary"></i> if
+                    you have trouble going up or down stairs.
+                  </li>
+                  <li>
+                    Click on the “You Are Here” button and select your general
+                    area. (If needed, change the floor you are on.)
+                  </li>
+                  <li>
+                    Search a destination by typing in the room number you need
+                    (ex: B501). <strong>OR</strong>
+                  </li>
+                  <li>
+                    Click your destination directly on the map (make sure to
+                    choose the correct floor).
+                  </li>
+                  <li>
+                    Then click the <strong>Route</strong> button.
+                  </li>
+                  <li>
+                    Follow the route to the destination! Be sure to clear your
+                    route once you arrive.
+                  </li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/*
         "GET NOTIFIED" MODAL:
@@ -376,62 +576,44 @@ function App() {
             overflowY: "auto",
           }}
         >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: 420,
-              background: "var(--bs-body-bg, #fff)",
-              borderRadius: 12,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-              overflow: "hidden",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
+          <div className="bg-card-dark rounded-5 p-3 shadow">
             {/* Modal header */}
-            <div
-              className="modal-header bg-card-blue text-center p-2"
-              style={{ padding: "0.75rem 1rem" }}
-            >
-              <h5 className="modal-title text-white" style={{ margin: 0 }}>
+            <div className="modal-header text-center mb-2 justify-content-between">
+              <h5 className="modal-title text-card" style={{ margin: 0 }}>
                 Enter Your Email & Location to Get Notified
               </h5>
-              <button
-                type="button"
-                className="btn-close p-2"
-                onClick={() => setPromptEmail(false)}
-              />
             </div>
 
             {/* Modal body */}
-            <div className="modal-body py-4 bg-head">
-              <input
-                type="text"
-                className="form-control mb-2 bg-card-inner"
-                placeholder="Enter a valid email..."
-                value={userEmail}
-                onChange={(e) => setUserEmail(e.target.value)}
-              />
+            <div className="border-top border-bottom">
+              <div className="modal-body py-4">
+                <input
+                  type="text"
+                  className="form-control mb-2 bg-card-inner"
+                  placeholder="Enter a valid email..."
+                  value={userEmail}
+                  onChange={(e) => setUserEmail(e.target.value)}
+                />
 
-              <Select
-                options={options}
-                value={options.filter((o) => location.includes(o.value))}
-                onChange={(vals) => setLocation(vals.map((v) => v.value))}
-                isMulti
-                placeholder="Select location(s)..."
-                styles={{
-                  menuList: (base) => ({
-                    ...base,
-                    maxHeight: "200px",
-                    overflowY: "auto",
-                    paddingBottom: "0.75rem",
-                  }),
-                }}
-              />
+                <Select
+                  options={options}
+                  value={options.filter((o) => location.includes(o.value))}
+                  onChange={(vals) => setLocation(vals.map((v) => v.value))}
+                  isMulti
+                  placeholder="Select location(s)..."
+                  styles={{
+                    menuList: (base) => ({
+                      ...base,
+                      maxHeight: "200px",
+                      overflowY: "auto",
+                      paddingBottom: "0.75rem",
+                    }),
+                  }}
+                />
+              </div>
             </div>
-
             {/* Modal footer */}
-            <div className="modal-footer bg-card-blue d-flex flex-column gap-3">
+            <div className="modal-footer d-flex flex-column gap-3">
               {/* Primary actions */}
               <div className="d-flex flex-column gap-2 w-75 mt-3 mx-3">
                 <button
@@ -449,11 +631,9 @@ function App() {
                   Cancel
                 </button>
               </div>
-
-              {/* Danger action, visually separated */}
               <div className="d-flex justify-content-center w-100 mb-2">
                 <button
-                  className="btn btn-sm btn-outline-danger w-25"
+                  className="btn btn-sm btn-outline-danger w-50"
                   onClick={() => {
                     setPromptEmail(false);
                     setDeleteEmail(true);
@@ -498,65 +678,51 @@ function App() {
             overflowY: "auto",
           }}
         >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: 420,
-              background: "var(--bs-body-bg, #fff)",
-              borderRadius: 12,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-              overflow: "hidden",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
+          <div className="bg-card-dark rounded-5 p-3 shadow">
             {/* Modal header */}
-            <div className="modal-header bg-head text-center p-2">
-              <h5 className="modal-title text-white" style={{ margin: 0 }}>
+            <div className="modal-header text-center mb-2 justify-content-between">
+              <h5 className="modal-title text-card m-0">
                 Enter Your Email to Unsubscribe
               </h5>
-              <button
-                type="button"
-                className="btn-close ms-4 px-2"
-                onClick={() => setDeleteEmail(false)}
-              />
             </div>
 
             {/* Modal body */}
-            <div className="modal-body bg-head p-2">
-              <input
-                type="text"
-                className="form-control bg-card-inner"
-                placeholder="Enter your email"
-                value={userEmail}
-                onChange={(e) => setUserEmail(e.target.value)}
-              />
+            <div className="border-top border-bottom">
+              <div className="modal-body py-4">
+                <input
+                  type="text"
+                  className="form-control mb-2 bg-card-inner"
+                  placeholder="Enter your email..."
+                  value={userEmail}
+                  onChange={(e) => setUserEmail(e.target.value)}
+                />
+              </div>
             </div>
 
             {/* Modal footer */}
-            <div className="modal-footer bg-content py-3 px-1 d-flex gap-2">
-              <button
-                className="btn btn-outline-primary flex-grow-1"
-                onClick={() => setDeleteEmail(false)}
-              >
-                Cancel
-              </button>
-
-              <button
-                className="btn btn-danger flex-grow-1"
-                onClick={validateEmail(userEmail) ? deleteUser : undefined}
-                disabled={!validateEmail(userEmail)}
-                style={{ flex: 1 }}
-              >
-                Unsubscribe
-              </button>
+            <div className="modal-footer d-flex flex-column gap-3">
+              <div className="d-flex flex-column gap-2 w-75 mt-3 mx-3">
+                <button
+                  className="btn btn-danger btn-lg w-100"
+                  onClick={validateEmail(userEmail) ? deleteUser : undefined}
+                  disabled={!validateEmail(userEmail)}
+                >
+                  Unsubscribe
+                </button>
+                <button
+                  className="btn btn-outline-primary w-100"
+                  onClick={() => setDeleteEmail(false)}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {/*
-        MAP PREVIEW + FLOOR SELECTOR:
+        MAP PREVIEW + FLOOR SELECTOR used for dev testing:
         - MapPreview gets the URL for the currently selected floor’s image.
         - Below that:
             - "loading" message while the manifest is being fetched.

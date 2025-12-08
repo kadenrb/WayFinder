@@ -130,6 +130,9 @@
   - bg-card: darker textured background for the card shell.
   - bg-card-inner: lighter inner fill so form controls stand out.
   - text-card: light, slightly blue-tinted text over dark card backgrounds.
+  - bg-card-orange: light orange background for the card shell.
+  - bg-card-blue: darker blue background for the card shell.
+  - text-slate: dark slate text for light backgrounds.
 */
 .bg-card {
   background-color: #3d4549;
@@ -150,38 +153,43 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.bg-card-blue {
-  background-color: #3c4a4f;
+.text-slate {
+  color: #3d4549 !important;
+}
+
+.bg-card-dark {
+  background-color: #2e2f33; /* dark, desaturated bronze */
   background-image: repeating-linear-gradient(
       45deg,
-      rgba(255, 255, 255, 0.02),
-      rgba(255, 255, 255, 0.02) 1px,
+      rgba(255, 255, 255, 0.015),
+      rgba(255, 255, 255, 0.015) 1px,
       transparent 1px,
       transparent 4px
     ),
     repeating-linear-gradient(
       -45deg,
-      rgba(255, 255, 255, 0.02),
-      rgba(255, 255, 255, 0.02) 1px,
+      rgba(255, 255, 255, 0.015),
+      rgba(255, 255, 255, 0.015) 1px,
       transparent 1px,
       transparent 4px
     );
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
 }
 
-.bg-card-orange {
-  background-color: #6c3a17;
+.bg-card-blue {
+  background-color: #155281d7;
   background-image: repeating-linear-gradient(
       45deg,
-      rgba(255, 255, 255, 0.03),
-      rgba(255, 255, 255, 0.03) 1px,
+      rgba(255, 255, 255, 0.02),
+      rgba(255, 255, 255, 0.02) 1px,
       transparent 1px,
       transparent 4px
     ),
     repeating-linear-gradient(
       -45deg,
-      rgba(255, 255, 255, 0.03),
-      rgba(255, 255, 255, 0.03) 1px,
+      rgba(255, 255, 255, 0.02),
+      rgba(255, 255, 255, 0.02) 1px,
       transparent 1px,
       transparent 4px
     );

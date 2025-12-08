@@ -124,7 +124,7 @@ export default function LandingPage({ user }) {
       if (idx === -1) return prev;
       try {
         URL.revokeObjectURL(prev[idx].url);
-      } catch { }
+      } catch {}
       const next = prev.slice(0, idx).concat(prev.slice(idx + 1));
       // Adjust selection
       if (selectedImageId === id) {
@@ -141,7 +141,7 @@ export default function LandingPage({ user }) {
       prev.forEach((i) => {
         try {
           if (i.url) URL.revokeObjectURL(i.url);
-        } catch { }
+        } catch {}
       });
       return [];
     });
@@ -194,7 +194,7 @@ export default function LandingPage({ user }) {
   const savePublicMapUrl = () => {
     try {
       localStorage.setItem("wf_public_map_url", publicMapUrl);
-    } catch { }
+    } catch {}
     alert("Public map URL saved for homepage preview");
   };
 
@@ -292,7 +292,7 @@ export default function LandingPage({ user }) {
               : undefined,
           northOffset:
             typeof floor.northOffset === "number" &&
-              Number.isFinite(floor.northOffset)
+            Number.isFinite(floor.northOffset)
               ? floor.northOffset
               : 0,
         };
@@ -301,7 +301,7 @@ export default function LandingPage({ user }) {
             `wf_map_editor_state:${floor.url || ""}`,
             JSON.stringify(state)
           );
-        } catch { }
+        } catch {}
       });
       // Rehydrate images list for the editor
       setImages(
@@ -337,8 +337,7 @@ export default function LandingPage({ user }) {
     setSelectedImageId(images[ni].id);
   };
 
-  const selectedImage =
-    images.find((i) => i.id === selectedImageId) || null;
+  const selectedImage = images.find((i) => i.id === selectedImageId) || null;
 
   // Build a warp registry and suggest a cross-floor route plan
   // Removed: dev-only cross-floor helpers (now user-side only)
@@ -376,7 +375,7 @@ export default function LandingPage({ user }) {
       const data = raw ? JSON.parse(raw) : {};
       data.userPos = { x: pos.x, y: pos.y };
       localStorage.setItem(key, JSON.stringify(data));
-    } catch { }
+    } catch {}
   }
 
   // Debounced proximity watcher to auto-switch floors when reaching a warp
@@ -414,7 +413,7 @@ export default function LandingPage({ user }) {
               : undefined,
           northOffset:
             typeof state?.northOffset === "number" &&
-              Number.isFinite(state.northOffset)
+            Number.isFinite(state.northOffset)
               ? state.northOffset
               : 0,
         });
@@ -443,36 +442,39 @@ export default function LandingPage({ user }) {
   const handleSignOut = () => {
     try {
       localStorage.removeItem("token");
-    } catch { }
+    } catch {}
     navigate("/");
   };
 
   return (
-    <div className="landing">
-      <div className="bg-head p-3 rounded mb-3 border-bottom">
-        <header
-          className="d-flex flex-column flex-md-row justify-content-between 
-          align-items-center mb-3 text-center text-md-start"
-        >
-          <div
-            className="display-3 fw-bold text-shadow d-flex align-items-center 
-            justify-content-center justify-content-md-start"
-          >
-            <img src={logo} alt="WayFinder Logo" className="me-2 logo-img" />
-            <span className="text-blue">Way</span>
-            <span className="text-orange">Finder</span>
-          </div>
+    <div className="">
+      <div className="bg-head rounded position-relative">
+        <header>
+          <div className="d-flex justify-content-center align-items-center position-relative">
+            <div className="fw-bold d-flex align-items-center justify-content-center">
+              <img src={logo} alt="WayFinder Logo" className="logo-img" />
+              <div>
+                <div className="text-shadow size-title">
+                  <span className="text-blue fancy-font way-shift">Way</span>
+                  <span className="text-orange fancy-font">Finder</span>
+                </div>
+                <div className="text-light slogan fancy-font text-end">
+                  Find your way, your way
+                </div>
+              </div>
+            </div>
 
-          <nav className="d-flex flex-column me-2">
+            {/* Sign out button pinned to the right */}
             <button
-              className="btn btn-outline-primary fw-bold px-5"
-              onClick={() => handleSignOut()}
+              className="btn btn-outline-primary fw-bold px-4 position-absolute end-0 me-3"
+              onClick={handleSignOut}
             >
               Sign Out
             </button>
-          </nav>
+          </div>
         </header>
       </div>
+
       <div className="d-flex justify-content-center">
         <div className="text-center mb-5 mt-4 card shadow-sm bg-card text-card h3 border-4 d-inline-block py-3 rounded-pill px-5">
           {admin ? (
@@ -480,7 +482,7 @@ export default function LandingPage({ user }) {
               Welcome,{" "}
               <span className="text-orange fw-bold">{admin.email}</span>. You
               are currently managing maps for{" "}
-              <span className="text-orange fw-bold">{admin.tags}</span>.
+              <span className="text-blue fw-bold">{admin.tags}</span>.
             </>
           ) : (
             "Loading..."
@@ -521,7 +523,7 @@ export default function LandingPage({ user }) {
               </button>
 
               <button
-                className="btn btn-info"
+                className="btn btn-warning text-white"
                 onClick={resumeFromManifest}
                 disabled={resuming}
               >
@@ -603,6 +605,8 @@ export default function LandingPage({ user }) {
             <MapEditor imageSrc={selectedImage?.url || ""} />
           </div>
 
+          {/* Old public map URL uploader before it was hosted
+          
           <aside>
             <div className="card shadow-sm bg-card text-card px-4 py-3 border-4 mb-4 justify-content-center text-center rounded-5">
               <h3 className="border-bottom border-2 border-blue rounded-3 pb-3 mb-0 fw-bold text-shadow-sm">
@@ -627,7 +631,7 @@ export default function LandingPage({ user }) {
                 </button>
               </div>
             </div>
-          </aside>
+          </aside> */}
         </section>
       </main>
     </div>
