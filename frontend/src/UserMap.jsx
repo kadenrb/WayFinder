@@ -438,6 +438,19 @@ export default function UserMap() {
     return { x, y };
   };
   const toPx = (x, y) => ({ x: x * natSize.w, y: y * natSize.h });
+
+  // Keep the user marker on a walkable pixel by re-snapping to the nearest valid cell.
+  // Useful after warp or initial load when the stored position might land inside walls/rooms.
+  const resnapUserToWalkable = () => {
+    if (!userPos) return;
+    const snapped = snapToWalkable(userPos.x, userPos.y);
+    if (!snapped) return;
+    if (snapped.x !== userPos.x || snapped.y !== userPos.y) {
+      setUserPos(snapped);
+      saveUserPos(selUrl, snapped);
+    }
+  };
+
   // Image load: update natural size, cache it, rebuild grid, and resume any pending route after a warp
   const onImgLoad = (e) => {
     const w = e.target.naturalWidth;
