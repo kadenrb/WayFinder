@@ -1987,6 +1987,9 @@ export default function MapEditor({ imageSrc }) {
             url: url || state?.imageSrc || "",
             points: Array.isArray(state?.points) ? state.points : [],
             walkable: state?.walkable || { color: "#9F9383", tolerance: 12 },
+            blockedAreas: Array.isArray(state?.blockedAreas)
+              ? state.blockedAreas
+              : [],
           });
         } catch {}
       }
@@ -2000,6 +2003,7 @@ export default function MapEditor({ imageSrc }) {
           url: imageSrc || "",
           points: points || [],
           walkable: walkable,
+          blockedAreas: blockedAreas || [],
         });
       }
       const payload = { floors };
