@@ -18,6 +18,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ensureDbnet, detectDbnet } from "./detectors/dbnet";
+import { Modal } from "bootstrap";
 
 // Point schema
 // { id, kind: 'room'|'door'|'poi', poiType?, name?, roomNumber?, aliases?: string[], x, y }
@@ -86,6 +87,12 @@ export default function MapEditor({ imageSrc }) {
     () => new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }),
     []
   );
+
+  // Help modal
+  const [showHelp, setShowHelp] = useState(false);
+
+  // Confirmation popup for clear all
+  const [confirmPopup, setConfirmPopup] = useState(null);
   // Detector controls
   const [detectorMode, setDetectorMode] = useState("none"); // 'none' | 'db'
   const [progActive, setProgActive] = useState(false);
@@ -110,17 +117,7 @@ export default function MapEditor({ imageSrc }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [pointsLocked, setPointsLocked] = useState(false); // toggle to prevent accidental moves
 
-  // ===============================
-  // SECTION: Inline List Editing (quick fixes)
-  // ===============================
-  const [listEditId, setListEditId] = useState(null);
-  const [listDraft, setListDraft] = useState(() => ({
-    name: "",
-    roomNumber: "",
-    aliasText: "",
-    warpKey: "",
-    poiType: POI_TYPES[0] || "",
-  }));
+
 
   // ===============================
   // SECTION: User Marker (dev/debug routing)
@@ -130,7 +127,11 @@ export default function MapEditor({ imageSrc }) {
   // ===============================
   // SECTION: Walkable Path Color (admin)
   // ===============================
-  const [walkable, setWalkable] = useState({ color: '#9F9383', tolerance: 12, extraColors: [] });
+  const [walkable, setWalkable] = useState({
+    color: "#9F9383",
+    tolerance: 12,
+    extraColors: [],
+  });
   const [northOffset, setNorthOffset] = useState(0);
   // Routing overlay (dev tool): path from user to selected point, constrained to walkable color
   const [routePts, setRoutePts] = useState([]); // [{x,y}] in normalized coords
@@ -152,6 +153,29 @@ export default function MapEditor({ imageSrc }) {
   // Cached walkable grid to avoid rebuilding on every user position update
   const walkGridRef = useRef(null); // { grid, gw, gh, step, w, h }
 
+
+
+ // Pagination setup
+  const PAGE_SIZE = 20;        // number of points per page
+  const [page, setPage] = useState(0);   // 0-based index (page 1 = index 0)
+
+  // ===============================
+  // SECTION: Inline List Editing (quick fixes)
+  // ===============================
+  const [listEditId, setListEditId] = useState(null);
+  const [listDraft, setListDraft] = useState(() => ({
+    name: "",
+    roomNumber: "",
+    aliasText: "",
+    warpKey: "",
+    poiType: POI_TYPES[0] || "",
+  }));
+
+
+  
+
+  
+  
   // ===============================
   // SECTION: Pan & Zoom Image Component
   // ===============================
@@ -394,7 +418,10 @@ export default function MapEditor({ imageSrc }) {
         } else {
           setWalkable({ color: "#9F9383", tolerance: 12, extraColors: [] });
         }
-        if (typeof data?.northOffset === 'number' && Number.isFinite(data.northOffset)) {
+        if (
+          typeof data?.northOffset === "number" &&
+          Number.isFinite(data.northOffset)
+        ) {
           setNorthOffset(data.northOffset);
         } else {
           setNorthOffset(0);
@@ -403,7 +430,7 @@ export default function MapEditor({ imageSrc }) {
         setPoints([]);
         setDbBoxes([]);
         setUserPos(null);
-        setWalkable({ color: '#9F9383', tolerance: 12, extraColors: [] });
+        setWalkable({ color: "#9F9383", tolerance: 12, extraColors: [] });
         setNorthOffset(0);
       }
     } catch {}
@@ -435,8 +462,17 @@ export default function MapEditor({ imageSrc }) {
           imageHeight: natSize.h,
         })
       );
-    } catch { }
-  }, [points, dbBoxes, blockedAreas, userPos, walkable, northOffset, storageKey, natSize.w, natSize.h]);
+    } catch {}
+  }, [
+    points,
+    dbBoxes,
+    userPos,
+    walkable,
+    northOffset,
+    storageKey,
+    natSize.w,
+    natSize.h,
+  ]);
 
   // Must declare hooks before any early returns
   /*
@@ -1314,6 +1350,13 @@ export default function MapEditor({ imageSrc }) {
     }, 600);
   };
 
+  // Confirm popup selector
+  const handleConfirm = () => {
+    if (confirmPopup === "db boxes") setDbBoxes([]);
+    if (confirmPopup === "pins") setPoints([]);
+    setConfirmPopup(null);
+  };
+
   // Super deep scan: 8x8 tiles, heavier upscale
   // Denser OCR tiling (max recall)
   // Same as deep scan but with an 8x8 grid. Use when you are OK with longer runtime.
@@ -1781,7 +1824,8 @@ export default function MapEditor({ imageSrc }) {
   const toNorm = (clientX, clientY) => {
     const el = contentRef.current;
     const rect = el?.getBoundingClientRect();
-    if (!rect || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
+    if (!rect || !el || rect.width === 0 || rect.height === 0)
+      return { x: 0, y: 0 };
     const sx = clientX - rect.left;
     const sy = clientY - rect.top;
     const x = clamp01(sx / rect.width);
@@ -2034,8 +2078,14 @@ export default function MapEditor({ imageSrc }) {
       const text = await f.text();
       const data = JSON.parse(text);
       const applyState = (state) => {
-        const w = typeof state?.imageWidth === "number" && state.imageWidth > 0 ? state.imageWidth : null;
-        const h = typeof state?.imageHeight === "number" && state.imageHeight > 0 ? state.imageHeight : null;
+        const w =
+          typeof state?.imageWidth === "number" && state.imageWidth > 0
+            ? state.imageWidth
+            : null;
+        const h =
+          typeof state?.imageHeight === "number" && state.imageHeight > 0
+            ? state.imageHeight
+            : null;
 
         // If the JSON carries image dimensions, seed natSize so overlays match
         if (w && h) setNatSize({ w, h });
@@ -2091,8 +2141,11 @@ export default function MapEditor({ imageSrc }) {
         }
         if (!chosen && data.floors.length > 1) {
           const labels = data.floors.map((floor, index) => {
-            const label = floor?.name || floor?.id || floor?.url || `Floor ${index + 1}`;
-            const count = Array.isArray(floor?.points) ? floor.points.length : 0;
+            const label =
+              floor?.name || floor?.id || floor?.url || `Floor ${index + 1}`;
+            const count = Array.isArray(floor?.points)
+              ? floor.points.length
+              : 0;
             return `${index + 1}. ${label} (${count} pts)`;
           });
           const promptMsg = [
@@ -2276,9 +2329,9 @@ export default function MapEditor({ imageSrc }) {
     // ===============================
     // SECTION: Render - Shell & Toolbar
     // ===============================
-    <div className="card shadow-sm bg-card text-card px-3 py-3 border-4 mb-4 rounded-5">
+    <div className="card shadow-sm bg-card text-card px-3 border-4 mb-4 rounded-5">
       <div className="card-body">
-        <div className="d-flex flex-wrap align-items-center py-3 px-3 border-bottom border-2 border-orange rounded-3">
+        <div className="d-flex flex-wrap align-items-center justify-content-between py-3 px-3 border-bottom border-2 border-orange rounded-3">
           <div className="d-flex flex-wrap align-items-center gap-2">
             <button
               className="btn btn-secondary btn-sm px-2 py-1"
@@ -2305,69 +2358,48 @@ export default function MapEditor({ imageSrc }) {
             </button>
           </div>
 
-          <h5 className="h2 card-title text-center text-card fw-bold text-shadow-sm flex-grow-1 me-5">
-            WayFinder - Map Editor
-          </h5>
+          <h1 className="card-title display-3 mx-4 fancy-font text-card text-shadow-sm mb-0 text-center">
+            <span className="text-orange">Map</span>
+            <span className="text-blue"> Editor</span>
+          </h1>
 
           <button
             className="btn btn-info text-white px-3 py-1"
-            onClick={() => alert("Are we writing docs?")}
+            onClick={() => setShowHelp(true)}
           >
-            Help
+            Help <i className="bi bi-info-circle-fill ms-2"></i>
           </button>
         </div>
         <div
           className="d-flex flex-wrap justify-content-center mb-4 border-top border-2 border-orange rounded-3"
           ref={rootRef}
         >
-          <div className="d-flex flex-wrap align-items-center mt-3 gap-5">
+          <div className="d-flex flex-wrap align-items-center small text-muted gap-2 mt-3">
             {/* Left buttons */}
-            <div className="d-flex flex-wrap align-items-center small text-muted gap-5">
-              <div className="me-5 d-flex flex-wrap align-items-center">
-                <button
-                  className="btn btn-info text-white"
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                >
-                  {showAdvanced
-                    ? "Hide Advanced Settings"
-                    : "Advanced Settings"}
-                </button>
-                <button
-                  className={`btn ${pointsLocked ? "btn-outline-danger" : "btn-danger"}`}
-                  title="Lock pins to prevent dragging"
-                  onClick={() => setPointsLocked((v) => !v)}
-                >
-                  {pointsLocked ? "Unlock dots" : "Lock dots"}
-                </button>
-              </div>
-              <div className="gap-3 d-flex flex-wrap">
-                <button
-                  className={`btn ${
-                    selectMode === "db" ? "btn-outline-danger" : "btn-danger"
-                  }`}
-                  title="Draw to select and delete DB boxes"
-                  onClick={() =>
-                    setSelectMode((m) => (m === "db" ? "none" : "db"))
-                  }
-                >
-                  Delete DB boxes
-                </button>
-
-                <button
-                  className={`btn ${
-                    selectMode === "points"
-                      ? "btn-outline-danger"
-                      : "btn-danger"
-                  }`}
-                  title="Draw to select and delete pins"
-                  onClick={() =>
-                    setSelectMode((m) => (m === "points" ? "none" : "points"))
-                  }
-                >
-                  Delete pins
-                </button>
-
-                <button
+            <div className="me-2 d-flex flex-wrap align-items-center small">
+              <button
+                className={`btn btn-sm text-white ${
+                  showAdvanced ? "btn-info" : "btn-outline-info"
+                }`}
+                onClick={() => setShowAdvanced(!showAdvanced)}
+              >
+                {showAdvanced ? "Hide Advanced Settings" : "Advanced Settings"}
+              </button>
+              <label className="ms-2 me-1 text-white">Pins:</label>
+              <button
+                className={`btn btn-sm text-white ${
+                  pointsLocked ? "btn-info" : "btn-outline-info"
+                }`}
+                title="Lock pins to prevent dragging"
+                onClick={() => setPointsLocked((v) => !v)}
+              >
+                {pointsLocked ? (
+                  <i class="bi bi-lock"></i>
+                ) : (
+                  <i class="bi bi-unlock"></i>
+                )}
+              </button>
+              <button
                   className={`btn ${
                     selectMode === "blocked-add" || selectMode === "blocked-remove"
                       ? "btn-outline-warning"
@@ -2386,20 +2418,18 @@ export default function MapEditor({ imageSrc }) {
                     ? "Click to remove no-go zones"
                     : "Click to add no-go zone"}
                 </button>
-              </div>
             </div>
-
             {/* Walkable inputs */}
-            <div
-              className="d-flex flex-wrap align-items-center ms-2 small text-card text-shadow-sm"
-              style={{ gap: 10 }}
-            >
+            <div className="d-flex flex-wrap align-items-center small text-card gap-1">
               <span>Walkable colour:</span>
               <input
                 type="color"
                 value={walkable?.color || "#9F9383"}
                 onChange={(e) =>
-                  setWalkable((w) => ({ ...w, color: normHex(e.target.value) }))
+                  setWalkable((w) => ({
+                    ...w,
+                    color: normHex(e.target.value),
+                  }))
                 }
                 title="Walkable path color"
               />
@@ -2408,11 +2438,19 @@ export default function MapEditor({ imageSrc }) {
                 style={{ width: 100 }}
                 value={walkable?.color || ""}
                 onChange={(e) =>
-                  setWalkable((w) => ({ ...w, color: normHex(e.target.value) }))
+                  setWalkable((w) => ({
+                    ...w,
+                    color: normHex(e.target.value),
+                  }))
                 }
                 placeholder="#9F9383"
               />
-              <button className="btn btn-sm btn-outline-secondary" onClick={pickWalkableFromScreen}>Pick</button>
+              <button
+                className="btn btn-sm btn-success"
+                onClick={pickWalkableFromScreen}
+              >
+                Pick
+              </button>
               <div className="d-flex align-items-center gap-2">
                 <span>Extra colours:</span>
                 <input
@@ -2422,53 +2460,118 @@ export default function MapEditor({ imageSrc }) {
                   title="Add an additional walkable colour"
                 />
                 <button
-                  className="btn btn-sm btn-outline-primary"
+                  className="btn btn-sm btn-success"
                   onClick={() => {
                     const next = Array.from(
-                      new Set([...(walkable.extraColors || []), normHex(extraColorDraft)])
+                      new Set([
+                        ...(walkable.extraColors || []),
+                        normHex(extraColorDraft),
+                      ])
                     );
                     setWalkable((w) => ({ ...w, extraColors: next }));
                   }}
                 >
                   Add
                 </button>
-                {Array.isArray(walkable.extraColors) && walkable.extraColors.length > 0 && (
-                  <div className="d-flex align-items-center gap-1 flex-wrap">
-                    {walkable.extraColors.map((c) => (
-                      <span key={c} className="badge text-bg-light">
-                        {c.toUpperCase()}{" "}
-                        <button
-                          className="btn btn-sm btn-link p-0"
-                          onClick={() =>
-                            setWalkable((w) => ({
-                              ...w,
-                              extraColors: (w.extraColors || []).filter((x) => x !== c),
-                            }))
-                          }
-                        >
-                          x
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                {Array.isArray(walkable.extraColors) &&
+                  walkable.extraColors.length > 0 && (
+                    <div className="d-flex align-items-center gap-1 flex-wrap">
+                      {walkable.extraColors.map((c) => (
+                        <span key={c} className="badge text-bg-light">
+                          {c.toUpperCase()}{" "}
+                          <button
+                            className="btn btn-sm btn-link p-0"
+                            onClick={() =>
+                              setWalkable((w) => ({
+                                ...w,
+                                extraColors: (w.extraColors || []).filter(
+                                  (x) => x !== c
+                                ),
+                              }))
+                            }
+                          >
+                            x
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
               </div>
-              <span>North offset</span>
-              <input
-                type="number"
-                className="form-control form-control-sm"
-                style={{ width: 80 }}
-                value={Number.isFinite(northOffset) ? northOffset : 0}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setNorthOffset(Number.isFinite(val) ? Math.max(-360, Math.min(360, val)) : 0);
-                }}
-                title="Degrees between map up and true north"
-              />
-              <span className="text-muted">deg</span>
+            </div>
+            {/* Right buttons */}
+            <div className="d-flex flex-wrap align-items-center text-card small">
+              <span className="me-1">Select erase:</span>
+              <div className="d-flex flex-wrap gap-2">
+                <button
+                  className={`btn btn-sm ${
+                    selectMode === "db" ? "btn-danger" : "btn-outline-danger"
+                  }`}
+                  onClick={() =>
+                    setSelectMode((m) => (m === "db" ? "none" : "db"))
+                  }
+                >
+                  DB Boxes
+                </button>
+
+                <button
+                  className={`btn btn-sm ${
+                    selectMode === "points"
+                      ? "btn-danger"
+                      : "btn-outline-danger"
+                  }`}
+                  onClick={() =>
+                    setSelectMode((m) => (m === "points" ? "none" : "points"))
+                  }
+                >
+                  Pins
+                </button>
+              </div>
             </div>
           </div>
         </div>
+
+        {showHelp && (
+          <div className="modal fade show d-block" tabIndex="-1">
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content text-card bg-card-dark">
+                <div className="modal-header justify-content-center w-100 position-relative">
+                  <h5 className="modal-title fancy-font display-4 text-shadow-sm text-center">
+                    <span className="text-orange">Editor</span>{" "}
+                    <span className="text-blue">Help</span>
+                  </h5>
+                  <button
+                    className="btn btn-outline-danger btn-sm position-absolute top-0 end-0 m-2"
+                    onClick={() => setShowHelp(false)}
+                  >
+                    X
+                  </button>
+                </div>
+
+                <div className="modal-body">
+                  <ol className="ps-3">
+                    <li>Upload map images.</li>
+                    <li>Detect OCR DB boxes.</li>
+                    <li>Select erase unwanted boxes</li>
+                    <li>
+                      Detect DB boxes (get text out of boxes for room numbers).
+                    </li>
+                    <li>Clear all DB boxes.</li>
+                    <li>Add points of interest pins (optional).</li>
+                    <li>
+                      Select what colour of the map should be determined as
+                      walkable (Routes will try to only go on this colour, can
+                      select multiple)
+                    </li>
+                    <li>Import/Export map data to save editor progress</li>
+                    <li>Publish floors.</li>
+                    <li>Return to home to see map (optional).</li>
+                    <li>Repeat for another building or floor.</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {progActive && (
           <div className="mb-2">
@@ -2491,6 +2594,22 @@ export default function MapEditor({ imageSrc }) {
 
         {showAdvanced && (
           <div className="border rounded p-2 d-flex flex-wrap align-items-center gap-2">
+            <span>North offset</span>
+            <input
+              type="number"
+              className="form-control form-control-sm"
+              style={{ width: 80 }}
+              value={Number.isFinite(northOffset) ? northOffset : 0}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                setNorthOffset(
+                  Number.isFinite(val) ? Math.max(-360, Math.min(360, val)) : 0
+                );
+              }}
+              title="Degrees between map up and true north"
+            />
+            <span className="text-white">deg</span>
+
             <span>Thresh</span>
             <input
               type="range"
@@ -2916,7 +3035,7 @@ export default function MapEditor({ imageSrc }) {
             {editing && (
               <div
                 data-editor
-                className="position-absolute card shadow"
+                className="position-absolute bg-card-blue rounded-5 border-white shadow"
                 style={{
                   left: editing.xPx,
                   top: editing.yPx,
@@ -2926,12 +3045,9 @@ export default function MapEditor({ imageSrc }) {
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div
-                  className="card-body poi-card"
-                  style={{ width: "100%", maxWidth: 500 }}
-                >
+                <div className="card-body">
                   <div className="mb-2">
-                    <label className="form-label">Kind</label>
+                    <label className="form-label">Way point type:</label>
                     <select
                       className="form-select form-select-sm"
                       value={editing.draft.kind}
@@ -3005,13 +3121,14 @@ export default function MapEditor({ imageSrc }) {
                           placeholder="e.g., STAIRS-A, ELEV-1"
                         />
                         <small className="text-muted">
-                          Points with matching Warp Key connect across floors.
+                          Points with matching Warp Key connect across floors
+                          (ex: STAIRS-A to STAIRS-A).
                         </small>
                       </div>
                     )}
 
                   <div className="mb-2">
-                    <label className="form-label">Name</label>
+                    <label className="form-label">Room name:</label>
                     <input
                       className="form-control form-control-sm"
                       type="text"
@@ -3022,12 +3139,12 @@ export default function MapEditor({ imageSrc }) {
                           draft: { ...s.draft, name: e.target.value },
                         }))
                       }
-                      placeholder="e.g., Physics Lab"
+                      placeholder="ex: Tim Hortons"
                     />
                   </div>
 
                   <div className="mb-2">
-                    <label className="form-label">Room Number</label>
+                    <label className="form-label">Room Number:</label>
                     <input
                       className="form-control form-control-sm"
                       type="text"
@@ -3038,12 +3155,14 @@ export default function MapEditor({ imageSrc }) {
                           draft: { ...s.draft, roomNumber: e.target.value },
                         }))
                       }
-                      placeholder="e.g., 2B-104"
+                      placeholder="ex: 210C"
                     />
                   </div>
 
                   <div className="mb-2">
-                    <label className="form-label">Aliases / Ranges</label>
+                    <label className="form-label">
+                      Aliases / Ranges (Used to group rooms together):
+                    </label>
                     <input
                       className="form-control form-control-sm"
                       type="text"
@@ -3074,9 +3193,9 @@ export default function MapEditor({ imageSrc }) {
                           draft: { ...s.draft, aliases: parts },
                         }));
                       }}
-                      placeholder="e.g., AC210-AC221, AC301, AC303"
+                      placeholder="ex: AC210-AC221, AC301, AC303"
                     />
-                    <small className="text-muted">
+                    <small className="slogan text-white">
                       Use commas. Ranges like AC210-AC221 map to this point.
                     </small>
                   </div>
@@ -3112,15 +3231,15 @@ export default function MapEditor({ imageSrc }) {
           </div>
         </div>
 
-        <div className="d-flex flex-wrap gap-5 mt-4 align-items-center justify-content-center">
+        <div className="d-flex flex-wrap gap-5 mt-2 align-items-center justify-content-center">
           <div className="gap-3 d-flex flex-wrap align-items-center">
             <button
-              className="btn btn-warning text-shadow-sm text-white my-auto"
+              className="btn btn-sm btn-warning text-shadow-sm text-white my-auto"
               onClick={exportFloorsJson}
             >
               Export Floors (JSON)
             </button>
-            <label className="btn btn-outline-warning my-auto">
+            <label className="btn btn-sm btn-outline-warning my-auto">
               Import JSON
               <input
                 type="file"
@@ -3132,7 +3251,7 @@ export default function MapEditor({ imageSrc }) {
           </div>
           <div className="gap-3 d-flex flex-wrap align-items-center">
             <button
-              className="btn btn-primary my-auto"
+              className="btn btn-sm btn-primary my-auto"
               onClick={async () => {
                 setBusy("DB detectâ€¦");
                 setProgActive(true);
@@ -3205,7 +3324,7 @@ export default function MapEditor({ imageSrc }) {
               Detect (DB only)
             </button>
             <button
-              className="btn btn-outline-primary my-auto"
+              className="btn btn-sm btn-outline-primary my-auto"
               onClick={async () => {
                 if (!dbBoxes || dbBoxes.length === 0) {
                   setBusy("No DB boxes");
@@ -3295,23 +3414,79 @@ export default function MapEditor({ imageSrc }) {
               OCR DB boxes
             </button>
           </div>
-          <div className="gap-3 d-flex flex-wrap align-items-center">
-            <button
-              className="btn btn-danger btn-sm my-auto"
-              onClick={() => {
-                setDbBoxes([]); /* heatmap removed */
-              }}
-              disabled={!!busy}
-            >
-              Clear DB boxes
-            </button>
-            <button
-              className="btn btn-outline-danger btn-sm my-auto"
-              onClick={() => setPoints([])}
-            >
-              Clear Points
-            </button>
+          {/* INSTANT CLEAR */}
+          <div className="d-flex flex-wrap align-items-center text-card small">
+            <div className="small text-card me-1">Clear All:</div>
+            <div className="d-flex flex-wrap gap-2">
+              <button
+                className="btn btn-danger btn-sm"
+                onClick={() => {
+                  setConfirmPopup("db boxes");
+                  new Modal(
+                    document.getElementById("confirmClearModal")
+                  ).show();
+                }}
+                disabled={!!busy}
+              >
+                DB Boxes
+              </button>
+
+              <button
+                className="btn btn-danger btn-sm"
+                onClick={() => {
+                  setConfirmPopup("pins");
+                  new Modal(
+                    document.getElementById("confirmClearModal")
+                  ).show();
+                }}
+              >
+                Pins
+              </button>
+            </div>
           </div>
+
+          {/* Confirmation modal for the clear all*/}
+          <div
+            className="modal fade"
+            id="confirmClearModal"
+            tabIndex="-1"
+            aria-hidden="true"
+          >
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content bg-card text-card">
+                <div className="modal-header">
+                  <h5 className="modal-title">Just double checking</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Close"
+                  ></button>
+                </div>
+                <div className="modal-body text-center">
+                  This will clear ALL {confirmPopup}, do you want to proceed?
+                </div>
+                <div className="modal-footer justify-content-between">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    data-bs-dismiss="modal"
+                  >
+                    Go back
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={handleConfirm}
+                    data-bs-dismiss="modal"
+                  >
+                    Yes, clear ALL of them
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Removed: duplicate radius slider for OCR dedup (kept default in logic) */}
           {busy && (
             <span
@@ -3323,185 +3498,189 @@ export default function MapEditor({ imageSrc }) {
           )}
         </div>
 
+       
         {/* =============================== */}
         {/* SECTION: Sidebar - Points List */}
         {/* =============================== */}
+
         {points.length > 0 && (
           <div className="mt-3">
-            <h6 className="text-dark">Points ({points.length})</h6>
-            <ul className="list-group">
-              {points
+            <h6 className="text-light">Points ({points.length})</h6>
+
+            {/* =============================== */}
+            {/* Step 1: Compute sorted & paginated points */}
+            {/* =============================== */}
+            {(() => {}) /* Remove any self-invoking function */}
+
+            {(() => {
+              // Compute sorted points
+              const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+              const sortedPoints = points
                 .slice()
                 .sort((a, b) => {
-                  const ka = (
-                    a.roomNumber ||
-                    a.name ||
-                    a.poiType ||
-                    a.kind ||
-                    ""
-                  ).toString();
-                  const kb = (
-                    b.roomNumber ||
-                    b.name ||
-                    b.poiType ||
-                    b.kind ||
-                    ""
-                  ).toString();
+                  const ka = (a.roomNumber || a.name || a.poiType || a.kind || "").toString();
+                  const kb = (b.roomNumber || b.name || b.poiType || b.kind || "").toString();
                   return collator.compare(ka, kb);
-                })
-                .map((p) => (
-                  <li
-                    key={p.id}
-                    ref={(el) => {
-                      if (el) pointItemRefs.current.set(p.id, el);
-                      else pointItemRefs.current.delete(p.id);
-                    }}
-                    className={`list-group-item ${
-                      selectedId === p.id ? "active" : ""
-                    }`}
-                    onClick={(e) => {
-                      if (listEditId !== p.id) focusPoint(p);
-                    }}
-                    onDoubleClick={() => beginEdit(p)}
-                    style={{
-                      cursor: listEditId === p.id ? "default" : "pointer",
-                    }}
-                  >
-                    {listEditId === p.id ? (
-                      <div
-                        className="d-flex flex-wrap flex-column gap-2"
-                        onClick={(e) => e.stopPropagation()}
+                });
+
+              // Pagination
+              const totalPages = Math.ceil(sortedPoints.length / PAGE_SIZE);
+              const paginatedPoints = sortedPoints.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
+              return (
+                <>
+                  {/* =============================== */}
+                  {/* Points List */}
+                  {/* =============================== rounded border border-white bg-card*/}
+                  <ul className="list-group list-group-flush">
+                    {paginatedPoints.map((p) => (
+                      <li
+                        key={p.id}
+                        ref={(el) => {
+                          if (el) pointItemRefs.current.set(p.id, el);
+                          else pointItemRefs.current.delete(p.id);
+                        }}
+                        className={`list-group-item bg-card rounded border border-white ${selectedId === p.id ? "active" : ""}`}
+                        onClick={() => {
+                          if (listEditId !== p.id) focusPoint(p);
+                        }}
+                        onDoubleClick={() => beginEdit(p)}
+                        style={{ cursor: listEditId === p.id ? "default" : "pointer" }}
                       >
-                        <div className="d-flex flex-wrap align-items-center gap-2">
-                          <span className={`badge ${markerClass(p.kind)}`}>
-                            {" "}
-                          </span>
-                          <input
-                            className="form-control form-control-sm"
-                            style={{ maxWidth: 160 }}
-                            placeholder="Room number"
-                            value={listDraft.roomNumber}
-                            onChange={(e) =>
-                              setListDraft((s) => ({
-                                ...s,
-                                roomNumber: e.target.value,
-                              }))
-                            }
-                          />
-                          <input
-                            className="form-control form-control-sm"
-                            style={{ maxWidth: 220 }}
-                            placeholder="Name"
-                            value={listDraft.name}
-                            onChange={(e) =>
-                              setListDraft((s) => ({
-                                ...s,
-                                name: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        {p.kind === "poi" && (
-                          <div className="d-flex flex-wrap align-items-center gap-2">
-                            <span style={{ width: 16 }}></span>
-                            <select
-                              className="form-select form-select-sm"
-                              style={{ maxWidth: 220 }}
-                              value={listDraft.poiType || POI_TYPES[0] || ""}
-                              onChange={(e) =>
-                                setListDraft((s) => ({
-                                  ...s,
-                                  poiType: e.target.value,
-                                }))
-                              }
-                            >
-                              {POI_TYPES.map((type) => (
-                                <option key={type} value={type}>
-                                  {type.charAt(0).toUpperCase() + type.slice(1)}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                        {p.kind === "poi" &&
-                          (listDraft.poiType === "stairs" ||
-                            listDraft.poiType === "elevator") && (
+                        {listEditId === p.id ? (
+                          // ==== EDIT MODE ====
+                          <div className="d-flex flex-wrap flex-column gap-2" onClick={(e) => e.stopPropagation()}>
+                            <div className="d-flex flex-wrap align-items-center gap-2">
+                              <span className={`badge ${markerClass(p.kind)}`}> </span>
+                              <input
+                                className="form-control form-control-sm"
+                                style={{ maxWidth: 160 }}
+                                placeholder="Room number"
+                                value={listDraft.roomNumber}
+                                onChange={(e) =>
+                                  setListDraft((s) => ({ ...s, roomNumber: e.target.value }))
+                                }
+                              />
+                              <input
+                                className="form-control form-control-sm"
+                                style={{ maxWidth: 220 }}
+                                placeholder="Name"
+                                value={listDraft.name}
+                                onChange={(e) =>
+                                  setListDraft((s) => ({ ...s, name: e.target.value }))
+                                }
+                              />
+                            </div>
+
+                            {p.kind === "poi" && (
+                              <div className="d-flex flex-wrap align-items-center gap-2">
+                                <span style={{ width: 16 }}></span>
+                                <select
+                                  className="form-select form-select-sm"
+                                  style={{ maxWidth: 220 }}
+                                  value={listDraft.poiType || POI_TYPES[0] || ""}
+                                  onChange={(e) =>
+                                    setListDraft((s) => ({ ...s, poiType: e.target.value }))
+                                  }
+                                >
+                                  {POI_TYPES.map((type) => (
+                                    <option key={type} value={type}>
+                                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+
+                            {p.kind === "poi" &&
+                              (listDraft.poiType === "stairs" || listDraft.poiType === "elevator") && (
+                                <div className="d-flex flex-wrap align-items-center gap-2">
+                                  <span style={{ width: 16 }}></span>
+                                  <input
+                                    className="form-control form-control-sm"
+                                    style={{ maxWidth: 220 }}
+                                    placeholder="Warp Key (e.g., STAIRS-A)"
+                                    value={listDraft.warpKey || ""}
+                                    onChange={(e) =>
+                                      setListDraft((s) => ({ ...s, warpKey: e.target.value }))
+                                    }
+                                  />
+                                </div>
+                              )}
+
                             <div className="d-flex flex-wrap align-items-center gap-2">
                               <span style={{ width: 16 }}></span>
                               <input
                                 className="form-control form-control-sm"
-                                style={{ maxWidth: 220 }}
-                                placeholder="Warp Key (e.g., STAIRS-A)"
-                                value={listDraft.warpKey || ""}
+                                placeholder="Aliases / Ranges (e.g., AC210-AC221, AC301)"
+                                value={listDraft.aliasText}
                                 onChange={(e) =>
-                                  setListDraft((s) => ({
-                                    ...s,
-                                    warpKey: e.target.value,
-                                  }))
+                                  setListDraft((s) => ({ ...s, aliasText: e.target.value }))
                                 }
                               />
                             </div>
-                          )}
-                        <div className="d-flex flex-wrap align-items-center gap-2">
-                          <span style={{ width: 16 }}></span>
-                          <input
-                            className="form-control form-control-sm"
-                            placeholder="Aliases / Ranges (e.g., AC210-AC221, AC301)"
-                            value={listDraft.aliasText}
-                            onChange={(e) =>
-                              setListDraft((s) => ({
-                                ...s,
-                                aliasText: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="d-flex flex-wrap justify-content-end gap-2">
-                          <button
-                            className="btn btn-sm btn-secondary"
-                            onClick={cancelListEdit}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            className="btn btn-sm btn-primary"
-                            onClick={saveListEdit}
-                            disabled={!listDraft.name && !listDraft.roomNumber}
-                          >
-                            Save
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="d-flex flex-wrap justify-content-between align-items-center">
-                        <span>
-                          <span className={`badge me-2 ${markerClass(p.kind)}`}>
-                            {" "}
-                          </span>
-                          {p.roomNumber
-                            ? `#${p.roomNumber}`
-                            : p.name || p.poiType || p.kind}
-                        </span>
-                        <span className="d-flex flex-wrap align-items-center gap-2">
-                          <small className="text-muted">
-                            ({p.kind}
-                            {p.poiType ? `:${p.poiType}` : ""})
-                          </small>
-                          <button
-                            className="btn btn-sm btn-outline-primary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              beginListEdit(p);
-                            }}
-                          >
-                            Edit
-                          </button>
-                        </span>
-                      </div>
-                    )}
-                  </li>
-                ))}
-            </ul>
+
+                            <div className="d-flex flex-wrap justify-content-end gap-2">
+                              <button className="btn btn-sm btn-secondary" onClick={cancelListEdit}>
+                                Cancel
+                              </button>
+                              <button
+                                className="btn btn-sm btn-primary"
+                                onClick={saveListEdit}
+                                disabled={!listDraft.name && !listDraft.roomNumber}
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          // ==== VIEW MODE ====
+                          <div className="d-flex flex-wrap justify-content-between align-items-center">
+                            <span>
+                              <span className={`badge me-2 ${markerClass(p.kind)}`}> </span>
+                              <span className="text-white">
+                                {p.roomNumber ? `#${p.roomNumber}` : p.name || p.poiType || p.kind}
+                              </span>
+                            </span>
+                            <span className="d-flex flex-wrap align-items-center gap-2">
+                              <small className="text-white">
+                                ({p.kind}{p.poiType ? `:${p.poiType}` : ""})
+                              </small>
+                              <button
+                                className="btn btn-sm btn-outline-primary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  beginListEdit(p);
+                                }}
+                              >
+                                Edit
+                              </button>
+                            </span>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* =============================== */}
+                  {/* Pagination Controls */}
+                  {/* =============================== */}
+                  <div className="d-flex justify-content-between align-items-center mt-2 bg-card p-2 rounded border border-white">
+                    <button className="btn btn-sm btn-primary text-white" disabled={page === 0} onClick={() => setPage(page - 1)}>
+                      ◀ Prev
+                    </button>
+
+                    <span className="text-white">
+                      Page {page + 1} / {totalPages}
+                    </span>
+
+                    <button className="btn btn-sm btn-primary text-white" disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>
+                      Next ▶
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 
