@@ -1,5 +1,5 @@
 /*
-  MAP EDITOR — concise overview
+  MAP EDITOR â€” concise overview
 
   Purpose
   - Display a map image and overlay interactive markers for rooms/doors/POIs.
@@ -12,7 +12,7 @@
 
   Structure
   - State: markers, zoom, detection controls, progress, selection tools.
-  - Helpers: pixel↔normalized conversions, persistence, de‑duplication.
+  - Helpers: pixelâ†”normalized conversions, persistence, deâ€‘duplication.
   - Rendering: image, DB boxes, markers, editor card, list.
 */
 
@@ -63,7 +63,6 @@ export default function MapEditor({ imageSrc }) {
   const spacerRef = useRef(null); // scaled box
   const contentRef = useRef(null); // unscaled content (scaled via CSS transform)
   const imgRef = useRef(null);
-  const blockStartRef = useRef(null);
   const pointItemRefs = useRef(new Map());
   // ===============================
   // SECTION: Pins & Core Editor State
@@ -142,7 +141,7 @@ export default function MapEditor({ imageSrc }) {
   const [routeGap, setRouteGap] = useState(1);
   // Allow routing to include warp connectors (stairs/elevators with matching keys)
   const [useWarps, setUseWarps] = useState(true);
-  // Walkable mask overlay preview — to validate color+tolerance visually
+  // Walkable mask overlay preview â€” to validate color+tolerance visually
   const [showMask, setShowMask] = useState(false);
   const [maskUrl, setMaskUrl] = useState("");
   // Route destination persists even if selection is cleared (e.g., while dragging user)
@@ -238,7 +237,7 @@ export default function MapEditor({ imageSrc }) {
       if (label) setProgLabel(label);
     }
   };
-  // OCR/Tesseract — single shared worker
+  // OCR/Tesseract â€” single shared worker
   // We keep one worker across scans to avoid repeated WASM initialization.
   // createWorker options in use:
   // - workerPath: script the worker runs
@@ -957,7 +956,7 @@ export default function MapEditor({ imageSrc }) {
   const autoDetectRooms = async () => {
     if (!imageSrc) return;
     if (busy) return;
-    setBusy("Running OCR (beta)…");
+    setBusy("Running OCR (beta)â€¦");
     try {
       const worker = await getOcrWorker();
       ocrPrefixRef.current = "OCR";
@@ -1006,7 +1005,7 @@ export default function MapEditor({ imageSrc }) {
     cancelScanRef.current = false;
     try {
       setProgActive(true);
-      setProgress(0, "Preparing…");
+      setProgress(0, "Preparingâ€¦");
       if (!window.Tesseract) {
         await new Promise((resolve, reject) => {
           const s = document.createElement("script");
@@ -1618,9 +1617,9 @@ export default function MapEditor({ imageSrc }) {
   const lightDetectRooms = async () => {
     if (!imageSrc || !natSize.w || !natSize.h) return;
     if (busy) return;
-    setBusy("Loading OpenCV…");
+    setBusy("Loading OpenCVâ€¦");
     try {
-      // Load OpenCV from same‑origin static file under public/opencv/
+      // Load OpenCV from sameâ€‘origin static file under public/opencv/
       if (!(window.cv && window.cv.Mat)) {
         await new Promise((resolve, reject) => {
           const s = document.createElement("script");
@@ -1643,7 +1642,7 @@ export default function MapEditor({ imageSrc }) {
       }
       const cv = window.cv;
       if (!cv || !cv.Mat) throw new Error("OpenCV not ready");
-      setBusy("Light detect: proposing regions…");
+      setBusy("Light detect: proposing regionsâ€¦");
       // Draw image to canvas at 2.5x for better small text
       const scale = 2.5;
       const dw = Math.floor(natSize.w * scale);
@@ -1704,7 +1703,7 @@ export default function MapEditor({ imageSrc }) {
       bin.delete();
       src.delete();
 
-      setBusy(`Light detect: OCR ${boxes.length} regions…`);
+      setBusy(`Light detect: OCR ${boxes.length} regionsâ€¦`);
       const nw = natSize.w,
         nh = natSize.h;
       const ocrOpts = {
@@ -2368,16 +2367,33 @@ export default function MapEditor({ imageSrc }) {
 
                 <button
                   className={`btn ${
-                    selectMode === "blocked"
+                    selectMode === "blocked-add"
                       ? "btn-outline-warning"
                       : "btn-warning"
                   }`}
                   title="Draw a rectangle to block routing through an area"
                   onClick={() =>
-                    setSelectMode((m) => (m === "blocked" ? "none" : "blocked"))
+                    setSelectMode((m) =>
+                      m === "blocked-add" ? "none" : "blocked-add"
+                    )
                   }
                 >
-                  Block area
+                  Add no-go zone
+                </button>
+                <button
+                  className={`btn ${
+                    selectMode === "blocked-remove"
+                      ? "btn-outline-secondary"
+                      : "btn-secondary"
+                  }`}
+                  title="Draw a rectangle to remove blocked areas that intersect it"
+                  onClick={() =>
+                    setSelectMode((m) =>
+                      m === "blocked-remove" ? "none" : "blocked-remove"
+                    )
+                  }
+                >
+                  Remove no-go zone
                 </button>
               </div>
             </div>
@@ -2466,7 +2482,7 @@ export default function MapEditor({ imageSrc }) {
         {progActive && (
           <div className="mb-2">
             <div className="d-flex flex-wrap justify-content-between small text-muted">
-              <span>{progLabel || "Scanning…"}</span>
+              <span>{progLabel || "Scanningâ€¦"}</span>
               <span>{progPct}%</span>
             </div>
             <div className="progress" style={{ height: 6 }}>
@@ -2568,38 +2584,6 @@ export default function MapEditor({ imageSrc }) {
                   e.target.closest("[data-editor]")
                 )
                   return;
-                // Blocked-area draw: two clicks define opposite corners
-                if (selectMode === "blocked") {
-                  const { x, y } = toNorm(e.clientX, e.clientY);
-                  if (!blockStartRef.current) {
-                    blockStartRef.current = { x, y };
-                    setSelectRect({ x0: x, y0: y, x1: x, y1: y });
-                  } else {
-                    const s = blockStartRef.current;
-                    blockStartRef.current = null;
-                    const x0 = Math.min(s.x, x);
-                    const y0 = Math.min(s.y, y);
-                    const x1 = Math.max(s.x, x);
-                    const y1 = Math.max(s.y, y);
-                    setBlockedAreas((prev) => [
-                      ...prev,
-                      {
-                        id: uid(),
-                        label: `Blocked ${prev.length + 1}`,
-                        x: x0,
-                        y: y0,
-                        w: x1 - x0,
-                        h: y1 - y0,
-                        active: true,
-                      },
-                    ]);
-                    setSelectRect(null);
-                    setSelectMode("none");
-                    setBusy("Added blocked area");
-                    setTimeout(() => setBusy(""), 800);
-                  }
-                  return;
-                }
                 const { x, y } = toNorm(e.clientX, e.clientY);
                 setSelectRect({ x0: x, y0: y, x1: x, y1: y });
                 const move = (ev) => {
@@ -2648,6 +2632,41 @@ export default function MapEditor({ imageSrc }) {
                         const removed = before - next.length;
                         if (removed > 0) {
                           setBusy(`Removed ${removed} pins`);
+                          setTimeout(() => setBusy(""), 1200);
+                        }
+                        return next;
+                      });
+                    } else if (selectMode === "blocked-add") {
+                      setBlockedAreas((prev) => [
+                        ...prev,
+                        {
+                          id: uid(),
+                          label: `Blocked ${prev.length + 1}`,
+                          x: x0,
+                          y: y0,
+                          w: x1 - x0,
+                          h: y1 - y0,
+                          active: true,
+                        },
+                      ]);
+                      setBusy("Added blocked area");
+                      setTimeout(() => setBusy(""), 800);
+                    } else if (selectMode === "blocked-remove") {
+                      setBlockedAreas((prev) => {
+                        const before = prev.length;
+                        const next = prev.filter((b) => {
+                          const bx0 = b.x;
+                          const by0 = b.y;
+                          const bx1 = b.x + b.w;
+                          const by1 = b.y + b.h;
+                          const overlap = !(
+                            bx1 < x0 || bx0 > x1 || by1 < y0 || by0 > y1
+                          );
+                          return !overlap;
+                        });
+                        const removed = before - next.length;
+                        if (removed > 0) {
+                          setBusy(`Removed ${removed} blocked areas`);
                           setTimeout(() => setBusy(""), 1200);
                         }
                         return next;
@@ -3123,7 +3142,7 @@ export default function MapEditor({ imageSrc }) {
             <button
               className="btn btn-primary my-auto"
               onClick={async () => {
-                setBusy("DB detect…");
+                setBusy("DB detectâ€¦");
                 setProgActive(true);
                 setProgress(0, "DB detect");
                 const ok = await ensureDbnet();
@@ -3201,7 +3220,7 @@ export default function MapEditor({ imageSrc }) {
                   setTimeout(() => setBusy(""), 1500);
                   return;
                 }
-                setBusy("OCR DB boxes…");
+                setBusy("OCR DB boxesâ€¦");
                 setProgActive(true);
                 setProgress(0, "OCR DB");
                 if (!window.Tesseract) {
