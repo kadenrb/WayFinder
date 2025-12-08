@@ -327,6 +327,7 @@ export default function UserMap() {
           url: f.url || f.imageData || "",
           points: Array.isArray(f.points) ? f.points : [],
           walkable: f.walkable || { color: "#9F9383", tolerance: 12 },
+          blockedAreas: Array.isArray(f.blockedAreas) ? f.blockedAreas : [],
           sortOrder: typeof f.sortOrder === "number" ? f.sortOrder : index,
         }))
         .filter((f) => f.url);
