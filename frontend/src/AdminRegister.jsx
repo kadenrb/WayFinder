@@ -115,29 +115,32 @@ export default function AdminRegister() {
           - Stack on small screens (mobile).
           - Spread out horizontally on larger screens (desktop).
       */}
-      <div className="bg-head p-3 rounded mb-5 border-bottom">
-        <header
-          className="d-flex flex-column flex-md-row justify-content-between 
-          align-items-center mb-3 text-center text-md-start"
-        >
-          <div
-            className="display-3 fw-bold text-shadow mb-3 mb-md-0 d-flex align-items-center 
-            justify-content-center justify-content-md-start"
-          >
-            <img src={logo} alt="WayFinder Logo" className="me-2 logo-img" />
-            <span className="text-blue">Way</span>
-            <span className="text-orange">Finder</span>
+      <div className="bg-head rounded mb-5">
+        <header>
+          <div className="fw-bold d-flex align-items-center justify-content-center">
+            <img src={logo} alt="WayFinder Logo" className="logo-img" />
+            <div>
+              <div className="text-shadow size-title">
+                <span className="text-blue fancy-font way-shift">Way</span>
+                <span className="text-orange fancy-font">Finder</span>
+              </div>
+              <div className="text-light slogan fancy-font text-end">
+                Find your way, your way
+              </div>
+            </div>
           </div>
+        </header>
 
-          <nav className="d-flex flex-column flex-sm-row gap-2">
-            <Link className="btn btn-outline-primary fw-bold px-4" to="/">
+        <div className="bg-card py-3 border-bottom-blue border-top-orange rounded mt-3">
+          <nav className="d-flex justify-content-between align-items-center mx-2 flex-wrap gap-2">
+            <Link className="btn btn-outline-primary fw-bold" to="/">
               Home
             </Link>
             <Link className="btn btn-primary fw-bold" to="/admin/sign-in">
               Admin Sign In
             </Link>
           </nav>
-        </header>
+        </div>
       </div>
 
       {/* 
