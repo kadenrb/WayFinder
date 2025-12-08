@@ -534,7 +534,9 @@ function App() {
                     choose the correct floor).
                   </li>
                   <li>
-                    Then click the <strong>Route</strong> button.
+                    Navigate back to the starting floor (if you changed it) and
+                    click the <strong>Route</strong> button to generate your
+                    path.
                   </li>
                   <li>
                     Follow the route to the destination! Be sure to clear your
