@@ -1,5 +1,5 @@
 /*
-  MAP EDITOR — concise overview
+  MAP EDITOR â€” concise overview
 
   Purpose
   - Display a map image and overlay interactive markers for rooms/doors/POIs.
@@ -12,7 +12,7 @@
 
   Structure
   - State: markers, zoom, detection controls, progress, selection tools.
-  - Helpers: pixel↔normalized conversions, persistence, de‑duplication.
+  - Helpers: pixelâ†”normalized conversions, persistence, deâ€‘duplication.
   - Rendering: image, DB boxes, markers, editor card, list.
 */
 
@@ -72,6 +72,8 @@ export default function MapEditor({ imageSrc }) {
   const [selectedId, setSelectedId] = useState(null);
   const [editing, setEditing] = useState(null); // {id?, xPx, yPx, draft}
   const [drag, setDrag] = useState(null); // {id}
+  // Admin-blocked rectangles (no-routing zones) in normalized coords
+  const [blockedAreas, setBlockedAreas] = useState([]);
   // Zoom and natural image size
   const [zoom, setZoom] = useState(1);
   const [natSize, setNatSize] = useState({ w: 0, h: 0 });
@@ -103,7 +105,7 @@ export default function MapEditor({ imageSrc }) {
   // ===============================
   // SECTION: Selection & Batch Delete Tools
   // ===============================
-  const [selectMode, setSelectMode] = useState("none"); // 'none' | 'db' | 'points'
+  const [selectMode, setSelectMode] = useState("none"); // 'none' | 'db' | 'points' | 'blocked-add' | 'blocked-remove'
   const [selectRect, setSelectRect] = useState(null); // {x0,y0,x1,y1} in normalized coords
   const [dbThresh, setDbThresh] = useState(0.12);
   const [dbNorm, setDbNorm] = useState("imagenet"); // 'imagenet' | 'raw'
@@ -140,7 +142,7 @@ export default function MapEditor({ imageSrc }) {
   const [routeGap, setRouteGap] = useState(1);
   // Allow routing to include warp connectors (stairs/elevators with matching keys)
   const [useWarps, setUseWarps] = useState(true);
-  // Walkable mask overlay preview — to validate color+tolerance visually
+  // Walkable mask overlay preview â€” to validate color+tolerance visually
   const [showMask, setShowMask] = useState(false);
   const [maskUrl, setMaskUrl] = useState("");
   // Route destination persists even if selection is cleared (e.g., while dragging user)
@@ -259,7 +261,7 @@ export default function MapEditor({ imageSrc }) {
       if (label) setProgLabel(label);
     }
   };
-  // OCR/Tesseract — single shared worker
+  // OCR/Tesseract â€” single shared worker
   // We keep one worker across scans to avoid repeated WASM initialization.
   // createWorker options in use:
   // - workerPath: script the worker runs
@@ -384,6 +386,7 @@ export default function MapEditor({ imageSrc }) {
         }
         if (Array.isArray(data?.points)) setPoints(data.points);
         if (Array.isArray(data?.dbBoxes)) setDbBoxes(data.dbBoxes);
+        if (Array.isArray(data?.blockedAreas)) setBlockedAreas(data.blockedAreas);
         if (
           data &&
           typeof data.userPos === "object" &&
@@ -451,6 +454,7 @@ export default function MapEditor({ imageSrc }) {
         JSON.stringify({
           points,
           dbBoxes,
+          blockedAreas,
           userPos,
           walkable,
           northOffset,
@@ -988,7 +992,7 @@ export default function MapEditor({ imageSrc }) {
   const autoDetectRooms = async () => {
     if (!imageSrc) return;
     if (busy) return;
-    setBusy("Running OCR (beta)…");
+    setBusy("Running OCR (beta)â€¦");
     try {
       const worker = await getOcrWorker();
       ocrPrefixRef.current = "OCR";
@@ -1037,7 +1041,7 @@ export default function MapEditor({ imageSrc }) {
     cancelScanRef.current = false;
     try {
       setProgActive(true);
-      setProgress(0, "Preparing…");
+      setProgress(0, "Preparingâ€¦");
       if (!window.Tesseract) {
         await new Promise((resolve, reject) => {
           const s = document.createElement("script");
@@ -1656,9 +1660,9 @@ export default function MapEditor({ imageSrc }) {
   const lightDetectRooms = async () => {
     if (!imageSrc || !natSize.w || !natSize.h) return;
     if (busy) return;
-    setBusy("Loading OpenCV…");
+    setBusy("Loading OpenCVâ€¦");
     try {
-      // Load OpenCV from same‑origin static file under public/opencv/
+      // Load OpenCV from sameâ€‘origin static file under public/opencv/
       if (!(window.cv && window.cv.Mat)) {
         await new Promise((resolve, reject) => {
           const s = document.createElement("script");
@@ -1681,7 +1685,7 @@ export default function MapEditor({ imageSrc }) {
       }
       const cv = window.cv;
       if (!cv || !cv.Mat) throw new Error("OpenCV not ready");
-      setBusy("Light detect: proposing regions…");
+      setBusy("Light detect: proposing regionsâ€¦");
       // Draw image to canvas at 2.5x for better small text
       const scale = 2.5;
       const dw = Math.floor(natSize.w * scale);
@@ -1742,7 +1746,7 @@ export default function MapEditor({ imageSrc }) {
       bin.delete();
       src.delete();
 
-      setBusy(`Light detect: OCR ${boxes.length} regions…`);
+      setBusy(`Light detect: OCR ${boxes.length} regionsâ€¦`);
       const nw = natSize.w,
         nh = natSize.h;
       const ocrOpts = {
@@ -1814,18 +1818,16 @@ export default function MapEditor({ imageSrc }) {
 
   /*
     Convert window/client pixel coordinates into normalized map coordinates (0..1).
-    - Uses the scaled spacer box to translate mouse/touch positions.
-    - Accounts for current zoom so resulting x/y are in content space, not screen px.
+    - Uses the scaled CONTENT box (contentRef) so zoom/transform are reflected.
     - Returns an object { x, y } clamped to [0,1].
   */
   const toNorm = (clientX, clientY) => {
-    const el = spacerRef.current; // use scaled box for pointer math
+    const el = contentRef.current;
     const rect = el?.getBoundingClientRect();
     if (!rect || !el || rect.width === 0 || rect.height === 0)
       return { x: 0, y: 0 };
     const sx = clientX - rect.left;
     const sy = clientY - rect.top;
-    // rect already reflects the scaled size; divide by rect dims to get normalized coords
     const x = clamp01(sx / rect.width);
     const y = clamp01(sy / rect.height);
     return { x, y };
@@ -2029,6 +2031,9 @@ export default function MapEditor({ imageSrc }) {
             url: url || state?.imageSrc || "",
             points: Array.isArray(state?.points) ? state.points : [],
             walkable: state?.walkable || { color: "#9F9383", tolerance: 12 },
+            blockedAreas: Array.isArray(state?.blockedAreas)
+              ? state.blockedAreas
+              : [],
           });
         } catch {}
       }
@@ -2042,6 +2047,7 @@ export default function MapEditor({ imageSrc }) {
           url: imageSrc || "",
           points: points || [],
           walkable: walkable,
+          blockedAreas: blockedAreas || [],
         });
       }
       const payload = { floors };
@@ -2393,6 +2399,25 @@ export default function MapEditor({ imageSrc }) {
                   <i class="bi bi-unlock"></i>
                 )}
               </button>
+              <button
+                  className={`btn ${
+                    selectMode === "blocked-add" || selectMode === "blocked-remove"
+                      ? "btn-outline-warning"
+                      : "btn-warning"
+                  }`}
+                  title="Toggle add/remove no-go zones (draw a rectangle)"
+                  onClick={() =>
+                    setSelectMode((m) => {
+                      if (m === "blocked-add") return "blocked-remove";
+                      if (m === "blocked-remove") return "none";
+                      return "blocked-add";
+                    })
+                  }
+                >
+                  {selectMode === "blocked-add"
+                    ? "Click to remove no-go zones"
+                    : "Click to add no-go zone"}
+                </button>
             </div>
             {/* Walkable inputs */}
             <div className="d-flex flex-wrap align-items-center small text-card gap-1">
@@ -2551,7 +2576,7 @@ export default function MapEditor({ imageSrc }) {
         {progActive && (
           <div className="mb-2">
             <div className="d-flex flex-wrap justify-content-between small text-muted">
-              <span>{progLabel || "Scanning…"}</span>
+              <span>{progLabel || "Scanningâ€¦"}</span>
               <span>{progPct}%</span>
             </div>
             <div className="progress" style={{ height: 6 }}>
@@ -2659,6 +2684,7 @@ export default function MapEditor({ imageSrc }) {
                 height: "100%",
                 transform: `scale(${zoom})`,
                 transformOrigin: "top left",
+                userSelect: selectMode === "none" ? "auto" : "none",
               }}
               onClick={onImageClick}
               onMouseDown={(e) => {
@@ -2717,6 +2743,41 @@ export default function MapEditor({ imageSrc }) {
                         const removed = before - next.length;
                         if (removed > 0) {
                           setBusy(`Removed ${removed} pins`);
+                          setTimeout(() => setBusy(""), 1200);
+                        }
+                        return next;
+                      });
+                    } else if (selectMode === "blocked-add") {
+                      setBlockedAreas((prev) => [
+                        ...prev,
+                        {
+                          id: uid(),
+                          label: `Blocked ${prev.length + 1}`,
+                          x: x0,
+                          y: y0,
+                          w: x1 - x0,
+                          h: y1 - y0,
+                          active: true,
+                        },
+                      ]);
+                      setBusy("Added blocked area");
+                      setTimeout(() => setBusy(""), 800);
+                    } else if (selectMode === "blocked-remove") {
+                      setBlockedAreas((prev) => {
+                        const before = prev.length;
+                        const next = prev.filter((b) => {
+                          const bx0 = b.x;
+                          const by0 = b.y;
+                          const bx1 = b.x + b.w;
+                          const by1 = b.y + b.h;
+                          const overlap = !(
+                            bx1 < x0 || bx0 > x1 || by1 < y0 || by0 > y1
+                          );
+                          return !overlap;
+                        });
+                        const removed = before - next.length;
+                        if (removed > 0) {
+                          setBusy(`Removed ${removed} blocked areas`);
                           setTimeout(() => setBusy(""), 1200);
                         }
                         return next;
@@ -2898,6 +2959,33 @@ export default function MapEditor({ imageSrc }) {
                   );
                 })()}
 
+              {/* =============================== */}
+              {/* SECTION: Overlay - Blocked areas (no-routing zones) */}
+              {blockedAreas
+                .filter((b) => b.active !== false)
+                .map((b) => {
+                  const topLeft = toPx(b.x, b.y);
+                  const bottomRight = toPx(b.x + b.w, b.y + b.h);
+                  const w = bottomRight.x - topLeft.x;
+                  const h = bottomRight.y - topLeft.y;
+                  return (
+                    <div
+                      key={b.id}
+                      className="position-absolute"
+                      style={{
+                        left: topLeft.x,
+                        top: topLeft.y,
+                        width: w,
+                        height: h,
+                        background: "rgba(255,0,0,0.18)",
+                        border: "1px dashed rgba(255,0,0,0.6)",
+                        pointerEvents: "none",
+                        zIndex: 1,
+                      }}
+                      title={b.label || "Blocked area"}
+                    />
+                  );
+                })}
               {/* =============================== */}
               {/* SECTION: Overlay - Pins (rooms/doors/POIs) */}
               {/* =============================== */}
@@ -3165,7 +3253,7 @@ export default function MapEditor({ imageSrc }) {
             <button
               className="btn btn-sm btn-primary my-auto"
               onClick={async () => {
-                setBusy("DB detect…");
+                setBusy("DB detectâ€¦");
                 setProgActive(true);
                 setProgress(0, "DB detect");
                 const ok = await ensureDbnet();
@@ -3243,7 +3331,7 @@ export default function MapEditor({ imageSrc }) {
                   setTimeout(() => setBusy(""), 1500);
                   return;
                 }
-                setBusy("OCR DB boxes…");
+                setBusy("OCR DB boxesâ€¦");
                 setProgActive(true);
                 setProgress(0, "OCR DB");
                 if (!window.Tesseract) {
@@ -3596,7 +3684,49 @@ export default function MapEditor({ imageSrc }) {
           </div>
         )}
 
-        
+        {/* SECTION: Sidebar - Blocked Areas */}
+        {blockedAreas.length > 0 && (
+          <div className="mt-3">
+            <h6 className="text-dark">Blocked Areas ({blockedAreas.length})</h6>
+            <ul className="list-group">
+              {blockedAreas.map((b) => (
+                <li
+                  key={b.id}
+                  className="list-group-item d-flex align-items-center justify-content-between gap-2"
+                >
+                  <div className="d-flex flex-column flex-grow-1">
+                    <strong>{b.label || "Blocked area"}</strong>
+                    <small className="text-muted">
+                      x:{b.x.toFixed(3)} y:{b.y.toFixed(3)} w:{b.w.toFixed(3)} h:{b.h.toFixed(3)}
+                    </small>
+                  </div>
+                  <div className="d-flex align-items-center gap-2">
+                    <button
+                      className={`btn btn-sm ${b.active === false ? "btn-outline-secondary" : "btn-warning"}`}
+                      onClick={() =>
+                        setBlockedAreas((prev) =>
+                          prev.map((item) =>
+                            item.id === b.id ? { ...item, active: !item.active } : item
+                          )
+                        )
+                      }
+                    >
+                      {b.active === false ? "Inactive" : "Active"}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-outline-danger"
+                      onClick={() =>
+                        setBlockedAreas((prev) => prev.filter((item) => item.id !== b.id))
+                      }
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

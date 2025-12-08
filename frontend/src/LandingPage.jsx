@@ -281,6 +281,9 @@ export default function LandingPage({ user }) {
         const state = {
           imageSrc: floor.url || "",
           points: Array.isArray(floor.points) ? floor.points : [],
+          blockedAreas: Array.isArray(floor.blockedAreas)
+            ? floor.blockedAreas
+            : [],
           walkable: floor.walkable || { color: "#9F9383", tolerance: 12 },
           imageWidth:
             typeof floor.width === "number" && floor.width > 0
@@ -401,6 +404,9 @@ export default function LandingPage({ user }) {
           name: img.name || `Floor ${index + 1}`,
           url: hostedUrl,
           points: Array.isArray(state?.points) ? state.points : [],
+          blockedAreas: Array.isArray(state?.blockedAreas)
+            ? state.blockedAreas
+            : [],
           walkable: state?.walkable || { color: "#9F9383", tolerance: 12 },
           sortOrder: index,
           width:
