@@ -98,7 +98,7 @@ export default function MapEditor({ imageSrc }) {
   // ===============================
   // SECTION: Selection & Batch Delete Tools
   // ===============================
-  const [selectMode, setSelectMode] = useState("none"); // 'none' | 'db' | 'points' | 'blocked'
+  const [selectMode, setSelectMode] = useState("none"); // 'none' | 'db' | 'points' | 'blocked-add' | 'blocked-remove'
   const [selectRect, setSelectRect] = useState(null); // {x0,y0,x1,y1} in normalized coords
   const [dbThresh, setDbThresh] = useState(0.12);
   const [dbNorm, setDbNorm] = useState("imagenet"); // 'imagenet' | 'raw'
@@ -1775,17 +1775,15 @@ export default function MapEditor({ imageSrc }) {
 
   /*
     Convert window/client pixel coordinates into normalized map coordinates (0..1).
-    - Uses the scaled spacer box to translate mouse/touch positions.
-    - Accounts for current zoom so resulting x/y are in content space, not screen px.
+    - Uses the scaled CONTENT box (contentRef) so zoom/transform are reflected.
     - Returns an object { x, y } clamped to [0,1].
   */
   const toNorm = (clientX, clientY) => {
-    const el = spacerRef.current; // use scaled box for pointer math
+    const el = contentRef.current;
     const rect = el?.getBoundingClientRect();
-    if (!rect || !el || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
+    if (!rect || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
     const sx = clientX - rect.left;
     const sy = clientY - rect.top;
-    // rect already reflects the scaled size; divide by rect dims to get normalized coords
     const x = clamp01(sx / rect.width);
     const y = clamp01(sy / rect.height);
     return { x, y };
@@ -2367,33 +2365,22 @@ export default function MapEditor({ imageSrc }) {
 
                 <button
                   className={`btn ${
-                    selectMode === "blocked-add"
+                    selectMode === "blocked-add" || selectMode === "blocked-remove"
                       ? "btn-outline-warning"
                       : "btn-warning"
                   }`}
-                  title="Draw a rectangle to block routing through an area"
+                  title="Toggle add/remove no-go zones (draw a rectangle)"
                   onClick={() =>
-                    setSelectMode((m) =>
-                      m === "blocked-add" ? "none" : "blocked-add"
-                    )
+                    setSelectMode((m) => {
+                      if (m === "blocked-add") return "blocked-remove";
+                      if (m === "blocked-remove") return "none";
+                      return "blocked-add";
+                    })
                   }
                 >
-                  Add no-go zone
-                </button>
-                <button
-                  className={`btn ${
-                    selectMode === "blocked-remove"
-                      ? "btn-outline-secondary"
-                      : "btn-secondary"
-                  }`}
-                  title="Draw a rectangle to remove blocked areas that intersect it"
-                  onClick={() =>
-                    setSelectMode((m) =>
-                      m === "blocked-remove" ? "none" : "blocked-remove"
-                    )
-                  }
-                >
-                  Remove no-go zone
+                  {selectMode === "blocked-add"
+                    ? "Click to remove no-go zones"
+                    : "Click to add no-go zone"}
                 </button>
               </div>
             </div>
@@ -2574,6 +2561,7 @@ export default function MapEditor({ imageSrc }) {
                 height: "100%",
                 transform: `scale(${zoom})`,
                 transformOrigin: "top left",
+                userSelect: selectMode === "none" ? "auto" : "none",
               }}
               onClick={onImageClick}
               onMouseDown={(e) => {
