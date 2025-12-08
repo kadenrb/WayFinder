@@ -105,10 +105,21 @@ export default function UserMap() {
   const patchDebug = (patch) => {
     setDebugData((prev) => ({ ...prev, ...patch }));
   };
+
   useEffect(() => {
     patchDebug({ sensorMsg });
   }, [sensorMsg]);
 
+  // Show the welcome banner on first load
+  const [showBanner, setShowBanner] = useState(() => {
+    return sessionStorage.getItem("bannerHidden") !== "true";
+  });
+
+  // Close the banner and remember the choice in session storage
+  const closeBanner = () => {
+    sessionStorage.setItem("bannerHidden", "true");
+    setShowBanner(false);
+  };
   // ---------------------------------------------------------------------------
   // SHARE URL ENCODING/DECODING (for QR handoff)
   // We keep the payload small: start floor URL, user position, dest id, accessibility.
@@ -1714,6 +1725,34 @@ export default function UserMap() {
   // ---------------------------------------------------------------------------
   return (
     <div className="card shadow-sm bg-card ">
+      {/* Banner for unsupported browsers called here because we need to access the tracking data*/}
+      {showBanner && (
+        <div
+          className="alert alert-warning text-dark text-center m-0 rounded-0 w-100 position-fixed top-0 start-0 d-flex justify-content-center align-items-center"
+          style={{ zIndex: 1050 }}
+        >
+          <button
+            className={
+              "btn rounded-pill no-shadow btn-info text-black mx-1 py-2"
+            }
+            onClick={() => {
+              sensorTracking ? stopSensorTracking() : startSensorTracking();
+              closeBanner();
+            }}
+            disabled={!sensorTracking && !userPos}
+          >
+            {sensorTracking ? "Stop navigation" : "Start live navigation"}
+          </button>
+          <span className="mx-2 slogan fst-italic">
+            Live navigation is not fully supported in Firefox/Brave yet.
+          </span>
+          <button
+            className="btn-close ms-2"
+            onClick={closeBanner}
+            aria-label="Close"
+          ></button>
+        </div>
+      )}
       <div className="d-flex align-items-center justify-content-between position-relative mb-3">
         {/* QR code button */}
         <div className="ms-2">
@@ -2074,13 +2113,14 @@ export default function UserMap() {
           <div className="text-muted">No published floors available yet.</div>
         )}
         <div className="d-flex align-items-center justify-content-center gap-2 mt-2">
+          {/* old debug tools we used to help in development */}
           {/* <button
             className={`btn btn-${autoWarp ? "info" : "outline-info"} btn-sm`}
             onClick={() => setAutoWarp((v) => !v)}
           >
             Auto warp: {autoWarp ? "On" : "Off"}
           </button> */}
-          <label className="mb-0 flex-shrink-0 text-card slogan">
+          {/* <label className="mb-0 flex-shrink-0 text-card slogan">
             Sensor tracking debug for Safari:
           </label>
           <button
@@ -2091,7 +2131,7 @@ export default function UserMap() {
             disabled={!sensorTracking && !userPos}
           >
             {sensorTracking ? "Stop tracking" : "Start tracking"}
-          </button>
+          </button> */}
           {/* <div
             className="d-flex align-items-center small text-muted"
             style={{ gap: 8 }}
