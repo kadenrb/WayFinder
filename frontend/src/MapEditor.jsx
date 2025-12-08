@@ -2841,17 +2841,17 @@ export default function MapEditor({ imageSrc }) {
               {blockedAreas
                 .filter((b) => b.active !== false)
                 .map((b) => {
-                  const x = b.x * natSize.w;
-                  const y = b.y * natSize.h;
-                  const w = b.w * natSize.w;
-                  const h = b.h * natSize.h;
+                  const topLeft = toPx(b.x, b.y);
+                  const bottomRight = toPx(b.x + b.w, b.y + b.h);
+                  const w = bottomRight.x - topLeft.x;
+                  const h = bottomRight.y - topLeft.y;
                   return (
                     <div
                       key={b.id}
                       className="position-absolute"
                       style={{
-                        left: x,
-                        top: y,
+                        left: topLeft.x,
+                        top: topLeft.y,
                         width: w,
                         height: h,
                         background: "rgba(255,0,0,0.18)",
