@@ -115,17 +115,7 @@ export default function MapEditor({ imageSrc }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [pointsLocked, setPointsLocked] = useState(false); // toggle to prevent accidental moves
 
-  // ===============================
-  // SECTION: Inline List Editing (quick fixes)
-  // ===============================
-  const [listEditId, setListEditId] = useState(null);
-  const [listDraft, setListDraft] = useState(() => ({
-    name: "",
-    roomNumber: "",
-    aliasText: "",
-    warpKey: "",
-    poiType: POI_TYPES[0] || "",
-  }));
+
 
   // ===============================
   // SECTION: User Marker (dev/debug routing)
@@ -161,6 +151,29 @@ export default function MapEditor({ imageSrc }) {
   // Cached walkable grid to avoid rebuilding on every user position update
   const walkGridRef = useRef(null); // { grid, gw, gh, step, w, h }
 
+
+
+ // Pagination setup
+  const PAGE_SIZE = 20;        // number of points per page
+  const [page, setPage] = useState(0);   // 0-based index (page 1 = index 0)
+
+  // ===============================
+  // SECTION: Inline List Editing (quick fixes)
+  // ===============================
+  const [listEditId, setListEditId] = useState(null);
+  const [listDraft, setListDraft] = useState(() => ({
+    name: "",
+    roomNumber: "",
+    aliasText: "",
+    warpKey: "",
+    poiType: POI_TYPES[0] || "",
+  }));
+
+
+  
+
+  
+  
   // ===============================
   // SECTION: Pan & Zoom Image Component
   // ===============================
@@ -3397,187 +3410,193 @@ export default function MapEditor({ imageSrc }) {
           )}
         </div>
 
+       
         {/* =============================== */}
         {/* SECTION: Sidebar - Points List */}
         {/* =============================== */}
+
         {points.length > 0 && (
           <div className="mt-3">
-            <h6 className="text-dark">Points ({points.length})</h6>
-            <ul className="list-group">
-              {points
+            <h6 className="text-light">Points ({points.length})</h6>
+
+            {/* =============================== */}
+            {/* Step 1: Compute sorted & paginated points */}
+            {/* =============================== */}
+            {(() => {}) /* Remove any self-invoking function */}
+
+            {(() => {
+              // Compute sorted points
+              const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+              const sortedPoints = points
                 .slice()
                 .sort((a, b) => {
-                  const ka = (
-                    a.roomNumber ||
-                    a.name ||
-                    a.poiType ||
-                    a.kind ||
-                    ""
-                  ).toString();
-                  const kb = (
-                    b.roomNumber ||
-                    b.name ||
-                    b.poiType ||
-                    b.kind ||
-                    ""
-                  ).toString();
+                  const ka = (a.roomNumber || a.name || a.poiType || a.kind || "").toString();
+                  const kb = (b.roomNumber || b.name || b.poiType || b.kind || "").toString();
                   return collator.compare(ka, kb);
-                })
-                .map((p) => (
-                  <li
-                    key={p.id}
-                    ref={(el) => {
-                      if (el) pointItemRefs.current.set(p.id, el);
-                      else pointItemRefs.current.delete(p.id);
-                    }}
-                    className={`list-group-item ${
-                      selectedId === p.id ? "active" : ""
-                    }`}
-                    onClick={(e) => {
-                      if (listEditId !== p.id) focusPoint(p);
-                    }}
-                    onDoubleClick={() => beginEdit(p)}
-                    style={{
-                      cursor: listEditId === p.id ? "default" : "pointer",
-                    }}
-                  >
-                    {listEditId === p.id ? (
-                      <div
-                        className="d-flex flex-wrap flex-column gap-2"
-                        onClick={(e) => e.stopPropagation()}
+                });
+
+              // Pagination
+              const totalPages = Math.ceil(sortedPoints.length / PAGE_SIZE);
+              const paginatedPoints = sortedPoints.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
+              return (
+                <>
+                  {/* =============================== */}
+                  {/* Points List */}
+                  {/* =============================== rounded border border-white bg-card*/}
+                  <ul className="list-group list-group-flush">
+                    {paginatedPoints.map((p) => (
+                      <li
+                        key={p.id}
+                        ref={(el) => {
+                          if (el) pointItemRefs.current.set(p.id, el);
+                          else pointItemRefs.current.delete(p.id);
+                        }}
+                        className={`list-group-item bg-card rounded border border-white ${selectedId === p.id ? "active" : ""}`}
+                        onClick={() => {
+                          if (listEditId !== p.id) focusPoint(p);
+                        }}
+                        onDoubleClick={() => beginEdit(p)}
+                        style={{ cursor: listEditId === p.id ? "default" : "pointer" }}
                       >
-                        <div className="d-flex flex-wrap align-items-center gap-2">
-                          <span className={`badge ${markerClass(p.kind)}`}>
-                            {" "}
-                          </span>
-                          <input
-                            className="form-control form-control-sm"
-                            style={{ maxWidth: 160 }}
-                            placeholder="Room number"
-                            value={listDraft.roomNumber}
-                            onChange={(e) =>
-                              setListDraft((s) => ({
-                                ...s,
-                                roomNumber: e.target.value,
-                              }))
-                            }
-                          />
-                          <input
-                            className="form-control form-control-sm"
-                            style={{ maxWidth: 220 }}
-                            placeholder="Name"
-                            value={listDraft.name}
-                            onChange={(e) =>
-                              setListDraft((s) => ({
-                                ...s,
-                                name: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        {p.kind === "poi" && (
-                          <div className="d-flex flex-wrap align-items-center gap-2">
-                            <span style={{ width: 16 }}></span>
-                            <select
-                              className="form-select form-select-sm"
-                              style={{ maxWidth: 220 }}
-                              value={listDraft.poiType || POI_TYPES[0] || ""}
-                              onChange={(e) =>
-                                setListDraft((s) => ({
-                                  ...s,
-                                  poiType: e.target.value,
-                                }))
-                              }
-                            >
-                              {POI_TYPES.map((type) => (
-                                <option key={type} value={type}>
-                                  {type.charAt(0).toUpperCase() + type.slice(1)}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                        {p.kind === "poi" &&
-                          (listDraft.poiType === "stairs" ||
-                            listDraft.poiType === "elevator") && (
+                        {listEditId === p.id ? (
+                          // ==== EDIT MODE ====
+                          <div className="d-flex flex-wrap flex-column gap-2" onClick={(e) => e.stopPropagation()}>
+                            <div className="d-flex flex-wrap align-items-center gap-2">
+                              <span className={`badge ${markerClass(p.kind)}`}> </span>
+                              <input
+                                className="form-control form-control-sm"
+                                style={{ maxWidth: 160 }}
+                                placeholder="Room number"
+                                value={listDraft.roomNumber}
+                                onChange={(e) =>
+                                  setListDraft((s) => ({ ...s, roomNumber: e.target.value }))
+                                }
+                              />
+                              <input
+                                className="form-control form-control-sm"
+                                style={{ maxWidth: 220 }}
+                                placeholder="Name"
+                                value={listDraft.name}
+                                onChange={(e) =>
+                                  setListDraft((s) => ({ ...s, name: e.target.value }))
+                                }
+                              />
+                            </div>
+
+                            {p.kind === "poi" && (
+                              <div className="d-flex flex-wrap align-items-center gap-2">
+                                <span style={{ width: 16 }}></span>
+                                <select
+                                  className="form-select form-select-sm"
+                                  style={{ maxWidth: 220 }}
+                                  value={listDraft.poiType || POI_TYPES[0] || ""}
+                                  onChange={(e) =>
+                                    setListDraft((s) => ({ ...s, poiType: e.target.value }))
+                                  }
+                                >
+                                  {POI_TYPES.map((type) => (
+                                    <option key={type} value={type}>
+                                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+
+                            {p.kind === "poi" &&
+                              (listDraft.poiType === "stairs" || listDraft.poiType === "elevator") && (
+                                <div className="d-flex flex-wrap align-items-center gap-2">
+                                  <span style={{ width: 16 }}></span>
+                                  <input
+                                    className="form-control form-control-sm"
+                                    style={{ maxWidth: 220 }}
+                                    placeholder="Warp Key (e.g., STAIRS-A)"
+                                    value={listDraft.warpKey || ""}
+                                    onChange={(e) =>
+                                      setListDraft((s) => ({ ...s, warpKey: e.target.value }))
+                                    }
+                                  />
+                                </div>
+                              )}
+
                             <div className="d-flex flex-wrap align-items-center gap-2">
                               <span style={{ width: 16 }}></span>
                               <input
                                 className="form-control form-control-sm"
-                                style={{ maxWidth: 220 }}
-                                placeholder="Warp Key (e.g., STAIRS-A)"
-                                value={listDraft.warpKey || ""}
+                                placeholder="Aliases / Ranges (e.g., AC210-AC221, AC301)"
+                                value={listDraft.aliasText}
                                 onChange={(e) =>
-                                  setListDraft((s) => ({
-                                    ...s,
-                                    warpKey: e.target.value,
-                                  }))
+                                  setListDraft((s) => ({ ...s, aliasText: e.target.value }))
                                 }
                               />
                             </div>
-                          )}
-                        <div className="d-flex flex-wrap align-items-center gap-2">
-                          <span style={{ width: 16 }}></span>
-                          <input
-                            className="form-control form-control-sm"
-                            placeholder="Aliases / Ranges (e.g., AC210-AC221, AC301)"
-                            value={listDraft.aliasText}
-                            onChange={(e) =>
-                              setListDraft((s) => ({
-                                ...s,
-                                aliasText: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="d-flex flex-wrap justify-content-end gap-2">
-                          <button
-                            className="btn btn-sm btn-secondary"
-                            onClick={cancelListEdit}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            className="btn btn-sm btn-primary"
-                            onClick={saveListEdit}
-                            disabled={!listDraft.name && !listDraft.roomNumber}
-                          >
-                            Save
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="d-flex flex-wrap justify-content-between align-items-center">
-                        <span>
-                          <span className={`badge me-2 ${markerClass(p.kind)}`}>
-                            {" "}
-                          </span>
-                          {p.roomNumber
-                            ? `#${p.roomNumber}`
-                            : p.name || p.poiType || p.kind}
-                        </span>
-                        <span className="d-flex flex-wrap align-items-center gap-2">
-                          <small className="text-muted">
-                            ({p.kind}
-                            {p.poiType ? `:${p.poiType}` : ""})
-                          </small>
-                          <button
-                            className="btn btn-sm btn-outline-primary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              beginListEdit(p);
-                            }}
-                          >
-                            Edit
-                          </button>
-                        </span>
-                      </div>
-                    )}
-                  </li>
-                ))}
-            </ul>
+
+                            <div className="d-flex flex-wrap justify-content-end gap-2">
+                              <button className="btn btn-sm btn-secondary" onClick={cancelListEdit}>
+                                Cancel
+                              </button>
+                              <button
+                                className="btn btn-sm btn-primary"
+                                onClick={saveListEdit}
+                                disabled={!listDraft.name && !listDraft.roomNumber}
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          // ==== VIEW MODE ====
+                          <div className="d-flex flex-wrap justify-content-between align-items-center">
+                            <span>
+                              <span className={`badge me-2 ${markerClass(p.kind)}`}> </span>
+                              <span className="text-white">
+                                {p.roomNumber ? `#${p.roomNumber}` : p.name || p.poiType || p.kind}
+                              </span>
+                            </span>
+                            <span className="d-flex flex-wrap align-items-center gap-2">
+                              <small className="text-white">
+                                ({p.kind}{p.poiType ? `:${p.poiType}` : ""})
+                              </small>
+                              <button
+                                className="btn btn-sm btn-outline-primary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  beginListEdit(p);
+                                }}
+                              >
+                                Edit
+                              </button>
+                            </span>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* =============================== */}
+                  {/* Pagination Controls */}
+                  {/* =============================== */}
+                  <div className="d-flex justify-content-between align-items-center mt-2 bg-card p-2 rounded border border-white">
+                    <button className="btn btn-sm btn-primary text-white" disabled={page === 0} onClick={() => setPage(page - 1)}>
+                      ◀ Prev
+                    </button>
+
+                    <span className="text-white">
+                      Page {page + 1} / {totalPages}
+                    </span>
+
+                    <button className="btn btn-sm btn-primary text-white" disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>
+                      Next ▶
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
+
+        
       </div>
     </div>
   );
