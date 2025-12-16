@@ -79,3 +79,4 @@
 //     </div>
 //   );
 // }
+// old home page , we kept it to show the development history but it's no longer in use
