@@ -379,6 +379,7 @@ export default function MapEditor({ imageSrc }) {
         if (Array.isArray(data?.dbBoxes)) setDbBoxes(data.dbBoxes);
         if (Array.isArray(data?.blockedAreas))
           setBlockedAreas(data.blockedAreas);
+        // Restore user position if valid
         if (
           data &&
           typeof data.userPos === "object" &&
@@ -390,6 +391,7 @@ export default function MapEditor({ imageSrc }) {
         } else {
           setUserPos(null);
         }
+        // Restore walkable settings
         if (
           data &&
           typeof data.walkable === "object" &&
@@ -407,6 +409,7 @@ export default function MapEditor({ imageSrc }) {
               ? data.walkable.extraColors.map((c) => normHex(c))
               : [],
           });
+          // Restore extraColors normalization
         } else {
           setWalkable({ color: "#9F9383", tolerance: 12, extraColors: [] });
         }
@@ -565,6 +568,7 @@ export default function MapEditor({ imageSrc }) {
         const px = Math.min(w - 1, gx * step + (step >> 1));
         const py = Math.min(h - 1, gy * step + (step >> 1));
         const idx = (py * w + px) * 4;
+        // Compare pixel color to each target color
         const r = data[idx],
           g = data[idx + 1],
           b = data[idx + 2];
@@ -805,6 +809,7 @@ export default function MapEditor({ imageSrc }) {
         setRouteMsg("No selected point");
         return;
       }
+      // Target grid cell
       const tx = Math.max(0, Math.min(gw - 1, Math.round((sel.x * w) / step)));
       const ty = Math.max(0, Math.min(gh - 1, Math.round((sel.y * h) / step)));
       const sCell = findNearestWalkable(grid, gw, gh, [sx, sy]);
@@ -903,6 +908,7 @@ export default function MapEditor({ imageSrc }) {
             walkGridRef.current = gridObj;
           }
           const { grid, gw, gh, step, w, h } = gridObj;
+          // Build warp adjacency if needed
           const warpAdj = useWarps
             ? buildWarpAdjacency(grid, gw, gh, step, w, h)
             : null;
@@ -924,6 +930,7 @@ export default function MapEditor({ imageSrc }) {
             0,
             Math.min(gh - 1, Math.round((sel.y * h) / step))
           );
+          // Find nearest walkable cells
           const sCell = findNearestWalkable(grid, gw, gh, [sx, sy]);
           const tCell = findNearestWalkable(grid, gw, gh, [tx, ty]);
           if (!sCell || !tCell) return;
@@ -936,6 +943,7 @@ export default function MapEditor({ imageSrc }) {
             Math.max(0, Math.floor(routeGap)),
             warpAdj
           );
+          // No path
           if (!path || path.length < 2) return;
           const out = path.map(([gx, gy]) => ({
             x: (gx * step + step / 2) / w,
@@ -946,6 +954,7 @@ export default function MapEditor({ imageSrc }) {
         } catch {}
       })();
     }, 80);
+    // return cleanup
     return () => {
       if (routeTimerRef.current) {
         clearTimeout(routeTimerRef.current);
@@ -998,6 +1007,7 @@ export default function MapEditor({ imageSrc }) {
         const t = (w.text || "").replace(/[^A-Za-z0-9\-]/g, "").trim();
         if (!t || t.length < 3) continue;
         if (!roomRe.test(t)) continue;
+        // Get center of bounding box
         const b = w.bbox || w;
         const cx = ((b?.x0 || 0) + (b?.x1 || 0)) / 2 / nw;
         const cy = ((b?.y0 || 0) + (b?.y1 || 0)) / 2 / nh;
@@ -1187,6 +1197,7 @@ export default function MapEditor({ imageSrc }) {
       let tileIndex = 0;
       const totalTiles = tilesX * tilesY * 2; // two passes each
       for (let ty = 0; ty < tilesY; ty++) {
+        // Y tiles
         for (let tx = 0; tx < tilesX; tx++) {
           if (cancelScanRef.current) throw new Error("Canceled");
           const sx0 = Math.max(0, tx * stepX - ox);
@@ -1200,12 +1211,14 @@ export default function MapEditor({ imageSrc }) {
           let usedDetector = false;
           if (await ensureDbnet()) {
             usedDetector = true;
+            // DBNet text detector pass to get boxes
             const urlA = await makeTileUrl(sx0, sy0, sw, sh, false);
             const urlB = await makeTileUrl(sx0, sy0, sw, sh, true);
             const boxesA = await detectDbnet(urlA, { maxSide: 1536 });
             const boxesB = await detectDbnet(urlB, { maxSide: 1536 });
             const boxes = [...(boxesA || []), ...(boxesB || [])];
             const tileCanvas = document.createElement("canvas");
+            // Load tile image
             const img = await new Promise((resolve, reject) => {
               const i = new Image();
               i.crossOrigin = "anonymous";
@@ -1218,7 +1231,7 @@ export default function MapEditor({ imageSrc }) {
             tileCanvas.getContext("2d").drawImage(img, 0, 0);
             const total = boxes.length || 1;
             let done = 0;
-            for (const b of boxes) {
+            for (const b of boxes) { // b: {x, y, w, h}
               done += 1;
               setBusy(`Deep OCR (DB): ${done}/${total}`);
               setProgress(
@@ -1301,7 +1314,7 @@ export default function MapEditor({ imageSrc }) {
               ocrOptsBase
             );
             all.push(...processWords(resA?.data?.words || [], tile));
-
+            // Inverted pass
             if (cancelScanRef.current) throw new Error("Canceled");
             tileIndex += 1;
             setBusy(`Deep OCR: tile ${tileIndex}/${totalTiles}`);
@@ -1332,10 +1345,12 @@ export default function MapEditor({ imageSrc }) {
         setBusy("");
         return;
       }
+      // debugging error message 
       console.error(err);
       setBusy(`Deep OCR failed: ${err?.message || "Unknown error"}`);
       setTimeout(() => setBusy(""), 2500);
     }
+    // send progress to 100% then clear after a short delay
     setTimeout(() => {
       setProgActive(false);
       setProgress(0, "");
@@ -1394,7 +1409,11 @@ export default function MapEditor({ imageSrc }) {
       const stepY = Math.floor(h / tilesY);
       const ox = Math.floor(stepX * overlap);
       const oy = Math.floor(stepY * overlap);
-
+      /**
+       * Create a scaled image tile from the source image.
+       * Optionally inverts colors to improve OCR accuracy on dark backgrounds.
+       * Returns a PNG data URL for OCR processing.
+      */
       const makeTileUrl = (sx, sy, sw, sh, invert = false) => {
         const c = document.createElement("canvas");
         c.width = sw * scale;
@@ -1405,15 +1424,15 @@ export default function MapEditor({ imageSrc }) {
         return new Promise((resolve, reject) => {
           const img = new Image();
           img.crossOrigin = "anonymous";
-          img.onload = () => {
+          img.onload = () => { // draw the cropped tile scaled up for better OCR
             ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw * scale, sh * scale);
-            if (invert) {
+            if (invert) { // optional color inversion for better text contrast
               const id = ctx.getImageData(0, 0, c.width, c.height);
               const d = id.data;
               for (let i = 0; i < d.length; i += 4) {
-                d[i] = 255 - d[i];
-                d[i + 1] = 255 - d[i + 1];
-                d[i + 2] = 255 - d[i + 2];
+                d[i] = 255 - d[i]; // red 
+                d[i + 1] = 255 - d[i + 1]; // green
+                d[i + 2] = 255 - d[i + 2]; // blue
               }
               ctx.putImageData(id, 0, 0);
             }
@@ -1423,29 +1442,40 @@ export default function MapEditor({ imageSrc }) {
           img.src = imageSrc;
         });
       };
-
+      /**
+       * Convert OCR-recognized words into room label candidates.
+       * Handles split labels (123 + A) and maps pixel positions
+       * into normalized coordinates for the floor map.
+      */
       const processWords = (words, tile) => {
         const { sx, sy } = tile;
         const candidates = [];
+        // matches common room number formats
         const roomRe =
           /^(?:[A-Za-z]?\d{2,4}[A-Za-z]?|\d{1,2}[A-Za-z]-?\d{2,4})$/;
         for (let i = 0; i < words.length; i++) {
           const w0 = words[i];
+          // Normalize OCR output
           const tRaw = (w0.text || "").toUpperCase();
           let t = tRaw.replace(/[^A-Z0-9-]/g, "").trim();
           if (!t) continue;
+          /**
+           * Detect split room labels like "123" followed by "A"
+           * when OCR separates adjacent characters.
+          */
           if (/^\d{2,4}$/.test(t) && i + 1 < words.length) {
             const n = words[i + 1];
             const nRaw = (n.text || "")
               .toUpperCase()
               .replace(/[^A-Z0-9-]/g, "");
             if (/^[A-Z]$/.test(nRaw)) {
-              const dx = Math.abs(
+              const dx = Math.abs( // Measure spatial proximity between words
                 (n.bbox?.x0 || n.x0 || 0) - (w0.bbox?.x1 || w0.x1 || 0)
               );
               const dy = Math.abs(
                 (n.bbox?.y0 || n.y0 || 0) - (w0.bbox?.y0 || w0.y0 || 0)
               );
+              // Merge only if visually adjacent
               if (dx < 40 && dy < 25) {
                 const bx0 = Math.min(
                   w0.bbox?.x0 || w0.x0 || 0,
@@ -1463,6 +1493,7 @@ export default function MapEditor({ imageSrc }) {
                   w0.bbox?.y1 || w0.y1 || 0,
                   n.bbox?.y1 || n.y1 || 0
                 );
+                // Convert bounding box center to normalized coordinates
                 const cx = (bx0 + bx1) / 2 / scale;
                 const cy = (by0 + by1) / 2 / scale;
                 const ux = (sx + cx) / w;
@@ -1475,13 +1506,15 @@ export default function MapEditor({ imageSrc }) {
                   x: ux,
                   y: uy,
                 });
-                i++;
+                i++; // Skip the next word since it was merged
                 continue;
               }
             }
           }
+          // Filter out invalid or short tokens
           if (!t || t.length < 3) continue;
           if (!roomRe.test(t)) continue;
+          // Compute center of bounding box
           const b = w0.bbox || w0;
           const cx = ((b?.x0 || 0) + (b?.x1 || 0)) / 2 / scale;
           const cy = ((b?.y0 || 0) + (b?.y1 || 0)) / 2 / scale;
@@ -1500,7 +1533,13 @@ export default function MapEditor({ imageSrc }) {
         }
         return candidates;
       };
-
+      /**
+       * Main Super Deep OCR routine:
+       * Iterates over image tiles
+       * Uses DBNet for text detection when available
+       * Falls back to standard Tesseract OCR
+       * Aggregates, deduplicates, and commits detected room labels
+      */
       const all = [];
       let tileIndex = 0;
       const totalTiles = tilesX * tilesY * 2;
@@ -1514,13 +1553,14 @@ export default function MapEditor({ imageSrc }) {
           const sw = Math.max(1, sx1 - sx0);
           const sh = Math.max(1, sy1 - sy0);
           const tile = { sx: sx0, sy: sy0, sw, sh };
-
+          // Try DBNet text detector first
           tileIndex += 1;
           let usedDetector = false;
           if (await ensureDbnet()) {
             const urlA = await makeTileUrl(sx0, sy0, sw, sh, false);
             tileIndex += 1;
             setBusy(`Super Deep OCR: tile ${tileIndex}/${totalTiles} (DB)`);
+            // DBNet detection on normal and inverted tiles
             const urlB = await makeTileUrl(sx0, sy0, sw, sh, true);
             const boxesA = await detectDbnet(urlA, { maxSide: 1536 });
             const boxesB = await detectDbnet(urlB, { maxSide: 1536 });
@@ -1535,11 +1575,13 @@ export default function MapEditor({ imageSrc }) {
                 i.onerror = () => reject(new Error("tile load"));
                 i.src = urlA;
               });
+              // draw tile image to canvas for cropping
               tileCanvas.width = img.naturalWidth || img.width;
               tileCanvas.height = img.naturalHeight || img.height;
               tileCanvas.getContext("2d").drawImage(img, 0, 0);
               let done = 0;
               const total = boxes.length;
+              // OCR each detected box
               for (const b of boxes) {
                 done += 1;
                 setBusy(`Super Deep OCR (DB): ${done}/${total}`);
@@ -1565,6 +1607,7 @@ export default function MapEditor({ imageSrc }) {
                   swc * 2,
                   shc * 2
                 );
+                // OCR the cropped box
                 const cropUrl = c.toDataURL("image/png");
                 const res = await window.Tesseract.recognize(cropUrl, "eng", {
                   ...ocrOptsBase,
@@ -1577,6 +1620,7 @@ export default function MapEditor({ imageSrc }) {
                   .replace(/[^A-Z0-9-]/g, "")
                   .trim();
                 if (!raw) continue;
+                // Fuzzy normalization of common OCR misreads
                 const norm = raw
                   .replace(/O/g, "0")
                   .replace(/B/g, "8")
@@ -1603,6 +1647,7 @@ export default function MapEditor({ imageSrc }) {
               }
             }
           }
+          // Fallback to normal + inverted OCR if DBNet not used
           if (!usedDetector) {
             setBusy(`Super Deep OCR: tile ${tileIndex}/${totalTiles}`);
             const urlA = await makeTileUrl(sx0, sy0, sw, sh, false);
@@ -1626,7 +1671,7 @@ export default function MapEditor({ imageSrc }) {
           }
         }
       }
-
+      // deduplicate and add final results
       const byLabel = dedupByLabel(all, 0.004);
       const filtered = filterOutExistingSameLabel(byLabel);
       setPoints((prev) => [...prev, ...filtered]);
@@ -1666,6 +1711,7 @@ export default function MapEditor({ imageSrc }) {
               window.cv["onRuntimeInitialized"] = resolve;
             } else setTimeout(resolve, 150);
           };
+          // Error loading OpenCV script
           s.onerror = () =>
             reject(
               new Error(
@@ -1689,6 +1735,7 @@ export default function MapEditor({ imageSrc }) {
       const img = new Image();
       img.crossOrigin = "anonymous";
       const srcUrl = imageSrc;
+      // Load image
       await new Promise((resolve, reject) => {
         img.onload = resolve;
         img.onerror = () => reject(new Error("Image load failed"));
@@ -1710,6 +1757,7 @@ export default function MapEditor({ imageSrc }) {
 
       const contours = new cv.MatVector();
       const hierarchy = new cv.Mat();
+      // Find contours
       cv.findContours(
         bin,
         contours,
@@ -1750,7 +1798,7 @@ export default function MapEditor({ imageSrc }) {
         tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-",
         psm: 7,
       };
-
+      // OCR a cropped box image
       const results = [];
       for (let i = 0; i < boxes.length; i++) {
         const b = boxes[i];
@@ -1962,6 +2010,7 @@ export default function MapEditor({ imageSrc }) {
           .filter(Boolean)
       )
     );
+    // Prepare point to save
     const toSave = { ...d, aliases: normAliases };
     if (toSave.kind === "poi") {
       toSave.poiType = toSave.poiType || POI_TYPES[0] || "";
@@ -2116,6 +2165,7 @@ export default function MapEditor({ imageSrc }) {
             typeof state.walkable.tolerance === "number"
               ? state.walkable.tolerance
               : 12;
+          // Normalize color and extraColors
           setWalkable({
             color: normHex(state.walkable.color),
             tolerance: tol,
@@ -2125,7 +2175,7 @@ export default function MapEditor({ imageSrc }) {
           });
         }
       };
-
+      // If multiple floors, prompt user to choose
       if (Array.isArray(data?.floors)) {
         let chosen = null;
         if (imageSrc) {
@@ -2140,6 +2190,7 @@ export default function MapEditor({ imageSrc }) {
               : 0;
             return `${index + 1}. ${label} (${count} pts)`;
           });
+          // Prompt user to pick a floor
           const promptMsg = [
             "Multiple floors found in this file.",
             "Enter the number of the floor you want to import:",

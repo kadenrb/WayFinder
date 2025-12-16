@@ -1,5 +1,8 @@
+// express routing system 
 const express = require("express");
+// prisma ORM client for interacting with the database
 const { PrismaClient } = require("@prisma/client");
+// AWS SDK v3 S3 client and commands for reading/writing objects
 const {
   S3Client,
   GetObjectCommand,
@@ -8,7 +11,7 @@ const {
 
 const router = express.Router();
 const prisma = new PrismaClient();
-
+// load S3 configuration variables from the envrionment
 const {
   S3_ACCESS_KEY,
   S3_SECRET_KEY,
@@ -16,11 +19,13 @@ const {
   S3_BUCKET,
   S3_MANIFEST_KEY,
 } = process.env;
-
+// Deafult manifest key used in S3 if none is provided 
 const manifestKey = S3_MANIFEST_KEY || "floors/manifest.json";
+// check if all S3 variables exist (determine if S3 storage is enabled)
 const hasS3Config =
   S3_ACCESS_KEY && S3_SECRET_KEY && S3_REGION && S3_BUCKET;
 
+// create S3 client only if configuration is present
 const s3Client = hasS3Config
   ? new S3Client({
       region: S3_REGION,
@@ -31,6 +36,7 @@ const s3Client = hasS3Config
     })
   : null;
 
+// convert an S3 response stream into a string 
 const streamToString = async (body) => {
   if (!body) return "";
   const chunks = [];
@@ -40,8 +46,11 @@ const streamToString = async (body) => {
   return Buffer.concat(chunks).toString("utf-8");
 };
 
+// normalize a floor object to ensure consistent data structure
+// applies default and validates numeric fields 
 const normalizeFloor = (floor, index = 0) => {
   const url = floor.url || floor.imageData || "";
+  // safe numeric conversion 
   const toNumber = (value) => {
     if (typeof value === "number" && Number.isFinite(value)) {
       return value;
@@ -62,6 +71,7 @@ const normalizeFloor = (floor, index = 0) => {
   };
 };
 
+// format database records inot the response structure expected by the client 
 const formatFloors = (records) =>
   records.map((f) => ({
     id: f.id,
@@ -77,7 +87,7 @@ const formatFloors = (records) =>
         : 0,
     createdAt: f.createdAt,
   }));
-
+// read manifest.json from S3 
 const readManifest = async () => {
   if (!s3Client) return { floors: [] };
   try {
@@ -94,13 +104,14 @@ const readManifest = async () => {
       updatedAt: parsed?.updatedAt,
     };
   } catch (err) {
+    // manifest does not exist yet 
     if (err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404) {
       return { floors: [] };
     }
     throw err;
   }
 };
-
+// write manifest.json to S3 
 const writeManifest = async (floors) => {
   if (!s3Client) {
     throw new Error("S3 is not configured for manifest storage.");
@@ -124,8 +135,10 @@ const writeManifest = async (floors) => {
   );
   return floors;
 };
-
+// get published floors route
+// returns all published floors from S3 or database 
 router.get("/", async (_req, res) => {
+  // S3 mode
   if (s3Client) {
     try {
       const manifest = await readManifest();
@@ -141,6 +154,7 @@ router.get("/", async (_req, res) => {
         .json({ error: "Failed to load published floors" });
     }
   }
+  // Database mode
   try {
     const rows = await prisma.publishedFloor.findMany({
       orderBy: { sortOrder: "asc" },
@@ -151,12 +165,14 @@ router.get("/", async (_req, res) => {
     res.status(500).json({ error: "Failed to load published floors" });
   }
 });
-
+// put publish floors route
+// plubish or update floor list in S3 or Pirsma DB
 router.put("/", async (req, res) => {
   const floors = Array.isArray(req.body?.floors) ? req.body.floors : null;
   if (!floors || !floors.length) {
     return res.status(400).json({ error: "Floors array is required" });
   }
+  // normalize floors and validate URLS
   const normalized = [];
   try {
     floors.forEach((floor, index) => {
@@ -169,7 +185,7 @@ router.put("/", async (req, res) => {
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
-
+  // S3 mode 
   if (s3Client) {
     try {
       await writeManifest(normalized);
@@ -179,7 +195,7 @@ router.put("/", async (req, res) => {
       return res.status(500).json({ error: "Failed to publish floors" });
     }
   }
-
+  // database mode 
   try {
     await prisma.$transaction([
       prisma.publishedFloor.deleteMany(),
@@ -203,8 +219,10 @@ router.put("/", async (req, res) => {
     res.status(500).json({ error: "Failed to publish floors" });
   }
 });
-
+// detele published floors by id 
+// removes a floor from S3 manifest or prisma DB
 router.delete("/:id", async (req, res) => {
+  // S3 mode
   if (s3Client) {
     try {
       const manifest = await readManifest();
@@ -222,7 +240,7 @@ router.delete("/:id", async (req, res) => {
       return res.status(500).json({ error: "Failed to delete floor" });
     }
   }
-
+  // database mode 
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: "Invalid floor id" });

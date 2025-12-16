@@ -73,7 +73,10 @@ export default function LandingPage({ user }) {
 
   // Simple id generator local to this module
   const uid = () => Math.random().toString(36).slice(2, 10);
-
+  /*
+    Fetch published floors from the public S3 manifest.
+    This is used both on initial load and after publishing.
+  */
   const fetchPublishedFloors = React.useCallback(async () => {
     setLoadingPublished(true);
     try {
@@ -91,7 +94,7 @@ export default function LandingPage({ user }) {
       setLoadingPublished(false);
     }
   }, []);
-
+  // load published floors on first render 
   useEffect(() => {
     fetchPublishedFloors();
   }, [fetchPublishedFloors]);
@@ -107,8 +110,8 @@ export default function LandingPage({ user }) {
       name: f.name || "map.png",
       url: URL.createObjectURL(f),
       size: f.size || 0,
-      file: f,
-      remoteUrl: null,
+      file: f, // keep original file for upload
+      remoteUrl: null, // to be filled after upload
     }));
     setImages((prev) => {
       const next = [...prev, ...created];
@@ -155,7 +158,7 @@ export default function LandingPage({ user }) {
         localStorage.getItem("wf_public_map_url")) ||
       ""
   );
-
+  // Fetch and verify admin session 
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
@@ -190,14 +193,14 @@ export default function LandingPage({ user }) {
 
     fetchAdmin();
   }, [navigate]);
-
+  // set public map URL in localStorage for homepage preview
   const savePublicMapUrl = () => {
     try {
       localStorage.setItem("wf_public_map_url", publicMapUrl);
     } catch {}
     alert("Public map URL saved for homepage preview");
   };
-
+  // delete published floor by id for local state
   const deletePublishedFloor = async (id) => {
     if (!window.confirm("Remove this published floor?")) return;
     try {
@@ -217,7 +220,10 @@ export default function LandingPage({ user }) {
       setTimeout(() => setPublishMsg(""), 4000);
     }
   };
-
+  /*
+    Upload a single floor image to S3 via backend.
+    Caches the resulting URL to avoid duplicate uploads.
+  */
   const uploadFloorImage = async (img) => {
     if (img.remoteUrl) return img.remoteUrl;
     if (!img.file)
@@ -384,7 +390,6 @@ export default function LandingPage({ user }) {
   // Debounced proximity watcher to auto-switch floors when reaching a warp
   // Removed: auto cross-floor dev effect
   // Removed: planCrossFloorRoute dev helper
-
   // Publish current floors + points/walkable to public viewer
   async function publishPublicFloors() {
     if (!images.length) return;

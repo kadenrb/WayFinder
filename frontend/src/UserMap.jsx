@@ -16,10 +16,10 @@
   website.
 */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import { StepDetector } from "./stepDetector";
-import DebuggerPanel from "./DebuggerPanel";
-import ShareRouteQRCode from "./ShareRouteQRCode";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch"; // enbales zooming and panning of the map image 
+import { StepDetector } from "./stepDetector"; // Detects user steps using device motion sensors
+import DebuggerPanel from "./DebuggerPanel"; // Optional debugging UI
+import ShareRouteQRCode from "./ShareRouteQRCode"; // QR code component used to share routes
 
 // ---------------------------------------------------------------------------
 // STATE AND REFS
@@ -38,60 +38,65 @@ function markerClass(kind) {
   }
 }
 
+// main user map component 
+
+
 export default function UserMap() {
   const [floors, setFloors] = useState([]); // [{id,name,url,points,walkable}]
-  const [selUrl, setSelUrl] = useState("");
+  const [selUrl, setSelUrl] = useState(""); // URL of the currently selected floor image
   const [userPos, setUserPos] = useState(null); // {x,y}
-  const [placing, setPlacing] = useState(false);
+  const [placing, setPlacing] = useState(false);  // True when user is placing their position manually
   const [dest, setDest] = useState(null); // { url, id }
-  const [routePts, setRoutePts] = useState([]);
-  const routePtsRef = useRef([]);
-  const waypointPtsRef = useRef([]);
-  const [waypoints, setWaypoints] = useState([]);
-  const waypointIdxRef = useRef(0);
-  const planRef = useRef(null);
-  const destRef = useRef(null);
+  const [routePts, setRoutePts] = useState([]);  // Points used to render the navigation route
+  const routePtsRef = useRef([]);  // Ref version of route points for async access
+  const waypointPtsRef = useRef([]); // Ref storing waypoint pixel data
+  const [waypoints, setWaypoints] = useState([]);  // Ordered list of route waypoints
+  const waypointIdxRef = useRef(0); // Tracks which waypoint is currently active
+  const planRef = useRef(null);  // Routing plan reference
+  const destRef = useRef(null);  // Destination reference
   const [lastUser, setLastUser] = useState(null); // last known user position (url + pos)
   const pendingRouteRef = useRef(null); // used when we auto-switch to the user's floor before routing
   const routeResumeRef = useRef(null); // callback to resume routing when image loads
   // Cache floor images and their natural size so we can route immediately after a warp
   const imageCacheRef = useRef(new Map()); // url -> {img, w, h}
-  const stepDetectorRef = useRef(null);
-  const stepSampleIntervalRef = useRef(50);
-  const lastStepTsRef = useRef(0);
+  const stepDetectorRef = useRef(null);  // Step detection instance
+  const stepSampleIntervalRef = useRef(50); // Sampling interval for motion sensors
+  const lastStepTsRef = useRef(0); // Timestamp of the last detected step
   // ---------------------------------------------------------------------------
   // SENSOR LOOP
   // Listens for magnetometer/orientation/motion events and moves the marker.
   // ---------------------------------------------------------------------------
+  // stores users position in a ref for sensor updates 
   useEffect(() => {
     routePtsRef.current = Array.isArray(routePts) ? routePts : [];
   }, [routePts]);
   useEffect(() => {
     userPosRef.current = userPos;
   }, [userPos]);
-  const [displayHeading, setDisplayHeading] = useState(0);
+  const [displayHeading, setDisplayHeading] = useState(0); // Displayed heading (snapped to compass increments)
   useEffect(() => {
     routePtsRef.current = Array.isArray(routePts) ? routePts : [];
   }, [routePts]);
-  const [autoWarp, setAutoWarp] = useState(true);
+  const [autoWarp, setAutoWarp] = useState(true); // Automatically warp between floors
   const [accessibleMode, setAccessibleMode] = useState(false); // prefer elevators when crossing floors
-  const [gapCells, setGapCells] = useState(0);
+  const [gapCells, setGapCells] = useState(0); // Gap tolerance when walking between pixels
   const [warpProximity, setWarpProximity] = useState(0.02); // normalized distance
   const [plan, setPlan] = useState(null); // { steps:[{ url, kind:'warp'|'dest', key?, target:{x,y} }], index }
-  const dragRef = useRef(null);
+  const dragRef = useRef(null);   // Reference for drag interactions
   const [moveStep, setMoveStep] = useState(0.01); // normalized delta per arrow key press
-  const [searchText, setSearchText] = useState("");
-  const [searchMsg, setSearchMsg] = useState("");
-  const [routeMsg, setRouteMsg] = useState("");
-  const [sensorTracking, setSensorTracking] = useState(false);
-  const [sensorMsg, setSensorMsg] = useState("");
-  const [debugVisible, setDebugVisible] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [recordDuration, setRecordDuration] = useState(10);
-  const [recordMsg, setRecordMsg] = useState("");
-  const shareStartRef = useRef(false);
-  const shareRetryTimerRef = useRef(null);
-  const [debugData, setDebugData] = useState({
+  const [searchText, setSearchText] = useState(""); // room search input 
+  const [searchMsg, setSearchMsg] = useState(""); // search feedback message 
+  const [routeMsg, setRouteMsg] = useState(""); // routing feedback message 
+  const [sensorTracking, setSensorTracking] = useState(false);  // Enables motion-based tracking
+  const [sensorMsg, setSensorMsg] = useState(""); // Sensor status message
+  const [debugVisible, setDebugVisible] = useState(false);  // Toggle debug panel
+  const [recording, setRecording] = useState(false); // Enables route recording
+  const [recordDuration, setRecordDuration] = useState(10); // Duration of recording
+  const [recordMsg, setRecordMsg] = useState(""); // Recording status message
+  const shareStartRef = useRef(false);  // Indicates route started from shared link
+  const shareRetryTimerRef = useRef(null); // Timer for retrying shared route loading
+  const [debugData, setDebugData] = useState({ 
+  // Debug data displayed in DebuggerPanel
     heading: 0,
     compassHeading: 0,
     yaw: 0,
@@ -102,10 +107,11 @@ export default function UserMap() {
     lastStepTs: 0,
     stepDelta: 0,
   });
+  // Helper to update debug state
   const patchDebug = (patch) => {
     setDebugData((prev) => ({ ...prev, ...patch }));
   };
-
+   // Keep debug sensor message updated
   useEffect(() => {
     patchDebug({ sensorMsg });
   }, [sensorMsg]);
@@ -154,17 +160,30 @@ export default function UserMap() {
     }
     return 0;
   };
-
+  /*
+  Normalizes an angle so it always falls within the range [0, 360).
+  This prevents negative headings or values larger than a full rotation,
+  which simplifies compass math and comparisons.
+  */
   const normalizeAngle = (deg) => {
     let heading = deg % 360;
     if (heading < 0) heading += 360;
     if (heading >= 360) heading -= 360;
     return heading;
   };
-
+  /*
+  Quantizes a heading to the nearest 45-degree increment.
+  This is used to "snap" the displayed heading to cardinal
+  and intercardinal directions for visual clarity.
+  */
   const quantizeHeading = (value) =>
     normalizeAngle(Math.round(value / 45) * 45);
 
+  /*
+  Loads the stored heading offset from localStorage.
+  This offset compensates for device-specific compass bias
+  and is persisted across sessions.
+  */
   const loadHeadingOffset = () => {
     try {
       const raw = localStorage.getItem("wf_heading_offset");
@@ -174,6 +193,10 @@ export default function UserMap() {
       }
     } catch {}
   };
+  /*
+  Saves a heading offset to localStorage and applies normalization.
+  This allows user calibration of compass heading to persist.
+  */
   const saveHeadingOffset = (val) => {
     headingOffsetRef.current = normalizeAngle(val || 0);
     try {
@@ -183,6 +206,7 @@ export default function UserMap() {
       );
     } catch {}
   };
+  // load the heading offset once when the component mounts 
   useEffect(() => {
     loadHeadingOffset();
   }, []);
@@ -190,6 +214,11 @@ export default function UserMap() {
     normalizeAngle((val || 0) + (headingOffsetRef.current || 0));
 
   const headingUpdateRef = useRef({ ts: 0, value: 0 });
+  /*
+  Limits the rate of heading change to prevent sudden jumps
+  caused by noisy sensor data.
+  The heading is capped at 90 degrees per second.
+  */
   const limitHeadingRate = (prev, next) => {
     const now = performance && performance.now ? performance.now() : Date.now();
     const { ts = now, value = prev || 0 } = headingUpdateRef.current;
@@ -210,7 +239,11 @@ export default function UserMap() {
     if (d > 180) d -= 360;
     return Math.abs(d);
   };
-
+  /*
+  Determines a stable heading using recent GPS samples.
+  Filters out low-speed or high-acceleration readings and
+  averages headings using vector math.
+  */
   const geoStableHeading = () => {
     const buf = geoBufferRef.current || [];
     const now = Date.now();
@@ -233,7 +266,10 @@ export default function UserMap() {
     if (maxDiff > 20) return null;
     return mean;
   };
-
+  /*
+  Determines whether the gyroscope is currently stable.
+  If recent yaw values exceed a threshold, motion is considered unstable.
+  */
   const gyroCalm = () => {
     const now = Date.now();
     const win = (yawWindowRef.current || []).filter((e) => now - e.ts < 2000);
@@ -251,7 +287,10 @@ export default function UserMap() {
     if (mag > 3.5) mag = mag / 9.81; // likely m/s^2; convert to g
     return { ax, ay, az, mag };
   };
-
+  /*
+  Smooths heading changes using linear interpolation.
+  Helps reduce jitter while still responding to real movement.
+  */
   const smoothHeading = (prev, next, alpha = 0.2) => {
     if (typeof prev !== "number" || !Number.isFinite(prev))
       return normalizeAngle(next || 0);
@@ -262,7 +301,11 @@ export default function UserMap() {
     const blended = prev + alpha * delta;
     return normalizeAngle(blended);
   };
-
+  /*
+  Updates the heading shown in the UI.
+  Applies offsets, compensates for screen orientation,
+  snaps to fixed increments, and updates debug output.
+  */
   const updateDisplayedHeading = () => {
     const heading = normalizeAngle(
       applyHeadingOffset(headingRef.current || 0) - getScreenOrientationAngle()
@@ -496,7 +539,7 @@ export default function UserMap() {
       localStorage.setItem(`wf_user_pos:${url || ""}`, JSON.stringify(p));
     } catch {}
   };
-
+ 
   // Apply shared route state from ?share= (base64-encoded JSON) on initial load
   useEffect(() => {
     if (typeof window === "undefined") return;
